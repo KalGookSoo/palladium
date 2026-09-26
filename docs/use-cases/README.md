@@ -20,6 +20,9 @@ has_children: true
 - [내보내기](./export.md)
 - [프로젝트 저장/불러오기](./project-management.md)
 - [내레이션 녹음](./narration-recording.md)
+- [단축키](./keyboard-shortcuts.md)
+- [환경설정](./preferences.md)
+- [도움말](./help.md)
 
 ## 공통 Mermaid 색상 기준
 
