@@ -1,3 +1,8 @@
+---
+title: 기능명세서
+nav_order: 2
+---
+
 # palladium 영상 편집 기능명세서 (초안)
 
 ## 목적
