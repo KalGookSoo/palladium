@@ -1,0 +1,111 @@
+<svg viewBox="0 0 1200 780" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif">
+  <rect x="1" y="1" width="1198" height="778" fill="#ffffff" stroke="#d0d3d8" stroke-width="2" rx="8"/>
+
+  <!-- Toolbar -->
+  <rect x="1" y="1" width="1198" height="48" fill="#f3f4f6" stroke="#d0d3d8" rx="8"/>
+  <rect x="1" y="33" width="1198" height="16" fill="#f3f4f6"/>
+  <circle cx="24" cy="25" r="6" fill="#d0d3d8"/>
+  <circle cx="44" cy="25" r="6" fill="#d0d3d8"/>
+  <circle cx="64" cy="25" r="6" fill="#d0d3d8"/>
+  <text x="100" y="30" font-size="15" font-weight="600" fill="#24292f">palladium</text>
+  <rect x="220" y="12" width="76" height="24" rx="5" fill="#ffffff" stroke="#d0d3d8"/>
+  <text x="234" y="28" font-size="12" fill="#57606a">가져오기</text>
+  <rect x="308" y="12" width="112" height="24" rx="5" fill="#ffffff" stroke="#d0d3d8"/>
+  <text x="322" y="28" font-size="12" fill="#57606a">화면비: 16:9</text>
+  <rect x="1076" y="12" width="100" height="24" rx="5" fill="#5f3ceb"/>
+  <text x="1096" y="28" font-size="12" fill="#ffffff">내보내기</text>
+
+  <!-- Media Panel -->
+  <rect x="1" y="49" width="252" height="401" fill="#fafafa" stroke="#d0d3d8"/>
+  <text x="16" y="74" font-size="13" font-weight="600" fill="#24292f">미디어 패널</text>
+  <rect x="16" y="86" width="220" height="22" rx="4" fill="#ffffff" stroke="#d0d3d8"/>
+  <text x="24" y="101" font-size="11" fill="#8b949e">검색 / 필터</text>
+  <g>
+    <rect x="16" y="120" width="36" height="26" fill="#e5e7eb"/>
+    <text x="60" y="137" font-size="11" fill="#24292f">clip-01.mov</text>
+    <rect x="16" y="154" width="36" height="26" fill="#e5e7eb"/>
+    <text x="60" y="171" font-size="11" fill="#24292f">clip-02.mov</text>
+    <rect x="16" y="188" width="36" height="26" fill="#e5e7eb"/>
+    <text x="60" y="205" font-size="11" fill="#24292f">bgm.m4a</text>
+    <rect x="16" y="222" width="36" height="26" fill="#e5e7eb"/>
+    <text x="60" y="239" font-size="11" fill="#24292f">logo.png</text>
+  </g>
+  <text x="16" y="270" font-size="11" font-weight="600" fill="#8b949e">폴더</text>
+  <text x="16" y="290" font-size="11" fill="#57606a">📁 하이라이트</text>
+  <text x="16" y="310" font-size="11" fill="#57606a">📁 통합본</text>
+
+  <!-- Preview Player -->
+  <rect x="253" y="49" width="560" height="401" fill="#fafafa" stroke="#d0d3d8"/>
+  <text x="269" y="74" font-size="13" font-weight="600" fill="#24292f">미리보기 플레이어</text>
+  <rect x="283" y="88" width="500" height="282" fill="#111827"/>
+  <polygon points="518,205 518,255 560,230" fill="#ffffff" opacity="0.85"/>
+  <rect x="283" y="384" width="500" height="6" rx="3" fill="#d0d3d8"/>
+  <rect x="283" y="384" width="190" height="6" rx="3" fill="#5f3ceb"/>
+  <circle cx="533" cy="387" r="15" fill="#5f3ceb"/>
+  <polygon points="528,381 528,393 540,387" fill="#ffffff"/>
+  <text x="700" y="391" font-size="11" fill="#57606a">00:12 / 00:48</text>
+
+  <!-- Inspector -->
+  <rect x="813" y="49" width="386" height="401" fill="#fafafa" stroke="#d0d3d8"/>
+  <text x="829" y="74" font-size="13" font-weight="600" fill="#24292f">인스펙터</text>
+  <g font-size="11" fill="#57606a">
+    <rect x="829" y="86" width="62" height="22" fill="#ffffff" stroke="#5f3ceb" stroke-width="1.5"/>
+    <text x="842" y="101" fill="#5f3ceb">트림</text>
+    <rect x="895" y="86" width="62" height="22" fill="#ffffff" stroke="#d0d3d8"/>
+    <text x="908" y="101">이펙트</text>
+    <rect x="961" y="86" width="76" height="22" fill="#ffffff" stroke="#d0d3d8"/>
+    <text x="972" y="101">트랜스폼</text>
+    <rect x="1041" y="86" width="62" height="22" fill="#ffffff" stroke="#d0d3d8"/>
+    <text x="1054" y="101">자막</text>
+  </g>
+  <text x="829" y="132" font-size="11" fill="#8b949e">시작 지점</text>
+  <rect x="829" y="140" width="180" height="20" rx="4" fill="#ffffff" stroke="#d0d3d8"/>
+  <text x="829" y="180" font-size="11" fill="#8b949e">종료 지점</text>
+  <rect x="829" y="188" width="180" height="20" rx="4" fill="#ffffff" stroke="#d0d3d8"/>
+  <text x="829" y="228" font-size="11" fill="#8b949e">재생 속도</text>
+  <rect x="829" y="238" width="180" height="6" rx="3" fill="#d0d3d8"/>
+  <circle cx="919" cy="241" r="7" fill="#5f3ceb"/>
+
+  <!-- Timeline -->
+  <rect x="1" y="450" width="1198" height="329" fill="#ffffff" stroke="#d0d3d8" rx="8"/>
+  <rect x="1" y="450" width="1198" height="8" fill="#ffffff"/>
+  <text x="16" y="474" font-size="13" font-weight="600" fill="#24292f">타임라인 (멀티트랙)</text>
+  <rect x="16" y="486" width="1168" height="18" fill="#f3f4f6"/>
+  <line x1="16" y1="504" x2="1184" y2="504" stroke="#d0d3d8"/>
+
+  <!-- Video track -->
+  <text x="20" y="533" font-size="10" fill="#8b949e">영상</text>
+  <rect x="64" y="512" width="220" height="36" fill="#c7d2fe" stroke="#5f3ceb"/>
+  <text x="72" y="534" font-size="10" fill="#24292f">클립 1</text>
+  <polygon points="284,512 304,512 284,548" fill="#5f3ceb" opacity="0.5"/>
+  <rect x="304" y="512" width="260" height="36" fill="#c7d2fe" stroke="#5f3ceb"/>
+  <text x="312" y="534" font-size="10" fill="#24292f">클립 2</text>
+
+  <!-- Overlay/PIP track -->
+  <text x="20" y="577" font-size="10" fill="#8b949e">오버레이</text>
+  <rect x="380" y="556" width="120" height="30" fill="#fde68a" stroke="#b45309"/>
+  <text x="390" y="575" font-size="10" fill="#24292f">PIP</text>
+
+  <!-- Audio track -->
+  <text x="20" y="621" font-size="10" fill="#8b949e">오디오</text>
+  <rect x="64" y="600" width="500" height="30" fill="#bbf7d0" stroke="#15803d"/>
+  <path d="M70,615 L90,605 L110,625 L130,608 L150,620 L170,610 L190,618 L210,606 L230,622 L250,612 L270,617 L290,609 L310,619 L330,613 L350,616 L370,611 L390,620 L410,608 L430,617 L450,613 L470,619 L490,610 L510,616 L530,612 L550,618" stroke="#15803d" fill="none" stroke-width="1"/>
+
+  <!-- Subtitle track -->
+  <text x="20" y="665" font-size="10" fill="#8b949e">자막</text>
+  <rect x="140" y="644" width="90" height="26" fill="#fecaca" stroke="#b91c1c"/>
+  <text x="150" y="661" font-size="9" fill="#24292f">자막 1</text>
+  <rect x="260" y="644" width="140" height="26" fill="#fecaca" stroke="#b91c1c"/>
+  <text x="270" y="661" font-size="9" fill="#24292f">자막 2</text>
+
+  <!-- Marker -->
+  <polygon points="450,504 460,504 460,514 455,520 450,514" fill="#f59e0b"/>
+
+  <!-- Playhead -->
+  <line x1="450" y1="486" x2="450" y2="700" stroke="#dc2626" stroke-width="2"/>
+  <polygon points="443,486 457,486 450,496" fill="#dc2626"/>
+
+  <text x="16" y="730" font-size="10" fill="#8b949e">스크롤 / 줌</text>
+  <rect x="16" y="740" width="1168" height="8" rx="4" fill="#f3f4f6"/>
+  <rect x="300" y="740" width="300" height="8" rx="4" fill="#d0d3d8"/>
+</svg>

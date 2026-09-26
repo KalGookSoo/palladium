@@ -127,6 +127,8 @@ nav_order: 2
 
 - [지원 미디어 포맷/코덱](media-format-support.md)
 - [파일 접근 권한(샌드박스)](file-access-and-sandboxing.md)
+- [UI 레이아웃](ui-layout.md)
+- [네이티브 스타일 가이드](native-style-guide.md)
 
 ## 미정 사항
 
