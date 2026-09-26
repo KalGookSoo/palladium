@@ -1,0 +1,64 @@
+# macOS
+.DS_Store
+
+# Xcode
+## User settings
+xcuserdata/
+
+## Compatibility with Xcode 8 and earlier
+*.xcscmblueprint
+*.xccheckout
+
+## Build artifacts
+build/
+DerivedData/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+
+## Obj-C/Swift specific
+*.hmap
+
+## Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Swift Package Manager
+.build/
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Code signing / secrets
+*.p8
+*.p12
+*.mobileprovision
+*.cer
+*.key
+
+# Editor
+.idea/
+.vscode/
+
+# local env files
+.env*.local
+
+/.claude/
+/AGENTS.md
+/CLAUDE.md
+/issues/
