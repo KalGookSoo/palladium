@@ -27,7 +27,7 @@ nav_order: 5
 |---|---|---|
 | 툴바 | 가져오기 진입점, 화면비 프리셋, 내보내기 진입점 | [미디어 가져오기](use-cases/media-import.md), [내보내기](use-cases/export.md) |
 | 미디어 패널 | 가져온 클립 목록, 검색·필터, 폴더 정리 | [미디어 가져오기](use-cases/media-import.md) |
-| 미리보기 플레이어 | 재생·일시정지·스크러빙, 프레임 단위 이동 | [미리보기/재생](use-cases/preview.md) |
+| 미리보기 플레이어 | 재생·일시정지·스크러빙, 프레임 단위 이동, 마이크 내레이션 녹음 | [미리보기/재생](use-cases/preview.md), [내레이션 녹음](use-cases/narration-recording.md) |
 | 인스펙터 | 선택한 클립의 트림/이펙트/트랜스폼/자막 속성 편집(탭 전환) | [클립 자르기(트림)](use-cases/trimming.md), [자막 삽입](use-cases/subtitles.md) |
 | 타임라인 | 멀티트랙 클립 배치, 트림, 트랜지션, 오버레이, 마커, 재생 헤드 | [클립 이어붙이기](use-cases/joining-clips.md), [클립 자르기(트림)](use-cases/trimming.md), [트랜지션](use-cases/transitions.md), [오버레이 및 마스킹](use-cases/overlays.md) |
 

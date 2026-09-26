@@ -19,6 +19,7 @@ has_children: true
 - [미리보기/재생](./preview.md)
 - [내보내기](./export.md)
 - [프로젝트 저장/불러오기](./project-management.md)
+- [내레이션 녹음](./narration-recording.md)
 
 ## 공통 Mermaid 색상 기준
 

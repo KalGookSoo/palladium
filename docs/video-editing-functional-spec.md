@@ -28,6 +28,7 @@ nav_order: 2
 - 미디어 검색/필터
 - 한 프로젝트 안에 여러 시퀀스(타임라인) 관리
 - 프록시 미디어 생성/연결(저사양 편집용 저해상도 대체 파일)
+- 재생 중 내레이션/더빙 녹음(마이크) — 녹음 결과를 자동으로 가져와 녹음 시작 시점의 타임라인 위치에 배치. 정밀 싱크 자동 보정은 하지 않고 수동 트림/이동으로 조정
 
 ### 타임라인 편집 (핵심 NLE)
 
@@ -122,6 +123,7 @@ nav_order: 2
 - [미리보기/재생](use-cases/preview.md)
 - [내보내기](use-cases/export.md)
 - [프로젝트 저장/불러오기](use-cases/project-management.md)
+- [내레이션 녹음](use-cases/narration-recording.md)
 
 ## 참고
 
