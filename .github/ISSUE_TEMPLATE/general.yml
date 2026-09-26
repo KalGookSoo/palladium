@@ -1,0 +1,52 @@
+name: 일반 이슈
+description: 질문이 아닌 일반적인 작업/개선/토론 이슈를 등록하세요.
+title: "[이슈] "
+labels: []
+assignees: []
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: 이슈 설명
+      description: 무엇을 해결하려는지, 어떤 문제가 있는지 명확히 설명해 주세요.
+      placeholder: 예) docs/video-editing-functional-spec.md의 타임라인 설계를 실제 모델로 구현해야 합니다.
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: 현재 상황
+      description: 현재 동작/상태를 구체적으로 적어 주세요.
+    validations:
+      required: false
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대하는 결과
+      description: 완료 후 기대하는 결과/수용 기준(acceptance criteria)을 적어 주세요.
+    validations:
+      required: false
+  - type: textarea
+    id: solution
+    attributes:
+      label: 해결 방안(선택)
+      description: 해결을 위한 아이디어나 접근 방법이 있다면 제안해 주세요.
+  - type: textarea
+    id: docs
+    attributes:
+      label: 관련 문서(선택)
+      description: 관련된 docs/ 문서가 있으면 경로를 적어 주세요(예 docs/video-editing-functional-spec.md, docs/file-access-and-sandboxing.md).
+  - type: textarea
+    id: extra
+    attributes:
+      label: 추가 정보
+      description: 관련 링크, 스크린샷, 참고 자료 등을 첨부해 주세요.
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 체크리스트
+      options:
+        - label: 중복 이슈가 없는지 검색했습니다
+          required: true
+        - label: 범위와 기대 결과를 명확히 작성했습니다
+          required: true

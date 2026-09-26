@@ -6,6 +6,10 @@
 
 아직 개발 초기 단계입니다. 기능명세는 [docs/video-editing-functional-spec.md](docs/video-editing-functional-spec.md)에서 정리 중입니다.
 
+## 기여
+
+기여 방법은 [`.github/CONTRIBUTING.md`](.github/CONTRIBUTING.md)를 참고합니다.
+
 ## 라이선스
 
 [Apache License 2.0](LICENSE)

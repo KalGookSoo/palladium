@@ -1,0 +1,114 @@
+name: 버그 리포트
+description: BDD(Given/When/Then) 형식으로 재현/기대/실제 동작을 기술해 버그를 보고하세요.
+title: "[버그] "
+labels: [bug]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        감사합니다! 이 템플릿은 행위 주도 개발(BDD) 형식에 맞춰 버그를 명확히 기술하도록 돕습니다.
+        - 핵심은 "Given/When/Then/But"(기대/실제) 구조입니다.
+        - 스크린샷/영상/에러 로그 첨부를 권장합니다.
+  - type: input
+    id: scenario_title
+    attributes:
+      label: 시나리오 제목
+      description: 어떤 상황의 버그인지 한 줄로 요약하세요.
+      placeholder: 예) 클립 트림 후 내보내기하면 트림 구간이 반영되지 않음
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 관련 영역
+      description: 버그가 발생한 화면/기능을 선택하세요.
+      options:
+        - 미디어 가져오기
+        - 타임라인/클립 트림
+        - 클립 이어붙이기
+        - 자막 삽입
+        - 내보내기
+        - 미리보기/재생
+        - 프로젝트 저장/불러오기
+        - 파일 접근 권한(샌드박스)
+        - 기타
+    validations:
+      required: false
+  - type: textarea
+    id: given
+    attributes:
+      label: Given(전제 조건)
+      description: 버그 재현 전 상태. 어떤 클립/프로젝트를 어떤 상태로 준비했는지 등.
+      placeholder: |
+        예)
+        - 클립 3개를 이어붙여 타임라인을 구성한 상태
+        - 두 번째 클립을 트림(시작 5초 제거)한 상태
+    validations:
+      required: true
+  - type: textarea
+    id: when
+    attributes:
+      label: When(행동)
+      description: 사용자가 수행한 구체적 행동을 단계로 작성하세요.
+      placeholder: |
+        예)
+        1) 내보내기 버튼 탭
+        2) 유튜브(16:9) 프리셋 선택
+        3) 내보내기 완료 후 결과 파일 재생
+    validations:
+      required: true
+  - type: textarea
+    id: then_expected
+    attributes:
+      label: Then(기대 결과)
+      description: 정상이라면 어떻게 보여야/동작해야 하는지.
+      placeholder: |
+        예) 두 번째 클립이 트림한 대로 5초가 제외된 채 내보내기된다.
+    validations:
+      required: true
+  - type: textarea
+    id: but_actual
+    attributes:
+      label: But(실제 결과)
+      description: 실제로 관찰된 결과를 정확히 적어 주세요.
+      placeholder: |
+        예) 트림하기 전 원본 길이 그대로 내보내기된다.
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: 환경 정보
+      description: 기기, macOS 버전, 앱 버전(빌드 번호 포함)
+      placeholder: |
+        - 기기: MacBook Pro 14인치(M3)
+        - macOS 버전: 15.0
+        - 앱 버전: palladium v0.1.0 (로컬 빌드)
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 스크린샷/영상(선택)
+      description: 가능하면 문제를 보여주는 이미지/GIF/영상 링크를 첨부하세요.
+      placeholder: 이미지 또는 링크 첨부
+  - type: textarea
+    id: logs
+    attributes:
+      label: 관련 로그(선택)
+      description: 콘솔 로그, 크래시 로그, 스택 트레이스 등을 붙여넣어 주세요.
+  - type: textarea
+    id: notes
+    attributes:
+      label: 가능한 원인/해결 아이디어(선택)
+      description: 원인 추정, 가설, 임시 우회 방법, 관련 문서/이슈 링크 등.
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 체크리스트
+      options:
+        - label: 중복 이슈를 검색했습니다
+          required: true
+        - label: 재현 절차와 환경 정보를 기입했습니다
+          required: true

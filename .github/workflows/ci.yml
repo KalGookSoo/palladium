@@ -1,0 +1,58 @@
+name: CI
+
+# main 브랜치로의 push와 모든 PR에서 빌드/포맷 검사를 자동으로 돌린다.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 같은 브랜치/PR에 새 커밋이 올라오면 이전 실행은 취소한다 — 오래된 결과가 뒤늦게
+# 완료되어 최신 커밋의 상태를 덮어쓰는 일을 막는다.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # 러너 기본 선택 Xcode가 이 프로젝트가 요구하는 버전(로컬 개발 기준 Xcode 26.5)보다
+      # 낮을 수 있다. 러너에 설치된 Xcode 중 가장 최신 버전을 매번 동적으로 골라 쓴다 —
+      # 특정 버전을 하드코딩하면 GitHub이 이미지를 갱신할 때마다 다시 손봐야 한다.
+      - name: Select latest available Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -n 1)
+          if [ -z "$LATEST" ]; then
+            echo "Xcode_*.app을 찾지 못해 기본 /Applications/Xcode.app을 그대로 쓴다." >&2
+          else
+            echo "다음 Xcode를 선택한다: $LATEST"
+            sudo xcode-select -s "$LATEST"
+          fi
+
+      - name: Show selected Xcode version
+        run: xcodebuild -version
+
+      - name: Build
+        run: |
+          xcodebuild build \
+            -project palladium.xcodeproj \
+            -scheme palladium \
+            -destination 'platform=macOS'
+
+  lint:
+    name: SwiftFormat Lint
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SwiftFormat
+        run: brew install swiftformat
+
+      # .swiftformat 설정(--swiftversion 5.0 --indent 4)을 그대로 따른다.
+      # docs/swift-coding-conventions.md 참고.
+      - name: Check formatting
+        run: swiftformat --lint palladium
