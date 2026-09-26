@@ -5,8 +5,8 @@
 //  Created by doyevskyi on 9/26/26.
 //
 
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 @main
 struct palladiumApp: App {
