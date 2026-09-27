@@ -1,10 +1,3 @@
-//
-//  palladiumTests.swift
-//  palladiumTests
-//
-//  Created by doyevskyi on 9/26/26.
-//
-
 import Testing
 
 struct palladiumTests {
