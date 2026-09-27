@@ -18,8 +18,20 @@ nav_order: 5
 - **툴바** — 상단, 전체 폭
 - **미디어 패널** — 좌측 사이드바
 - **미리보기 플레이어** — 중앙
-- **인스펙터** — 우측 사이드바
-- **타임라인** — 하단, 전체 폭
+- **인스펙터** — 우측 사이드바(창 전체 높이)
+- **타임라인** — 미리보기 플레이어 아래(미디어 패널과 인스펙터 사이). 경계를 드래그해 미리보기와의 높이 비율을 조절한다
+
+미디어 패널·인스펙터가 창 전체 높이를 차지하는 것은 `NavigationSplitView`와 `.inspector`의 표준 동작이다. 타임라인을 창 전체 폭으로 펼치려면 이 표준 컨테이너를 `HSplitView`로 재구현해야 하므로, [스타일 가이드](native-style-guide.md)에 따라 타임라인을 미리보기 아래에 둔다.
+
+### 패널 보기/가리기
+
+JetBrains IDE의 툴 윈도우처럼 패널을 열고 닫을 수 있다.
+
+| 패널 | 툴바 버튼 | 보기 메뉴 | 단축키 |
+|---|---|---|---|
+| 미디어 패널 | 사이드바 버튼(`NavigationSplitView` 기본 제공) | 사이드바 보기/가리기(시스템 기본) | ⌃⌘S(시스템 기본) |
+| 타임라인 | `rectangle.bottomhalf.inset.filled` | 타임라인 보기/가리기 | ⌥⌘2 |
+| 인스펙터 | `sidebar.trailing` | 인스펙터 보기/가리기 | ⌥⌘I |
 
 ## 섹션별 역할 및 관련 유즈케이스
 
@@ -41,7 +53,7 @@ macOS 표준 레이아웃 컨테이너(`NavigationSplitView`, `.toolbar`, `.insp
 | 미디어 패널 | `MediaPanelView` | `NavigationSplitView`의 사이드바 컬럼, 검색바 + 클립 리스트 + 폴더 트리 |
 | 미리보기 플레이어 | `PreviewPlayerView` | `AVPlayer` 래핑 + 스크럽 바 |
 | 인스펙터 | `InspectorView` | `.inspector(isPresented:)`로 구현, 하위 탭별로 `TrimInspectorView`/`EffectInspectorView`/`TransformInspectorView`/`SubtitleInspectorView` 분리 |
-| 타임라인 | `TimelineView` | 하위에 `TrackRowView`(트랙 한 줄), `ClipView`(클립 블록), `PlayheadView`, `MarkerView` |
+| 타임라인 | `TimelineEditorView` | 미리보기 플레이어와 `VSplitView`로 나눈다. 하위에 `TrackRowView`(트랙 한 줄), `ClipView`(클립 블록), `PlayheadView`, `MarkerView`. SwiftUI의 `TimelineView`와 이름이 겹치지 않도록 `TimelineEditorView`로 짓는다 |
 
 ## 미정 사항
 
