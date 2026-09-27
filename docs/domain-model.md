@@ -95,7 +95,7 @@ classDiagram
 
 ## 샘플 데이터
 
-`#Preview`와 유닛 테스트가 함께 쓰는 샘플은 앱 타깃의 `palladium/Domain/SampleData.swift` 한 곳에 둔다. `#Preview`는 앱 타깃 안에서 실행되므로 샘플이 앱 쪽에 있어야 하고, 테스트는 `@testable import palladium`으로 같은 샘플에 접근한다.
+`#Preview`와 유닛 테스트가 함께 쓰는 샘플은 앱 타깃의 `palladium/domain/SampleData.swift` 한 곳에 둔다. `#Preview`는 앱 타깃 안에서 실행되므로 샘플이 앱 쪽에 있어야 하고, 테스트는 `@testable import palladium`으로 같은 샘플에 접근한다.
 
 ## 영속화(SwiftData) 경계
 
