@@ -51,7 +51,7 @@ macOS 표준 레이아웃 컨테이너(`NavigationSplitView`, `.toolbar`, `.insp
 
 | 섹션 | 예상 View | 비고 |
 |---|---|---|
-| 툴바 | `ToolbarView` | `.toolbar { ToolbarItemGroup }`로 구현, 가져오기/화면비/내보내기 버튼 |
+| 툴바 | `MainWindowToolbar` | `.toolbar { }` 안에 들어가는 내용은 View가 아니라 `ToolbarContent`여야 하므로 `ToolbarContent`로 구현. 앞쪽(`.navigation`)에 가져오기(⌘I)·화면비 프리셋(16:9 / 9:16 / 1:1), 뒤쪽(`.primaryAction`)에 내보내기(⌘E)와 패널 토글. 가져오기·내보내기는 파일 메뉴에도 같은 단축키로 둔다 |
 | 미디어 패널 | `MediaPanelView` | `NavigationSplitView`의 사이드바 컬럼, 검색바 + 클립 리스트 + 폴더 트리 |
 | 미리보기 플레이어 | `PreviewPlayerView` | `AVPlayer` 래핑 + 스크럽 바 |
 | 인스펙터 | `InspectorView` | `.inspector(isPresented:)`로 구현, 하위 탭별로 `TrimInspectorView`/`EffectInspectorView`/`TransformInspectorView`/`SubtitleInspectorView` 분리 |
