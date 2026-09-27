@@ -46,7 +46,7 @@ classDiagram
     Project "1" *-- "1..*" EditSequence
     EditSequence "1" *-- "0..*" Track
     Track "1" *-- "0..*" Clip
-    Clip ..> MediaAsset: assetID로 참조
+    Clip ..> MediaAsset : assetID로 참조
 ```
 
 ## 타입별 책임
