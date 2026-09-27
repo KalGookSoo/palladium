@@ -7,6 +7,7 @@ struct palladiumApp: App {
             MainWindowView()
         }
         .commands {
+            FileCommands()
             PanelVisibilityCommands()
         }
     }
