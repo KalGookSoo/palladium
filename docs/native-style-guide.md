@@ -90,6 +90,7 @@ nav_order: 6
 - 주요 실행(내보내기, 저장): `.borderedProminent`, tint는 `Color.accentColor`(시스템 강조색).
 - 보조 동작(가져오기, 편집, 취소): `.bordered` 또는 `.plain`.
 - 파괴적 동작(삭제): `.bordered` + `role: .destructive` (시스템이 자동으로 빨간색 처리).
+- 예외 — 툴바 안의 버튼: 주요 실행이라도 `.borderedProminent`를 쓰지 않고 툴바 기본 스타일을 쓴다. 툴바에서 `.borderedProminent`는 다른 버튼보다 크게 그려져 버튼 크기가 어긋나기 때문이다. 버튼은 캡슐로 묶지 않고 모두 개별 버튼으로 둔다(항목 사이에 `ToolbarSpacer`). 묶는 기준이 모호하고, 묶으면 아이콘 정렬이 어긋나 보이기 때문이다.
 
 ## Iconography
 
