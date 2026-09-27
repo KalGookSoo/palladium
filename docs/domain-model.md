@@ -18,10 +18,17 @@ classDiagram
         id: UUID
         name: String
         assets: Array~MediaAsset~
+        folders: Array~MediaFolder~
         sequences: Array~EditSequence~
+    }
+    class MediaFolder {
+        id: UUID
+        name: String
+        assetIDs: Array~MediaAsset.ID~
     }
     class MediaAsset {
         id: UUID
+        name: String
         sourceURL: URL
         kind: MediaKind
         duration: CMTime
@@ -43,6 +50,8 @@ classDiagram
         timelineStart: CMTime
     }
     Project "1" *-- "0..*" MediaAsset
+    Project "1" *-- "0..*" MediaFolder
+    MediaFolder ..> MediaAsset : assetIDs로 참조
     Project "1" *-- "1..*" EditSequence
     EditSequence "1" *-- "0..*" Track
     Track "1" *-- "0..*" Clip
@@ -54,7 +63,8 @@ classDiagram
 | 타입             | 책임                                                          | 비고                                                                      |
 |----------------|-------------------------------------------------------------|-------------------------------------------------------------------------|
 | `Project`      | 가져온 원본 미디어와 시퀀스를 담는 저장 단위                                   | 새 프로젝트는 빈 시퀀스 하나로 시작한다([프로젝트 저장/불러오기](use-cases/project-management.md)) |
-| `MediaAsset`   | 가져온 원본 파일 하나(영상/오디오/이미지)의 정보                                | 미디어 패널에 보이는 항목. 타임라인 배치 정보는 갖지 않는다                                      |
+| `MediaAsset`   | 가져온 원본 파일 하나(영상/오디오/이미지)의 정보                                | 미디어 패널에 보이는 항목. 타임라인 배치 정보는 갖지 않는다. `name`은 가져올 때 파일 이름으로 채우고 이후 바꿀 수 있다 |
+| `MediaFolder`  | 미디어 패널에서 원본을 분류하는 폴더(빈) 하나                                   | 원본을 복사하지 않고 `assetIDs`로 참조한다. 어느 폴더에도 없는 원본은 "분류 안 됨"으로 보여준다        |
 | `EditSequence` | 독립된 편집 결과물 하나(통합본 또는 하이라이트)                                 | Swift 표준 라이브러리의 `Sequence` 프로토콜과 이름이 겹치지 않도록 `EditSequence`로 짓는다        |
 | `Track`        | 시퀀스 안에서 클립이 시간순으로 놓이는 레인 하나                                 | `TrackKind`: `video`, `audio`                                           |
 | `Clip`         | 원본의 어느 구간(`sourceRange`)을 타임라인의 어느 위치(`timelineStart`)에 놓을지 | 타임라인에서 차지하는 구간(`timelineRange`)은 저장하지 않고 계산한다                           |
@@ -117,7 +127,7 @@ classDiagram
 - 트랜지션([트랜지션](use-cases/transitions.md))
 - 오버레이·마스크([오버레이 및 마스킹](use-cases/overlays.md))
 - 마커([클립 이어붙이기](use-cases/joining-clips.md))
-- 폴더·레이블·태그·별점, 프록시([미디어 가져오기](use-cases/media-import.md))
+- 레이블·태그·별점, 프록시, 폴더 생성·이동 편집([미디어 가져오기](use-cases/media-import.md))
 - 재생 속도·역재생([클립 자르기(트림)](use-cases/trimming.md))
 
 ## 미정 사항
