@@ -7,15 +7,19 @@ nonisolated struct MediaAsset {
     let id: UUID
     /// 원본 파일의 위치.
     var sourceURL: URL
-    /// 원본의 종류
+    /// 원본의 종류.
     let kind: MediaKind
     /// 원본의 전체 길이.
     let duration: CMTime
 }
 
+/// 원본 미디어의 종류.
 nonisolated enum MediaKind {
+    /// 영상.
     case video
+    /// 오디오.
     case audio
+    /// 이미지.
     case image
 }
 
