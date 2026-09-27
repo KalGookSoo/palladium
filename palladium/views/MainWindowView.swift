@@ -3,6 +3,7 @@ import SwiftUI
 struct MainWindowView: View {
     @State private var isTimelineVisible = true
     @State private var isInspectorPresented = true
+    @State private var aspectRatio: AspectRatioPreset = .landscape16x9
 
     var body: some View {
         NavigationSplitView {
@@ -25,21 +26,11 @@ struct MainWindowView: View {
                 .inspectorColumnWidth(min: 240, ideal: 280, max: 400)
         }
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    isTimelineVisible.toggle()
-                } label: {
-                    Label("타임라인", systemImage: "rectangle.bottomhalf.inset.filled")
-                }
-                .help("타임라인 보기/가리기 (⌥⌘2)")
-
-                Button {
-                    isInspectorPresented.toggle()
-                } label: {
-                    Label("인스펙터", systemImage: "sidebar.trailing")
-                }
-                .help("인스펙터 보기/가리기 (⌥⌘I)")
-            }
+            MainWindowToolbar(
+                aspectRatio: $aspectRatio,
+                isTimelineVisible: $isTimelineVisible,
+                isInspectorPresented: $isInspectorPresented
+            )
         }
         .focusedSceneValue(\.isTimelineVisible, $isTimelineVisible)
         .focusedSceneValue(\.isInspectorPresented, $isInspectorPresented)
