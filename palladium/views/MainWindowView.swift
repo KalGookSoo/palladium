@@ -4,10 +4,12 @@ struct MainWindowView: View {
     @State private var isTimelineVisible = true
     @State private var isInspectorPresented = true
     @State private var aspectRatio: AspectRatioPreset = .landscape16x9
+    @State private var project = SampleData.project
+    @State private var selectedAssetID: MediaAsset.ID?
 
     var body: some View {
         NavigationSplitView {
-            MediaPanelView()
+            MediaPanelView(project: project, selectedAssetID: $selectedAssetID)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240)
         } detail: {
             VSplitView {
