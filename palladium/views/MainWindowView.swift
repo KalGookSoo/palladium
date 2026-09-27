@@ -11,12 +11,14 @@ struct MainWindowView: View {
         } detail: {
             VSplitView {
                 PreviewPlayerView()
-                    .frame(minHeight: 240)
+                    .frame(maxWidth: .infinity, minHeight: 240, maxHeight: .infinity)
                 if isTimelineVisible {
                     TimelineEditorView()
-                        .frame(minHeight: 160, idealHeight: 240)
+                        .frame(maxWidth: .infinity, minHeight: 160, idealHeight: 240, maxHeight: .infinity)
                 }
             }
+            // 창이 좁아질 때 양쪽 패널 대신 가운데가 먼저 줄어들도록 최소 폭을 명시한다.
+            .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
         }
         .inspector(isPresented: $isInspectorPresented) {
             InspectorView()
