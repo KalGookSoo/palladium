@@ -13,7 +13,7 @@ nav_order: 7
 ## 핵심 원칙
 
 - **사용하는 곳에서의 명확성이 간결함보다 중요하다.** 이름이 길어지더라도, 호출하는 코드를 읽었을 때 무슨 일이 일어나는지 명확해야 한다.
-- **모든 선언에는 문서화 주석을 남긴다.** `///`로 시작하는 문서 주석을 타입, 메서드, 속성에 작성한다.
+- **코드가 곧 문서가 되게 한다.** 이름과 타입으로 의도를 드러내고, 주석은 코드로 표현할 수 없는 "왜"에만 남긴다.
 - **모호함보다는 명확함을 우선한다.** 짧지만 애매한 이름보다, 길더라도 뜻이 분명한 이름을 쓴다.
 
 ## 대소문자 규칙
@@ -183,15 +183,68 @@ let isPendingDeletionPresented = Binding<Bool>(
 
 이 프로젝트에서 `Binding(get:set:)`는 항상 이렇게 필요한 스코프(대부분 `body` 안)에 지역적으로 선언한다 — `private var`로 끌어올린 사례는 없다.
 
-## 문서화 주석
+## 주석
 
-공개 타입/메서드/속성에는 `///` 문서 주석을 남긴다.
+코드 자체로 의도를 드러내는 것을 우선하고, 주석은 코드로 표현할 수 없을 때만 쓴다.
+
+- 이름이나 타입을 되풀이하는 주석은 쓰지 않는다.
 
 ```swift
-/// 저장된 클립을 이름 기준으로 조회한다.
-/// - Parameter name: 검색할 클립 이름.
-/// - Returns: 일치하는 클립. 없으면 `nil`.
-func findClip(named name: String) -> Clip?
+// 지양
+/// 클립을 구분하는 고유 식별자.
+let id: UUID
+
+// 권장
+let id: UUID
+```
+
+- 주석은 코드로 표현할 수 없는 이유(왜 이렇게 했는지, 무엇을 피하려는지)에만 남긴다. 선언에 대한 이유는 `///`로 써서 Xcode Quick Help(`Option` + 클릭)에 노출한다.
+
+```swift
+/// Swift 표준 라이브러리의 `Sequence` 프로토콜과 이름이 겹치지 않도록 `EditSequence`로 짓는다.
+struct EditSequence { ... }
+```
+
+- 동작 명세는 주석 대신 테스트 이름으로 남긴다: `@Test("길이가 0인 구간으로는 클립을 만들 수 없다")`. 테스트는 코드와 어긋나면 실패하므로 주석처럼 낡지 않는다.
+- 코드가 기대는 가정은 주석 대신 `precondition`/`preconditionFailure`로 강제한다. 가정이 깨지면 그 자리에서 이유와 함께 멈춘다.
+
+```swift
+// 지양
+// 시퀀스를 하나 넘기므로 init?은 항상 성공한다.
+return Project(name: name, assets: [], sequences: [firstSequence])!
+
+// 권장
+guard let project = Project(name: name, assets: [], sequences: [firstSequence]) else {
+    preconditionFailure("시퀀스를 하나 넘겼으므로 Project 생성은 실패할 수 없다")
+}
+return project
+```
+
+- 의미 있는 값은 매직 넘버로 두지 않고 이름 있는 상수로 둔다(예: `preferredTimescale: 600` 대신 `standardTimescale`).
+
+## 로깅
+
+`OSLog`의 `Logger`를 쓴다. 로그는 커맨드의 실행 흐름을 기록하는 도구이며, 레벨은 다음 기준으로 고른다.
+
+| 대상 | 레벨 |
+|---|---|
+| 커맨드의 시작과 결과(부수효과) | `info` |
+| 사용자에게 의미 있는 완료(저장, 내보내기 등) | `notice` |
+| 실패 | `error` |
+| 발생하면 안 되는 상태(버그) | `fault` |
+
+- 쿼리에는 로그를 넣지 않고 유닛 테스트로 검증한다. SwiftUI는 화면을 그릴 때마다 쿼리를 반복 호출하므로 로그가 넘치고, 쿼리는 부수효과 없는 순수 함수로 유지해야 하기 때문이다([커맨드와 쿼리를 엄격히 분리한다](#커맨드와-쿼리를-엄격히-분리한다-cqs) 참고). 같은 이유로 순수 도메인 타입(`palladium/domain/`)에도 로그를 넣지 않는다.
+- `subsystem`은 번들 ID(`kr.me.seesaw.palladium`), `category`는 기능 단위(`import`, `editing`, `export` 등)로 둔다.
+- 문자열 보간 값은 릴리스 로그에서 기본적으로 `<private>`로 가려진다. 식별자처럼 공개해도 되는 값에만 `privacy: .public`을 붙이고, 파일 경로 같은 사용자 정보는 공개하지 않는다.
+
+```swift
+import OSLog
+
+extension Logger {
+    static let editing = Logger(subsystem: "kr.me.seesaw.palladium", category: "editing")
+}
+
+Logger.editing.info("클립 트림: clip=\(clip.id, privacy: .public)")
 ```
 
 ## 포맷팅
