@@ -1,10 +1,3 @@
-//
-//  ContentView.swift
-//  palladium
-//
-//  Created by doyevskyi on 9/26/26.
-//
-
 import SwiftData
 import SwiftUI
 

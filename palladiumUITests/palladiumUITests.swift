@@ -1,10 +1,3 @@
-//
-//  palladiumUITests.swift
-//  palladiumUITests
-//
-//  Created by doyevskyi on 9/26/26.
-//
-
 import XCTest
 
 final class palladiumUITests: XCTestCase {
