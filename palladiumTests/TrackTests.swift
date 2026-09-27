@@ -41,6 +41,6 @@ struct TrackTests {
 // MARK: - Helpers
 
 private func makeClip(timelineStart: Double, duration: Double) throws -> Clip {
-    let sourceRange = CMTimeRange(start: .zero, duration: CMTime(seconds: duration, preferredTimescale: 600))
-    return try #require(Clip(assetID: UUID(), sourceRange: sourceRange, timelineStart: CMTime(seconds: timelineStart, preferredTimescale: 600)))
+    let sourceRange = CMTimeRange(start: .zero, duration: CMTime(seconds: duration, preferredTimescale: standardTimescale))
+    return try #require(Clip(assetID: UUID(), sourceRange: sourceRange, timelineStart: CMTime(seconds: timelineStart, preferredTimescale: standardTimescale)))
 }

@@ -45,7 +45,7 @@ struct ClipTests {
 // MARK: - Helpers
 
 private func seconds(_ value: Double) -> CMTime {
-    CMTime(seconds: value, preferredTimescale: 600)
+    CMTime(seconds: value, preferredTimescale: standardTimescale)
 }
 
 private func range(start: Double, duration: Double) -> CMTimeRange {
