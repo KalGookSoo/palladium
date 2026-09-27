@@ -5,6 +5,7 @@ import Foundation
 nonisolated enum SampleData {
     static let introVideo = MediaAsset(
         id: UUID(),
+        name: "intro.mov",
         sourceURL: URL(filePath: "/samples/intro.mov"),
         kind: .video,
         duration: seconds(10)
@@ -12,6 +13,7 @@ nonisolated enum SampleData {
 
     static let bRollVideo = MediaAsset(
         id: UUID(),
+        name: "b-roll.mov",
         sourceURL: URL(filePath: "/samples/b-roll.mov"),
         kind: .video,
         duration: seconds(20)
@@ -19,10 +21,14 @@ nonisolated enum SampleData {
 
     static let backgroundMusic = MediaAsset(
         id: UUID(),
+        name: "background-music.m4a",
         sourceURL: URL(filePath: "/samples/background-music.m4a"),
         kind: .audio,
         duration: seconds(60)
     )
+
+    /// 배경음악은 폴더에 넣지 않아 "분류 안 됨" 상태를 함께 보여준다.
+    static let footageFolder = MediaFolder(id: UUID(), name: "촬영본", assetIDs: [introVideo.id, bRollVideo.id])
 
     static let videoTrack = Track(
         id: UUID(),
@@ -47,6 +53,7 @@ nonisolated enum SampleData {
         guard let project = Project(
             name: "샘플 프로젝트",
             assets: [introVideo, bRollVideo, backgroundMusic],
+            folders: [footageFolder],
             sequences: [mainSequence]
         ) else {
             preconditionFailure("시퀀스를 하나 넘겼으므로 샘플 Project 생성은 실패할 수 없다")
@@ -63,7 +70,7 @@ nonisolated enum SampleData {
     private static func makeClip(asset: MediaAsset, sourceStart: Double, duration: Double, timelineStart: Double) -> Clip {
         let sourceRange = CMTimeRange(start: seconds(sourceStart), duration: seconds(duration))
         guard let clip = Clip(assetID: asset.id, sourceRange: sourceRange, timelineStart: seconds(timelineStart)) else {
-            preconditionFailure("샘플 클립 값이 Clip 불변식을 어긴다: \(asset.sourceURL.lastPathComponent)")
+            preconditionFailure("샘플 클립 값이 Clip 불변식을 어긴다: \(asset.name)")
         }
         return clip
     }
