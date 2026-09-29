@@ -1,11 +1,96 @@
+import OSLog
 import SwiftUI
 
+/// `VSplitView` 안에서는 화면 구성이 바뀔 때 이 View가 다시 만들어져 `@State`를 잃으므로, 플레이어와 로드 명령은 상위(`MainWindowView`)가 소유한다.
 struct PreviewPlayerView: View {
+    let asset: MediaAsset?
+    let previewPlayer: PreviewPlayer
+
     var body: some View {
-        ContentUnavailableView("미리보기 플레이어", systemImage: "play.rectangle")
+        switch previewPlayer.loadState {
+        case .empty:
+            ContentUnavailableView("원본을 선택하세요", systemImage: "play.rectangle")
+        case .loading:
+            ProgressView()
+        case .unavailable:
+            ContentUnavailableView(
+                "재생할 수 없음",
+                systemImage: "exclamationmark.triangle",
+                description: Text(asset?.name ?? "")
+            )
+        case let .ready(timeline):
+            VStack(spacing: 0) {
+                PlayerSurfaceView(player: previewPlayer.player)
+                PlaybackControls(previewPlayer: previewPlayer, timeline: timeline)
+            }
+        }
     }
 }
 
+private struct PlaybackControls: View {
+    let previewPlayer: PreviewPlayer
+    let timeline: PlaybackTimeline
+
+    var body: some View {
+        let progress = Binding<Double>(
+            get: { timeline.progress(at: previewPlayer.currentTime) },
+            set: { previewPlayer.seek(toProgress: $0, in: timeline) }
+        )
+
+        VStack {
+            Slider(value: progress, in: 0 ... 1)
+                .accessibilityLabel("재생 위치")
+
+            HStack {
+                Button {
+                    previewPlayer.stepFrame(by: -1, in: timeline)
+                } label: {
+                    Label("이전 프레임", systemImage: "backward.frame.fill")
+                }
+                .disabled(!timeline.canStepFrames)
+                .help("이전 프레임")
+
+                Button(action: previewPlayer.togglePlayPause) {
+                    Label(
+                        previewPlayer.isPlaying ? "일시정지" : "재생",
+                        systemImage: previewPlayer.isPlaying ? "pause.fill" : "play.fill"
+                    )
+                }
+                .help(previewPlayer.isPlaying ? "일시정지" : "재생")
+
+                Button {
+                    previewPlayer.stepFrame(by: 1, in: timeline)
+                } label: {
+                    Label("다음 프레임", systemImage: "forward.frame.fill")
+                }
+                .disabled(!timeline.canStepFrames)
+                .help("다음 프레임")
+
+                Text(timeline.timeLabel(at: previewPlayer.currentTime))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+
+                Spacer()
+
+                Button(action: requestNarrationRecording) {
+                    Label("내레이션 녹음", systemImage: "mic.fill")
+                }
+                .help("내레이션 녹음")
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.plain)
+        }
+        .padding()
+    }
+}
+
+private func requestNarrationRecording() {
+    Logger.narration.info("내레이션 녹음 요청: 아직 구현되지 않음")
+}
+
 #Preview {
-    PreviewPlayerView()
+    @Previewable @State var previewPlayer = PreviewPlayer()
+    PreviewPlayerView(asset: SampleData.introVideo, previewPlayer: previewPlayer)
+        .task { await previewPlayer.load(url: SampleData.introVideo.sourceURL) }
 }
