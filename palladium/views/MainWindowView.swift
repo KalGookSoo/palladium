@@ -6,14 +6,17 @@ struct MainWindowView: View {
     @State private var aspectRatio: AspectRatioPreset = .landscape16x9
     @State private var project = SampleData.project
     @State private var selectedAssetID: MediaAsset.ID?
+    @State private var previewPlayer = PreviewPlayer()
 
     var body: some View {
+        let selectedAsset = project.assets.first { $0.id == selectedAssetID }
+
         NavigationSplitView {
             MediaPanelView(project: project, selectedAssetID: $selectedAssetID)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240)
         } detail: {
             VSplitView {
-                PreviewPlayerView()
+                PreviewPlayerView(asset: selectedAsset, previewPlayer: previewPlayer)
                     .frame(maxWidth: .infinity, minHeight: 240, maxHeight: .infinity)
                 if isTimelineVisible {
                     TimelineEditorView()
@@ -36,6 +39,9 @@ struct MainWindowView: View {
         }
         .focusedSceneValue(\.isTimelineVisible, $isTimelineVisible)
         .focusedSceneValue(\.isInspectorPresented, $isInspectorPresented)
+        .task(id: selectedAssetID) {
+            await previewPlayer.load(url: selectedAsset?.sourceURL)
+        }
         .frame(minWidth: 900, minHeight: 600)
     }
 }

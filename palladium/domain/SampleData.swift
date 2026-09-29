@@ -1,12 +1,13 @@
 import CoreMedia
 import Foundation
 
-/// 원본 URL은 실제 파일이 없는 자리표시다.
+/// 인트로만 실제 영상을 가리키고, 나머지 원본 URL은 실제 파일이 없는 자리표시다.
 nonisolated enum SampleData {
+    /// 로컬에만 두고 git에서 제외한 palladium/samples/sample.mov가 빌드 시 앱 번들에 들어오면 그 파일을 가리키고, 없으면 자리표시 경로가 된다.
     static let introVideo = MediaAsset(
         id: UUID(),
         name: "intro.mov",
-        sourceURL: URL(filePath: "/samples/intro.mov"),
+        sourceURL: Bundle.main.url(forResource: "sample", withExtension: "mov") ?? URL(filePath: "/samples/intro.mov"),
         kind: .video,
         duration: seconds(10)
     )
