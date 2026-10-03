@@ -127,6 +127,7 @@ classDiagram
 - 새 프로젝트는 만드는 즉시 저장되고(`ProjectRepository.createProject(named:)`), 이후 내용 변경은 사용자가 저장해야 반영된다(`ProjectRepository.save(_:)`). 편집 화면은 마지막으로 저장한 프로젝트와 지금 프로젝트를 비교(`Equatable`)해 저장하지 않은 변경을 판단한다.
 - 레코드 구성: `ProjectRecord`(목록 정보: id, 이름, 생성일, 수정일, 원본·시퀀스 개수 → 도메인 `ProjectSummary`) 아래에 `MediaAssetRecord`, `MediaFolderRecord`, `SequenceRecord` → `TrackRecord` → `ClipRecord`, `SequenceRecord` → `MarkerRecord`. 프로젝트나 시퀀스를 지우면 하위 레코드도 함께 지워진다(`cascade`).
 - 저장은 무엇이 바뀌었는지 비교하지 않고 하위 레코드를 통째로 교체한다. 빠뜨린 삭제나 순서 변경이 남지 않게 하기 위함이다. 내용이 저장되기 전에 만든 레코드(시퀀스 없음)는 빈 시퀀스 하나로 연다.
+- 백업본: 저장하지 않은 변경은 1분(`BackupPolicy.defaultInterval`, 이후 환경설정 #19에서 조정)마다, 마지막 백업 이후 또 바뀌었을 때만 `ProjectBackupRecord`(프로젝트당 하나)에 쓴다. 내용은 저장본과 같은 하위 레코드 구조와 변환(`ProjectContentRecords`)을 쓴다. 저장하거나 "저장 안 함"으로 닫으면 지우고, 마지막 저장보다 새 백업본이 남아 있으면(비정상 종료) 프로젝트를 열 때 복구를 묻는다. 복구한 내용은 저장하지 않은 변경 상태로 열린다.
 - 영속 계층 구현 시 유의: SwiftData 관계 배열은 순서를 보장하지 않으므로 정렬 인덱스를 별도로 저장하고, `CMTime`은 `value`/`timescale`로 분해해 저장하며, 도메인과 레코드는 같은 `id`를 공유한다.
 - Xcode 템플릿의 SwiftData `Item` 모델은 도메인과 무관한 스캐폴딩이다. 메인 윈도우 레이아웃 뼈대(#12)에서 템플릿 `ContentView`를 걷어낼 때 함께 제거한다.
 

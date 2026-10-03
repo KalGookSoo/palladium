@@ -9,6 +9,8 @@ struct UnsavedChangesGuard: NSViewRepresentable {
     let projectName: String
     /// 저장에 성공하면 `true`. 실패하면 창을 닫거나 종료하지 않는다.
     let save: () -> Bool
+    /// "저장 안 함"을 고르면 호출된다. 저장하지 않은 변경의 백업본을 지우는 데 쓴다.
+    let discardChanges: () -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -23,6 +25,7 @@ struct UnsavedChangesGuard: NSViewRepresentable {
         coordinator.hasUnsavedChanges = hasUnsavedChanges
         coordinator.projectName = projectName
         coordinator.save = save
+        coordinator.discardChanges = discardChanges
         // 처음 그려질 때는 아직 창에 붙기 전이라 window가 nil일 수 있어 다음 런루프에서 연결한다.
         DispatchQueue.main.async {
             coordinator.attach(to: view.window)
@@ -33,6 +36,7 @@ struct UnsavedChangesGuard: NSViewRepresentable {
         var hasUnsavedChanges = false
         var projectName = ""
         var save: () -> Bool = { true }
+        var discardChanges: () -> Void = {}
         private(set) weak var window: NSWindow?
         private weak var originalDelegate: NSWindowDelegate?
 
@@ -67,9 +71,13 @@ struct UnsavedChangesGuard: NSViewRepresentable {
         /// 확인 창의 응답을 처리하고, 창을 닫거나 종료를 계속해도 되면 `true`를 돌려준다.
         func resolve(_ response: NSApplication.ModalResponse) -> Bool {
             switch response {
-            case .alertFirstButtonReturn: save()
-            case .alertSecondButtonReturn: true
-            default: false
+            case .alertFirstButtonReturn:
+                return save()
+            case .alertSecondButtonReturn:
+                discardChanges()
+                return true
+            default:
+                return false
             }
         }
 
