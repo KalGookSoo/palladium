@@ -94,9 +94,7 @@ struct MainWindowView: View {
             MainWindowToolbar(
                 aspectRatio: $aspectRatio,
                 isTimelineVisible: $isTimelineVisible,
-                isInspectorPresented: $isInspectorPresented,
-                hasUnsavedChanges: hasUnsavedChanges,
-                saveProject: saveProject
+                isInspectorPresented: $isInspectorPresented
             )
         }
         .focusedSceneValue(\.saveProject, saveAction)
