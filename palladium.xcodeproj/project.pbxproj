@@ -187,10 +187,10 @@
 				};
 			};
 			buildConfigurationList = 9F8A478F306799980014B46A /* Build configuration list for PBXProject "palladium" */;
-			developmentRegion = en;
+			developmentRegion = ko;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				en,
+				ko,
 				Base,
 			);
 			mainGroup = 9F8A478B306799980014B46A;
