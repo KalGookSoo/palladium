@@ -1,8 +1,8 @@
 import Foundation
 import SwiftData
 
-/// 프로젝트의 저장 전용 레코드. 지금은 시작 화면 목록에 필요한 정보만 담고,
-/// 원본·시퀀스·클립 같은 내용은 프로젝트 저장/불러오기(#7)에서 별도 레코드로 확장한다.
+/// 프로젝트의 저장 전용 레코드. 목록 정보와 함께 원본·폴더·시퀀스를 하위 레코드로 가진다.
+/// 프로젝트를 지우면 하위 레코드도 함께 지워진다(`cascade`).
 @Model
 final class ProjectRecord {
     @Attribute(.unique) var id: UUID
@@ -11,6 +11,9 @@ final class ProjectRecord {
     var modifiedAt: Date
     var assetCount: Int
     var sequenceCount: Int
+    @Relationship(deleteRule: .cascade, inverse: \MediaAssetRecord.project) var assets: [MediaAssetRecord] = []
+    @Relationship(deleteRule: .cascade, inverse: \MediaFolderRecord.project) var folders: [MediaFolderRecord] = []
+    @Relationship(deleteRule: .cascade, inverse: \SequenceRecord.project) var sequences: [SequenceRecord] = []
 
     init(summary: ProjectSummary) {
         id = summary.id

@@ -19,13 +19,8 @@ final class SwiftDataProjectRepository: ProjectRepository {
         return try modelContext.fetch(descriptor).map(\.summary)
     }
 
-    /// 프로젝트 내용은 아직 저장하지 않으므로(#7), 저장된 id·이름으로 빈 프로젝트를 만들어 돌려준다.
     func project(id: Project.ID) throws -> Project? {
-        let targetID = id
-        var descriptor = FetchDescriptor<ProjectRecord>(predicate: #Predicate { $0.id == targetID })
-        descriptor.fetchLimit = 1
-        guard let record = try modelContext.fetch(descriptor).first else { return nil }
-        return Project.makeNew(id: record.id, name: record.name)
+        try record(id: id)?.makeProject()
     }
 
     // MARK: - Commands
@@ -33,9 +28,29 @@ final class SwiftDataProjectRepository: ProjectRepository {
     func createProject(named name: String) throws -> Project {
         let project = Project.makeNew(name: name)
         let createdAt = now()
-        modelContext.insert(ProjectRecord(summary: project.summary(createdAt: createdAt, modifiedAt: createdAt)))
+        let record = ProjectRecord(summary: project.summary(createdAt: createdAt, modifiedAt: createdAt))
+        modelContext.insert(record)
+        record.replaceContent(with: project, modifiedAt: createdAt, in: modelContext)
         try modelContext.save()
         Logger.project.info("프로젝트 생성: \(project.id, privacy: .public)")
         return project
+    }
+
+    func save(_ project: Project) throws {
+        guard let record = try record(id: project.id) else {
+            throw ProjectRepositoryError.projectNotFound(project.id)
+        }
+        record.replaceContent(with: project, modifiedAt: now(), in: modelContext)
+        try modelContext.save()
+        Logger.project.notice("프로젝트 저장: \(project.id, privacy: .public)")
+    }
+
+    // MARK: - Helpers
+
+    private func record(id: Project.ID) throws -> ProjectRecord? {
+        let targetID = id
+        var descriptor = FetchDescriptor<ProjectRecord>(predicate: #Predicate { $0.id == targetID })
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).first
     }
 }

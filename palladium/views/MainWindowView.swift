@@ -1,4 +1,6 @@
 import CoreMedia
+import OSLog
+import SwiftData
 import SwiftUI
 
 /// 사이드바와 인스펙터만 폭 범위를 가진다. 가운데 영역과 창에는 최소 폭을 두지 않는다 —
@@ -18,6 +20,10 @@ struct MainWindowView: View {
     @State private var isInspectorPresented = true
     @State private var aspectRatio: AspectRatioPreset = .landscape16x9
     @State private var project: Project
+    /// 마지막으로 저장한 내용. 지금 프로젝트와 다르면 저장하지 않은 변경이 있다.
+    @State private var savedProject: Project
+    @State private var saveErrorMessage: String?
+    @Environment(\.modelContext) private var modelContext
     /// 프리미어 프로처럼 미디어 패널 선택, 미리보기에 연 원본, 타임라인 클립 선택은 서로 독립이다.
     @State private var selectedAssetID: MediaAsset.ID?
     @State private var openedAssetID: MediaAsset.ID?
@@ -28,9 +34,21 @@ struct MainWindowView: View {
 
     init(project: Project) {
         _project = State(initialValue: project)
+        _savedProject = State(initialValue: project)
     }
 
     var body: some View {
+        let hasUnsavedChanges = project != savedProject
+        // 저장할 변경이 없으면 nil을 넘겨 파일 > 저장 메뉴를 비활성화한다.
+        let saveAction: (() -> Void)? = hasUnsavedChanges ? { saveProject() } : nil
+        let isShowingSaveError = Binding<Bool>(
+            get: { saveErrorMessage != nil },
+            set: {
+                if !$0 {
+                    saveErrorMessage = nil
+                }
+            }
+        )
         let openedAsset = project.assets.first { $0.id == openedAssetID }
         let currentSequence = project.sequences.first
         let selectedClip = currentSequence?.tracks.flatMap(\.clips).first { $0.id == selectedClipID }
@@ -76,9 +94,12 @@ struct MainWindowView: View {
             MainWindowToolbar(
                 aspectRatio: $aspectRatio,
                 isTimelineVisible: $isTimelineVisible,
-                isInspectorPresented: $isInspectorPresented
+                isInspectorPresented: $isInspectorPresented,
+                hasUnsavedChanges: hasUnsavedChanges,
+                saveProject: saveProject
             )
         }
+        .focusedSceneValue(\.saveProject, saveAction)
         .focusedSceneValue(\.isTimelineVisible, $isTimelineVisible)
         .focusedSceneValue(\.isInspectorPresented, $isInspectorPresented)
         .focusedSceneValue(\.timelineScale, $timelineScale)
@@ -87,6 +108,21 @@ struct MainWindowView: View {
         }
         .frame(minHeight: 600)
         .navigationTitle(project.name)
+        .alert("저장하지 못했습니다", isPresented: isShowingSaveError) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text(saveErrorMessage ?? "")
+        }
+    }
+
+    private func saveProject() {
+        do {
+            try SwiftDataProjectRepository(modelContext: modelContext).save(project)
+            savedProject = project
+        } catch {
+            Logger.project.error("프로젝트 저장 실패: \(error.localizedDescription, privacy: .public)")
+            saveErrorMessage = error.localizedDescription
+        }
     }
 }
 

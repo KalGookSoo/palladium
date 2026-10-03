@@ -7,7 +7,7 @@ nonisolated struct Track {
     var clips: [Clip]
 }
 
-nonisolated enum TrackKind {
+nonisolated enum TrackKind: String {
     case video
     case audio
 }
