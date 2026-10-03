@@ -27,7 +27,7 @@ struct MainWindowView: View {
             .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
         }
         .inspector(isPresented: $isInspectorPresented) {
-            InspectorView()
+            InspectorView(asset: selectedAsset)
                 .inspectorColumnWidth(min: 240, ideal: 280, max: 400)
         }
         .toolbar {
