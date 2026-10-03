@@ -9,6 +9,7 @@ struct palladiumApp: App {
         .commands {
             FileCommands()
             PanelVisibilityCommands()
+            TimelineZoomCommands()
         }
     }
 }

@@ -9,7 +9,11 @@ struct PreviewPlayerView: View {
     var body: some View {
         switch previewPlayer.loadState {
         case .empty:
-            ContentUnavailableView("원본을 선택하세요", systemImage: "play.rectangle")
+            ContentUnavailableView(
+                "열린 원본 없음",
+                systemImage: "play.rectangle",
+                description: Text("미디어 패널에서 원본을 더블클릭하세요")
+            )
         case .loading:
             ProgressView()
         case .unavailable:

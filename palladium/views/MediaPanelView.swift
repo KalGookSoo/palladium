@@ -1,9 +1,11 @@
 import CoreMedia
 import SwiftUI
 
+/// 프리미어 프로의 프로젝트 패널처럼 한 번 클릭은 선택만 하고, 더블클릭하면 원본을 미리보기(소스 모니터)에서 연다.
 struct MediaPanelView: View {
     let project: Project
     @Binding var selectedAssetID: MediaAsset.ID?
+    let openAsset: (MediaAsset.ID) -> Void
     @State private var searchQuery = ""
 
     var body: some View {
@@ -28,6 +30,13 @@ struct MediaPanelView: View {
             }
         }
         .listStyle(.sidebar)
+        .contextMenu(forSelectionType: MediaAsset.ID.self) { _ in
+            EmptyView()
+        } primaryAction: { assetIDs in
+            if let assetID = assetIDs.first {
+                openAsset(assetID)
+            }
+        }
         .searchable(text: $searchQuery, placement: .sidebar, prompt: "이름 검색")
         .overlay {
             if hasNoResults, !searchQuery.isEmpty {
@@ -70,5 +79,5 @@ private struct MediaAssetRow: View {
 }
 
 #Preview {
-    MediaPanelView(project: SampleData.project, selectedAssetID: .constant(nil))
+    MediaPanelView(project: SampleData.project, selectedAssetID: .constant(nil), openAsset: { _ in })
 }

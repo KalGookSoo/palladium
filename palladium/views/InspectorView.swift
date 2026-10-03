@@ -1,15 +1,17 @@
 import CoreMedia
 import SwiftUI
 
-/// 타임라인 클립을 선택할 수 없는 동안(#17 이전)에는 미디어 패널에서 고른 원본을 임시로 보여준다.
+/// 프리미어 프로의 이펙트 컨트롤 패널처럼 타임라인에서 선택한 클립의 속성만 보여준다.
 struct InspectorView: View {
+    let clip: Clip?
+    /// 선택한 클립이 참조하는 원본. 프로젝트에서 찾지 못하면 `nil`이다.
     let asset: MediaAsset?
     @State private var selectedTab: InspectorTab = .trim
 
     var body: some View {
-        if let asset {
+        if let clip {
             VStack(alignment: .leading, spacing: 0) {
-                InspectorHeader(asset: asset)
+                InspectorHeader(clip: clip, asset: asset)
                     .padding()
 
                 Picker("속성", selection: $selectedTab) {
@@ -22,14 +24,18 @@ struct InspectorView: View {
                 .padding(.horizontal)
 
                 switch selectedTab {
-                case .trim: TrimInspectorView(asset: asset)
+                case .trim: TrimInspectorView(clip: clip)
                 case .effect: EffectInspectorView()
                 case .transform: TransformInspectorView()
                 case .subtitle: SubtitleInspectorView()
                 }
             }
         } else {
-            ContentUnavailableView("선택한 원본 없음", systemImage: "slider.horizontal.3")
+            ContentUnavailableView(
+                "선택한 클립 없음",
+                systemImage: "slider.horizontal.3",
+                description: Text("타임라인에서 클립을 선택하세요")
+            )
         }
     }
 }
@@ -55,16 +61,17 @@ private enum InspectorTab: CaseIterable, Identifiable {
 }
 
 private struct InspectorHeader: View {
-    let asset: MediaAsset
+    let clip: Clip
+    let asset: MediaAsset?
 
     var body: some View {
-        let durationText = Duration.seconds(asset.duration.seconds).formatted(.time(pattern: .minuteSecond))
+        let durationText = Duration.seconds(clip.sourceRange.duration.seconds).formatted(.time(pattern: .minuteSecond))
 
         VStack(alignment: .leading) {
-            Text(asset.name)
+            Text(asset?.name ?? "알 수 없는 원본")
                 .font(.headline)
                 .lineLimit(1)
-            Text("\(kindTitle) · \(durationText)")
+            Text("\(kindTitle) 클립 · \(durationText)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
@@ -72,20 +79,22 @@ private struct InspectorHeader: View {
     }
 
     private var kindTitle: String {
-        switch asset.kind {
+        switch asset?.kind {
         case .video: "영상"
         case .audio: "오디오"
         case .image: "이미지"
+        case nil: "알 수 없는"
         }
     }
 }
 
-#Preview("원본 선택") {
-    InspectorView(asset: SampleData.introVideo)
+#Preview("클립 선택") {
+    let clip = SampleData.videoTrack.clips[1]
+    InspectorView(clip: clip, asset: SampleData.bRollVideo)
         .frame(width: 280, height: 500)
 }
 
 #Preview("선택 없음") {
-    InspectorView(asset: nil)
+    InspectorView(clip: nil, asset: nil)
         .frame(width: 280, height: 500)
 }
