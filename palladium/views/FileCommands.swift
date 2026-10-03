@@ -19,7 +19,8 @@ struct FileCommands: Commands {
             .keyboardShortcut("1", modifiers: [.command, .shift])
         }
 
-        CommandGroup(replacing: .saveItem) {
+        // `.saveItem` 묶음에는 시스템의 "닫기"(⌘W)가 들어 있어 교체하지 않고 뒤에 덧붙인다.
+        CommandGroup(after: .saveItem) {
             Button("저장") {
                 saveProject?()
             }
