@@ -21,6 +21,8 @@ struct InspectorView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                // segmented Picker는 기본적으로 내용 폭만 차지하므로, 인스펙터 폭을 가득 채우도록 늘린다.
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal)
 
                 switch selectedTab {
