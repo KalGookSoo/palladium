@@ -37,6 +37,12 @@ classDiagram
         id: UUID
         name: String
         tracks: Array~Track~
+        markers: Array~Marker~
+    }
+    class Marker {
+        id: UUID
+        time: CMTime
+        name: String
     }
     class Track {
         id: UUID
@@ -54,6 +60,7 @@ classDiagram
     MediaFolder ..> MediaAsset : assetIDs로 참조
     Project "1" *-- "1..*" EditSequence
     EditSequence "1" *-- "0..*" Track
+    EditSequence "1" *-- "0..*" Marker
     Track "1" *-- "0..*" Clip
     Clip ..> MediaAsset : assetID로 참조
 ```
@@ -67,6 +74,7 @@ classDiagram
 | `MediaFolder`  | 미디어 패널에서 원본을 분류하는 폴더(빈) 하나                                   | 원본을 복사하지 않고 `assetIDs`로 참조한다. 어느 폴더에도 없는 원본은 "분류 안 됨"으로 보여준다        |
 | `EditSequence` | 독립된 편집 결과물 하나(통합본 또는 하이라이트)                                 | Swift 표준 라이브러리의 `Sequence` 프로토콜과 이름이 겹치지 않도록 `EditSequence`로 짓는다        |
 | `Track`        | 시퀀스 안에서 클립이 시간순으로 놓이는 레인 하나                                 | `TrackKind`: `video`, `audio`                                           |
+| `Marker`       | 시퀀스의 특정 시각에 붙이는 책갈피(시각 + 이름)                                | 영상 내용은 바꾸지 않는 표시용 정보. 추가·삭제 편집은 [클립 이어붙이기](use-cases/joining-clips.md)(#3)에서 다룬다 |
 | `Clip`         | 원본의 어느 구간(`sourceRange`)을 타임라인의 어느 위치(`timelineStart`)에 놓을지 | 타임라인에서 차지하는 구간(`timelineRange`)은 저장하지 않고 계산한다                           |
 
 보조 타입:
@@ -126,7 +134,7 @@ classDiagram
 - 자막([자막 삽입](use-cases/subtitles.md))
 - 트랜지션([트랜지션](use-cases/transitions.md))
 - 오버레이·마스크([오버레이 및 마스킹](use-cases/overlays.md))
-- 마커([클립 이어붙이기](use-cases/joining-clips.md))
+- 마커 추가·삭제 편집([클립 이어붙이기](use-cases/joining-clips.md))
 - 레이블·태그·별점, 프록시, 폴더 생성·이동 편집([미디어 가져오기](use-cases/media-import.md))
 - 재생 속도·역재생([클립 자르기(트림)](use-cases/trimming.md))
 
