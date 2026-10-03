@@ -48,7 +48,14 @@ nonisolated enum SampleData {
         ]
     )
 
-    static let mainSequence = EditSequence(id: UUID(), name: "통합본", tracks: [videoTrack, audioTrack])
+    static let introEndMarker = Marker(id: UUID(), time: seconds(8), name: "인트로 끝")
+
+    static let mainSequence = EditSequence(
+        id: UUID(),
+        name: "통합본",
+        tracks: [videoTrack, audioTrack],
+        markers: [introEndMarker]
+    )
 
     static let project: Project = {
         guard let project = Project(
