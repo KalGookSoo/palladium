@@ -1,6 +1,18 @@
 import CoreMedia
 import SwiftUI
 
+/// 사이드바와 인스펙터만 폭 범위를 가진다. 가운데 영역과 창에는 최소 폭을 두지 않는다 —
+/// 최소 폭끼리 동시에 만족될 수 없으면 분할 뷰 제약이 끝없이 다시 계산되다 앱이 중단되기 때문이다(#32).
+/// 창이 좁아지면 가운데 영역이 먼저 줄어들고, 넘치는 내용은 잘려 보인다.
+enum MainWindowMetrics {
+    static let sidebarMinWidth = 200.0
+    static let sidebarIdealWidth = 240.0
+    static let sidebarMaxWidth = 320.0
+    static let inspectorMinWidth = 240.0
+    static let inspectorIdealWidth = 280.0
+    static let inspectorMaxWidth = 320.0
+}
+
 struct MainWindowView: View {
     @State private var isTimelineVisible = true
     @State private var isInspectorPresented = true
@@ -24,7 +36,11 @@ struct MainWindowView: View {
             MediaPanelView(project: project, selectedAssetID: $selectedAssetID) { assetID in
                 openedAssetID = assetID
             }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+            .navigationSplitViewColumnWidth(
+                min: MainWindowMetrics.sidebarMinWidth,
+                ideal: MainWindowMetrics.sidebarIdealWidth,
+                max: MainWindowMetrics.sidebarMaxWidth
+            )
         } detail: {
             VSplitView {
                 PreviewPlayerView(asset: openedAsset, previewPlayer: previewPlayer)
@@ -40,12 +56,17 @@ struct MainWindowView: View {
                     .frame(maxWidth: .infinity, minHeight: 160, idealHeight: 240, maxHeight: .infinity)
                 }
             }
-            // 창이 좁아질 때 양쪽 패널 대신 가운데가 먼저 줄어들도록 최소 폭을 명시한다.
-            .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+            // 가운데 영역은 0까지 줄어들 수 있게 해 양쪽 패널 폭을 먼저 지키고, 넘치는 내용은 잘라낸다.
+            .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
         }
         .inspector(isPresented: $isInspectorPresented) {
             InspectorView(clip: selectedClip, asset: selectedClipAsset)
-                .inspectorColumnWidth(min: 240, ideal: 280, max: 400)
+                .inspectorColumnWidth(
+                    min: MainWindowMetrics.inspectorMinWidth,
+                    ideal: MainWindowMetrics.inspectorIdealWidth,
+                    max: MainWindowMetrics.inspectorMaxWidth
+                )
         }
         .toolbar {
             MainWindowToolbar(
@@ -60,7 +81,7 @@ struct MainWindowView: View {
         .task(id: openedAssetID) {
             await previewPlayer.load(url: openedAsset?.sourceURL)
         }
-        .frame(minWidth: 900, minHeight: 600)
+        .frame(minHeight: 600)
     }
 }
 
