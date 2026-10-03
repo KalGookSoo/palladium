@@ -35,7 +35,8 @@ struct ProjectWindowView: View {
                 .task { loadProject() }
                 .alert("저장하지 않은 변경 사항이 있습니다", isPresented: isAskingToRecover, presenting: pendingBackup) { backup in
                     Button("복구") { recover(backup) }
-                    Button("버리기", role: .destructive) { discardBackup() }
+                    // 취소 역할을 주어야 시스템이 [취소] 버튼을 따로 붙이지 않는다. Esc도 버리기로 동작한다.
+                    Button("버리기", role: .cancel) { discardBackup() }
                 } message: { backup in
                     Text("\(backup.backedUpAt.formatted(date: .abbreviated, time: .shortened))에 백업된 변경을 복구하시겠습니까? 복구한 내용은 저장해야 반영됩니다.")
                 }
