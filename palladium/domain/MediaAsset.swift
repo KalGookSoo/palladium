@@ -9,7 +9,7 @@ nonisolated struct MediaAsset {
     let duration: CMTime
 }
 
-nonisolated enum MediaKind {
+nonisolated enum MediaKind: String {
     case video
     case audio
     case image
