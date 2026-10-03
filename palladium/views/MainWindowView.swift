@@ -40,7 +40,7 @@ struct MainWindowView: View {
     var body: some View {
         let hasUnsavedChanges = project != savedProject
         // 저장할 변경이 없으면 nil을 넘겨 파일 > 저장 메뉴를 비활성화한다.
-        let saveAction: (() -> Void)? = hasUnsavedChanges ? { saveProject() } : nil
+        let saveAction: (() -> Void)? = hasUnsavedChanges ? { _ = saveProject() } : nil
         let isShowingSaveError = Binding<Bool>(
             get: { saveErrorMessage != nil },
             set: {
@@ -106,20 +106,30 @@ struct MainWindowView: View {
         }
         .frame(minHeight: 600)
         .navigationTitle(project.name)
+        .background {
+            UnsavedChangesGuard(hasUnsavedChanges: hasUnsavedChanges, projectName: project.name, save: saveProject)
+        }
         .alert("저장하지 못했습니다", isPresented: isShowingSaveError) {
             Button("확인", role: .cancel) {}
         } message: {
             Text(saveErrorMessage ?? "")
         }
+        // 디버그 메뉴에서 이름 끝에 표시를 붙여 저장하지 않은 변경 상태를 만든다.
+        #if DEBUG
+        .focusedSceneValue(\.makeUnsavedChange) { project.name += " ✎" }
+        #endif
     }
 
-    private func saveProject() {
+    /// 저장에 성공하면 `true`. 닫기·종료 확인 창은 실패하면 창을 닫지 않는다.
+    private func saveProject() -> Bool {
         do {
             try SwiftDataProjectRepository(modelContext: modelContext).save(project)
             savedProject = project
+            return true
         } catch {
             Logger.project.error("프로젝트 저장 실패: \(error.localizedDescription, privacy: .public)")
             saveErrorMessage = error.localizedDescription
+            return false
         }
     }
 }

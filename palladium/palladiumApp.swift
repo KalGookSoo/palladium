@@ -3,6 +3,8 @@ import SwiftUI
 
 @main
 struct palladiumApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     let modelContainer: ModelContainer = {
         do {
             return try ModelContainer(for: ProjectRecord.self)
@@ -28,6 +30,9 @@ struct palladiumApp: App {
             FileCommands()
             PanelVisibilityCommands()
             TimelineZoomCommands()
+            #if DEBUG
+                DebugCommands()
+            #endif
         }
     }
 }
