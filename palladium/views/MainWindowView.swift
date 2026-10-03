@@ -124,9 +124,14 @@ struct MainWindowView: View {
         } message: {
             Text(saveErrorMessage ?? "")
         }
-        // 디버그 메뉴에서 이름 끝에 표시를 붙여 저장하지 않은 변경 상태를 만든다.
+        // 디버그 메뉴에서 이름 끝에 표시를 붙여 저장하지 않은 변경 상태를 만들거나, 내용을 샘플 데이터로 바꾼다.
         #if DEBUG
         .focusedSceneValue(\.makeUnsavedChange) { project.name += " ✎" }
+            .focusedSceneValue(\.fillSampleData) {
+                project.assets = SampleData.project.assets
+                project.folders = SampleData.project.folders
+                project.sequences = SampleData.project.sequences
+            }
         #endif
     }
 
