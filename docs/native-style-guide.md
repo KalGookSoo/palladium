@@ -104,7 +104,6 @@ nav_order: 6
 | 오디오/볼륨 | `speaker.wave.2.fill` |
 | 음소거 | `speaker.slash.fill` |
 | 확대(줌 인) / 축소(줌 아웃) | `plus.magnifyingglass` / `minus.magnifyingglass` |
-| 프로젝트 저장 | `checkmark` |
 | 설정 | `gearshape.fill` |
 
 아이콘 크기와 굵기는 SF Symbols의 기본 `Font`/`imageScale` 연동을 그대로 따르고, 별도로 strokeWidth 같은 값을 지정하지 않는다. 아이콘 색은 현재 텍스트/tint 색을 따른다.
