@@ -7,7 +7,7 @@ struct palladiumApp: App {
 
     let modelContainer: ModelContainer = {
         do {
-            return try ModelContainer(for: ProjectRecord.self)
+            return try ModelContainer(for: ProjectRecord.self, ProjectBackupRecord.self)
         } catch {
             fatalError("프로젝트 저장소를 열 수 없음: \(error)")
         }

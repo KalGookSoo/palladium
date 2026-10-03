@@ -45,7 +45,41 @@ final class SwiftDataProjectRepository: ProjectRepository {
         Logger.project.notice("프로젝트 저장: \(project.id, privacy: .public)")
     }
 
+    // MARK: - Backups
+
+    func recoverableBackup(for projectID: Project.ID) throws -> ProjectBackup? {
+        guard let backup = try backupRecord(projectID: projectID) else { return nil }
+        let savedAt = try record(id: projectID)?.modifiedAt ?? .distantPast
+        return backup.backedUpAt > savedAt ? backup.makeBackup() : nil
+    }
+
+    func writeBackup(of project: Project) throws {
+        let backedUpAt = now()
+        let backup = try backupRecord(projectID: project.id) ?? {
+            let newRecord = ProjectBackupRecord(projectID: project.id, name: project.name, backedUpAt: backedUpAt)
+            modelContext.insert(newRecord)
+            return newRecord
+        }()
+        backup.replaceContent(with: project, backedUpAt: backedUpAt, in: modelContext)
+        try modelContext.save()
+        Logger.project.info("백업본 기록: \(project.id, privacy: .public)")
+    }
+
+    func deleteBackup(for projectID: Project.ID) throws {
+        guard let backup = try backupRecord(projectID: projectID) else { return }
+        modelContext.delete(backup)
+        try modelContext.save()
+        Logger.project.info("백업본 삭제: \(projectID, privacy: .public)")
+    }
+
     // MARK: - Helpers
+
+    private func backupRecord(projectID: Project.ID) throws -> ProjectBackupRecord? {
+        let targetID = projectID
+        var descriptor = FetchDescriptor<ProjectBackupRecord>(predicate: #Predicate { $0.projectID == targetID })
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).first
+    }
 
     private func record(id: Project.ID) throws -> ProjectRecord? {
         let targetID = id

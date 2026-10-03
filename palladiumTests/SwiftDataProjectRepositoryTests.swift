@@ -10,7 +10,7 @@ struct SwiftDataProjectRepositoryTests {
 
     init() throws {
         container = try ModelContainer(
-            for: ProjectRecord.self,
+            for: ProjectRecord.self, ProjectBackupRecord.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
     }
@@ -122,7 +122,75 @@ struct SwiftDataProjectRepositoryTests {
         #expect(project.sequences.count == 1)
     }
 
+    // MARK: - Backups
+
+    @Test("백업본이 없으면 복구할 것이 없다")
+    func noBackupMeansNothingToRecover() throws {
+        let repository = SwiftDataProjectRepository(modelContext: container.mainContext)
+        let created = try repository.createProject(named: "샘플")
+        #expect(try repository.recoverableBackup(for: created.id) == nil)
+    }
+
+    @Test("마지막 저장 이후에 쓴 백업본은 내용 그대로 복구할 수 있다")
+    func backupNewerThanSaveIsRecoverable() throws {
+        let repository = makeTickingRepository()
+        let created = try repository.createProject(named: "샘플")
+        let edited = try sampleContent(withID: created.id)
+
+        try repository.writeBackup(of: edited)
+
+        let backup = try #require(try repository.recoverableBackup(for: created.id))
+        #expect(backup.project == edited)
+        #expect(try repository.project(id: created.id) == created)
+    }
+
+    @Test("백업 후 저장하면 그 백업본은 복구 대상이 아니다")
+    func backupOlderThanSaveIsNotRecoverable() throws {
+        let repository = makeTickingRepository()
+        let created = try repository.createProject(named: "샘플")
+        try repository.writeBackup(of: sampleContent(withID: created.id))
+
+        try repository.save(created)
+
+        #expect(try repository.recoverableBackup(for: created.id) == nil)
+    }
+
+    @Test("백업본을 다시 쓰면 이전 백업본을 덮어쓴다")
+    func writingBackupAgainReplacesIt() throws {
+        let repository = makeTickingRepository()
+        let created = try repository.createProject(named: "샘플")
+        try repository.writeBackup(of: sampleContent(withID: created.id))
+        var renamed = created
+        renamed.name = "이름만 바꿈"
+
+        try repository.writeBackup(of: renamed)
+
+        #expect(try repository.recoverableBackup(for: created.id)?.project == renamed)
+        #expect(try container.mainContext.fetch(FetchDescriptor<ProjectBackupRecord>()).count == 1)
+    }
+
+    @Test("백업본을 지우면 복구할 것이 없고, 없는 백업본을 지워도 오류가 아니다")
+    func deletingBackupRemovesIt() throws {
+        let repository = makeTickingRepository()
+        let created = try repository.createProject(named: "샘플")
+        try repository.writeBackup(of: sampleContent(withID: created.id))
+
+        try repository.deleteBackup(for: created.id)
+        try repository.deleteBackup(for: created.id)
+
+        #expect(try repository.recoverableBackup(for: created.id) == nil)
+    }
+
     // MARK: - Helpers
+
+    /// 호출할 때마다 1분씩 흐르는 시계를 쓰는 저장소. 저장·백업 시각의 앞뒤를 확실히 가르기 위함이다.
+    private func makeTickingRepository() -> SwiftDataProjectRepository {
+        var clock = Date(timeIntervalSince1970: 0)
+        return SwiftDataProjectRepository(modelContext: container.mainContext) {
+            clock = clock.addingTimeInterval(60)
+            return clock
+        }
+    }
 
     /// 샘플 프로젝트의 내용을 주어진 id의 프로젝트로 옮긴다.
     private func sampleContent(withID id: Project.ID) throws -> Project {

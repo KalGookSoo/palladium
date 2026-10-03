@@ -3,6 +3,7 @@ import SwiftData
 
 // SwiftData 관계 배열은 저장 후 순서를 보장하지 않으므로 모든 하위 레코드에 `sortIndex`를 둔다.
 // `CMTime`은 정밀도를 잃지 않도록 `value`/`timescale`로 나눠 저장한다. 도메인과 같은 `id`를 쓴다.
+// 원본·폴더·시퀀스 레코드는 저장본(`project`)이나 백업본(`backup`) 중 한쪽에 속한다.
 
 @Model
 final class MediaAssetRecord {
@@ -14,6 +15,7 @@ final class MediaAssetRecord {
     var durationValue: Int64
     var durationTimescale: Int32
     var project: ProjectRecord?
+    var backup: ProjectBackupRecord?
 
     init(id: UUID, sortIndex: Int, name: String, sourceURL: URL, kindRawValue: String, durationValue: Int64, durationTimescale: Int32) {
         self.id = id
@@ -34,6 +36,7 @@ final class MediaFolderRecord {
     /// 폴더 안 원본 순서가 그대로 보존되도록 배열 값으로 저장한다.
     var assetIDs: [UUID]
     var project: ProjectRecord?
+    var backup: ProjectBackupRecord?
 
     init(id: UUID, sortIndex: Int, name: String, assetIDs: [UUID]) {
         self.id = id
@@ -51,6 +54,7 @@ final class SequenceRecord {
     @Relationship(deleteRule: .cascade, inverse: \TrackRecord.sequence) var tracks: [TrackRecord] = []
     @Relationship(deleteRule: .cascade, inverse: \MarkerRecord.sequence) var markers: [MarkerRecord] = []
     var project: ProjectRecord?
+    var backup: ProjectBackupRecord?
 
     init(id: UUID, sortIndex: Int, name: String) {
         self.id = id

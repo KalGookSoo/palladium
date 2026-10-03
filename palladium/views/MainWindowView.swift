@@ -22,6 +22,8 @@ struct MainWindowView: View {
     @State private var project: Project
     /// 마지막으로 저장한 내용. 지금 프로젝트와 다르면 저장하지 않은 변경이 있다.
     @State private var savedProject: Project
+    /// 마지막으로 백업본에 쓴 내용. 같은 내용을 다시 쓰지 않기 위해 기억한다.
+    @State private var lastBackedUpProject: Project?
     @State private var saveErrorMessage: String?
     @Environment(\.modelContext) private var modelContext
     /// 프리미어 프로처럼 미디어 패널 선택, 미리보기에 연 원본, 타임라인 클립 선택은 서로 독립이다.
@@ -32,9 +34,11 @@ struct MainWindowView: View {
     @State private var timelineScale = TimelineScale(pointsPerSecond: 40)
     @State private var previewPlayer = PreviewPlayer()
 
-    init(project: Project) {
-        _project = State(initialValue: project)
+    /// `recoveredContent`가 있으면 백업본에서 복구한 내용으로 열고, 저장하지 않은 변경 상태로 시작한다.
+    init(project: Project, recoveredContent: Project? = nil) {
+        _project = State(initialValue: recoveredContent ?? project)
         _savedProject = State(initialValue: project)
+        _lastBackedUpProject = State(initialValue: recoveredContent)
     }
 
     var body: some View {
@@ -101,13 +105,19 @@ struct MainWindowView: View {
         .focusedSceneValue(\.isTimelineVisible, $isTimelineVisible)
         .focusedSceneValue(\.isInspectorPresented, $isInspectorPresented)
         .focusedSceneValue(\.timelineScale, $timelineScale)
+        .task { await writeBackupsPeriodically() }
         .task(id: openedAssetID) {
             await previewPlayer.load(url: openedAsset?.sourceURL)
         }
         .frame(minHeight: 600)
         .navigationTitle(project.name)
         .background {
-            UnsavedChangesGuard(hasUnsavedChanges: hasUnsavedChanges, projectName: project.name, save: saveProject)
+            UnsavedChangesGuard(
+                hasUnsavedChanges: hasUnsavedChanges,
+                projectName: project.name,
+                save: saveProject,
+                discardChanges: deleteBackup
+            )
         }
         .alert("저장하지 못했습니다", isPresented: isShowingSaveError) {
             Button("확인", role: .cancel) {}
@@ -125,11 +135,39 @@ struct MainWindowView: View {
         do {
             try SwiftDataProjectRepository(modelContext: modelContext).save(project)
             savedProject = project
+            deleteBackup()
             return true
         } catch {
             Logger.project.error("프로젝트 저장 실패: \(error.localizedDescription, privacy: .public)")
             saveErrorMessage = error.localizedDescription
             return false
+        }
+    }
+
+    // MARK: - Backups
+
+    /// 창이 열려 있는 동안 정해진 간격마다 저장하지 않은 변경을 백업본에 쓴다. 창이 닫히면 Task가 취소되어 멈춘다.
+    private func writeBackupsPeriodically() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: BackupPolicy.defaultInterval)
+            guard !Task.isCancelled,
+                  BackupPolicy.shouldWriteBackup(current: project, saved: savedProject, lastBackedUp: lastBackedUpProject)
+            else { continue }
+            do {
+                try SwiftDataProjectRepository(modelContext: modelContext).writeBackup(of: project)
+                lastBackedUpProject = project
+            } catch {
+                Logger.project.error("백업본 기록 실패: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private func deleteBackup() {
+        do {
+            try SwiftDataProjectRepository(modelContext: modelContext).deleteBackup(for: project.id)
+            lastBackedUpProject = nil
+        } catch {
+            Logger.project.error("백업본 삭제 실패: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

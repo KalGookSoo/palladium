@@ -14,6 +14,17 @@ protocol ProjectRepository {
 
     /// 프로젝트 내용을 통째로 저장하고 수정 시각을 갱신한다. 저장소에 없는 프로젝트면 `ProjectRepositoryError.projectNotFound`.
     func save(_ project: Project) throws
+
+    // MARK: - 백업본
+
+    /// 마지막 저장 이후에 쓴 백업본이 있으면 돌려준다. 저장보다 오래된 백업본은 없는 것으로 본다.
+    func recoverableBackup(for projectID: Project.ID) throws -> ProjectBackup?
+
+    /// 저장하지 않은 변경을 백업본으로 쓴다. 이전 백업본은 덮어쓴다.
+    func writeBackup(of project: Project) throws
+
+    /// 백업본을 지운다. 없으면 아무 일도 하지 않는다.
+    func deleteBackup(for projectID: Project.ID) throws
 }
 
 enum ProjectRepositoryError: Error {
