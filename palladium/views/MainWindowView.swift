@@ -43,7 +43,7 @@ struct MainWindowView: View {
             )
         } detail: {
             VSplitView {
-                PreviewPlayerView(asset: openedAsset, previewPlayer: previewPlayer)
+                PreviewPlayerView(asset: openedAsset, previewPlayer: previewPlayer, hasProjectAssets: !project.assets.isEmpty)
                     .frame(maxWidth: .infinity, minHeight: 240, maxHeight: .infinity)
                 if isTimelineVisible, let currentSequence {
                     TimelineEditorView(

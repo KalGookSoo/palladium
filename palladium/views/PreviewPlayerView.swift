@@ -5,6 +5,8 @@ import SwiftUI
 struct PreviewPlayerView: View {
     let asset: MediaAsset?
     let previewPlayer: PreviewPlayer
+    /// 프로젝트에 원본이 하나도 없으면 더블클릭할 대상이 없으므로 가져오기부터 안내한다.
+    let hasProjectAssets: Bool
 
     var body: some View {
         switch previewPlayer.loadState {
@@ -12,7 +14,7 @@ struct PreviewPlayerView: View {
             ContentUnavailableView(
                 "열린 원본 없음",
                 systemImage: "play.rectangle",
-                description: Text("미디어 패널에서 원본을 더블클릭하세요")
+                description: Text(hasProjectAssets ? "미디어 패널에서 원본을 더블클릭하세요" : "⌘I로 미디어를 가져오세요")
             )
         case .loading:
             ProgressView()
@@ -95,6 +97,6 @@ private func requestNarrationRecording() {
 
 #Preview {
     @Previewable @State var previewPlayer = PreviewPlayer()
-    PreviewPlayerView(asset: SampleData.introVideo, previewPlayer: previewPlayer)
+    PreviewPlayerView(asset: SampleData.introVideo, previewPlayer: previewPlayer, hasProjectAssets: true)
         .task { await previewPlayer.load(url: SampleData.introVideo.sourceURL) }
 }

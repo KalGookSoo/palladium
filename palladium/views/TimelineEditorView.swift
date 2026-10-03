@@ -59,34 +59,55 @@ struct TimelineEditorView: View {
 
             Divider()
 
-            HStack(alignment: .top, spacing: 0) {
-                TrackHeaderColumn(tracks: sequence.tracks)
-                Divider()
-                ScrollView(.horizontal) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        TimelineRulerView(
-                            scale: scale,
-                            sequenceDuration: sequence.duration,
-                            markers: sequence.markers,
-                            playheadTime: $playheadTime
-                        )
-                        ForEach(sequence.tracks) { track in
-                            TrackRowView(track: track, assets: assets, scale: scale, selectedClipID: $selectedClipID)
-                        }
-                    }
-                    // 내용이 패널 높이를 채워야 가로 스크롤바가 마지막 트랙 위가 아니라 패널 바닥에 놓인다.
-                    .frame(width: contentWidth, alignment: .leading)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .overlay(alignment: .topLeading) {
-                        PlayheadView()
-                            .offset(x: scale.x(for: playheadTime) - 1)
-                            .allowsHitTesting(false)
-                    }
+            if sequence.tracks.allSatisfy(\.clips.isEmpty) {
+                // 빈 타임라인은 "무엇을 하면 되는지"를 안내한다. 원본이 없으면 가져오기부터 안내한다.
+                if assets.isEmpty {
+                    ContentUnavailableView(
+                        "타임라인이 비어 있음",
+                        systemImage: "square.and.arrow.down",
+                        description: Text("⌘I로 미디어를 가져온 뒤 타임라인에 배치하세요")
+                    )
+                } else {
+                    ContentUnavailableView(
+                        "타임라인이 비어 있음",
+                        systemImage: "film.stack",
+                        description: Text("미디어 패널에서 원본을 끌어다 놓아 클립을 추가하세요")
+                    )
                 }
+            } else {
+                timelineContent(contentWidth: contentWidth)
             }
-            .frame(maxHeight: .infinity)
         }
         .simultaneousGesture(pinch)
+    }
+
+    private func timelineContent(contentWidth: Double) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            TrackHeaderColumn(tracks: sequence.tracks)
+            Divider()
+            ScrollView(.horizontal) {
+                VStack(alignment: .leading, spacing: 0) {
+                    TimelineRulerView(
+                        scale: scale,
+                        sequenceDuration: sequence.duration,
+                        markers: sequence.markers,
+                        playheadTime: $playheadTime
+                    )
+                    ForEach(sequence.tracks) { track in
+                        TrackRowView(track: track, assets: assets, scale: scale, selectedClipID: $selectedClipID)
+                    }
+                }
+                // 내용이 패널 높이를 채워야 가로 스크롤바가 마지막 트랙 위가 아니라 패널 바닥에 놓인다.
+                .frame(width: contentWidth, alignment: .leading)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .overlay(alignment: .topLeading) {
+                    PlayheadView()
+                        .offset(x: scale.x(for: playheadTime) - 1)
+                        .allowsHitTesting(false)
+                }
+            }
+        }
+        .frame(maxHeight: .infinity)
     }
 }
 
@@ -112,7 +133,37 @@ private struct TrackHeaderColumn: View {
     }
 }
 
-#Preview {
+#Preview("빈 타임라인 — 원본 있음") {
+    @Previewable @State var selectedClipID: Clip.ID?
+    @Previewable @State var playheadTime = CMTime.zero
+    @Previewable @State var scale = TimelineScale(pointsPerSecond: 40)
+
+    TimelineEditorView(
+        sequence: EditSequence(id: UUID(), name: "시퀀스 1", tracks: []),
+        assets: SampleData.project.assets,
+        selectedClipID: $selectedClipID,
+        playheadTime: $playheadTime,
+        scale: $scale
+    )
+    .frame(width: 700, height: 240)
+}
+
+#Preview("빈 타임라인 — 원본 없음") {
+    @Previewable @State var selectedClipID: Clip.ID?
+    @Previewable @State var playheadTime = CMTime.zero
+    @Previewable @State var scale = TimelineScale(pointsPerSecond: 40)
+
+    TimelineEditorView(
+        sequence: EditSequence(id: UUID(), name: "시퀀스 1", tracks: []),
+        assets: [],
+        selectedClipID: $selectedClipID,
+        playheadTime: $playheadTime,
+        scale: $scale
+    )
+    .frame(width: 700, height: 240)
+}
+
+#Preview("샘플 시퀀스") {
     @Previewable @State var selectedClipID: Clip.ID?
     @Previewable @State var playheadTime = CMTime(seconds: 5, preferredTimescale: standardTimescale)
     @Previewable @State var scale = TimelineScale(pointsPerSecond: 40)
