@@ -124,8 +124,9 @@ classDiagram
 - 프로젝트 파일은 SwiftData 기반 자체 포맷으로 저장한다([기능명세서](video-editing-functional-spec.md) 공통 개념에서 확정).
 - 도메인 계층과 영속 계층을 분리한다. 이 문서의 순수 타입이 도메인의 기준이며, 타입별 저장 전용 `@Model` 레코드(예: `ClipRecord`)와 둘 사이의 변환은 영속 계층에 둔다. 도메인은 저장소를 `ProjectRepository`
   프로토콜로만 알고, SwiftData 구현은 영속 계층(`palladium/persistence/`)에 둔다.
-- 별도의 "저장" 동작은 없다. 프로젝트는 만드는 즉시 저장되고(`ProjectRepository.createProject(named:)`), 이후 변경도 즉시 반영한다.
-- 지금 저장하는 것은 시작 창 목록에 필요한 정보뿐이다(`ProjectRecord`: id, 이름, 생성일, 수정일, 원본·시퀀스 개수 → 도메인 `ProjectSummary`). 원본·폴더·시퀀스·트랙·클립·마커의 저장은 [프로젝트 저장/불러오기](use-cases/project-management.md)(#7)에서 같은 구조로 확장한다. 그전까지 `project(id:)`는 저장된 id·이름으로 빈 프로젝트를 돌려준다.
+- 새 프로젝트는 만드는 즉시 저장되고(`ProjectRepository.createProject(named:)`), 이후 내용 변경은 사용자가 저장해야 반영된다(`ProjectRepository.save(_:)`). 편집 화면은 마지막으로 저장한 프로젝트와 지금 프로젝트를 비교(`Equatable`)해 저장하지 않은 변경을 판단한다.
+- 레코드 구성: `ProjectRecord`(목록 정보: id, 이름, 생성일, 수정일, 원본·시퀀스 개수 → 도메인 `ProjectSummary`) 아래에 `MediaAssetRecord`, `MediaFolderRecord`, `SequenceRecord` → `TrackRecord` → `ClipRecord`, `SequenceRecord` → `MarkerRecord`. 프로젝트나 시퀀스를 지우면 하위 레코드도 함께 지워진다(`cascade`).
+- 저장은 무엇이 바뀌었는지 비교하지 않고 하위 레코드를 통째로 교체한다. 빠뜨린 삭제나 순서 변경이 남지 않게 하기 위함이다. 내용이 저장되기 전에 만든 레코드(시퀀스 없음)는 빈 시퀀스 하나로 연다.
 - 영속 계층 구현 시 유의: SwiftData 관계 배열은 순서를 보장하지 않으므로 정렬 인덱스를 별도로 저장하고, `CMTime`은 `value`/`timescale`로 분해해 저장하며, 도메인과 레코드는 같은 `id`를 공유한다.
 - Xcode 템플릿의 SwiftData `Item` 모델은 도메인과 무관한 스캐폴딩이다. 메인 윈도우 레이아웃 뼈대(#12)에서 템플릿 `ContentView`를 걷어낼 때 함께 제거한다.
 
