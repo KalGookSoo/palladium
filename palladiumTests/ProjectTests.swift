@@ -37,4 +37,19 @@ struct ProjectTests {
     func unfiledAssetsExcludeFiledAssets() {
         #expect(SampleData.project.unfiledAssets == [SampleData.backgroundMusic])
     }
+
+    @Test("새 프로젝트 이름의 앞뒤 공백은 지우고, 비어 있으면 기본 이름을 쓴다")
+    func newProjectNameIsNormalized() {
+        #expect(Project.makeNew(name: "  여행 브이로그 ").name == "여행 브이로그")
+        #expect(Project.makeNew(name: "   ").name == Project.untitledName)
+    }
+
+    @Test("요약은 원본·시퀀스 개수를 담는다")
+    func summaryCountsAssetsAndSequences() {
+        let date = Date(timeIntervalSince1970: 0)
+        let summary = SampleData.project.summary(createdAt: date, modifiedAt: date)
+        #expect(summary.assetCount == 3)
+        #expect(summary.sequenceCount == 1)
+        #expect(summary.id == SampleData.project.id)
+    }
 }

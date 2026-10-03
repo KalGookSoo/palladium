@@ -17,7 +17,7 @@ struct MainWindowView: View {
     @State private var isTimelineVisible = true
     @State private var isInspectorPresented = true
     @State private var aspectRatio: AspectRatioPreset = .landscape16x9
-    @State private var project = SampleData.project
+    @State private var project: Project
     /// 프리미어 프로처럼 미디어 패널 선택, 미리보기에 연 원본, 타임라인 클립 선택은 서로 독립이다.
     @State private var selectedAssetID: MediaAsset.ID?
     @State private var openedAssetID: MediaAsset.ID?
@@ -25,6 +25,10 @@ struct MainWindowView: View {
     @State private var playheadTime: CMTime = .zero
     @State private var timelineScale = TimelineScale(pointsPerSecond: 40)
     @State private var previewPlayer = PreviewPlayer()
+
+    init(project: Project) {
+        _project = State(initialValue: project)
+    }
 
     var body: some View {
         let openedAsset = project.assets.first { $0.id == openedAssetID }
@@ -82,9 +86,10 @@ struct MainWindowView: View {
             await previewPlayer.load(url: openedAsset?.sourceURL)
         }
         .frame(minHeight: 600)
+        .navigationTitle(project.name)
     }
 }
 
 #Preview {
-    MainWindowView()
+    MainWindowView(project: SampleData.project)
 }
