@@ -47,7 +47,15 @@ private struct PlaybackControls: View {
             Slider(value: progress, in: 0 ... 1)
                 .accessibilityLabel("재생 위치")
 
+            // 양옆 칸이 같은 폭을 나눠 가져 재생 버튼이 정확히 가운데에 온다. 왼쪽 끝은 떠 있는 사이드바에 가려질 수 있어
+            // 시간은 버튼 바로 왼쪽에, 내레이션 녹음은 바로 오른쪽에 붙인다.
             HStack {
+                Text(timeline.timeLabel(at: previewPlayer.currentTime))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+
                 Button {
                     previewPlayer.stepFrame(by: -1, in: timeline)
                 } label: {
@@ -72,17 +80,11 @@ private struct PlaybackControls: View {
                 .disabled(!timeline.canStepFrames)
                 .help("다음 프레임")
 
-                Text(timeline.timeLabel(at: previewPlayer.currentTime))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-
-                Spacer()
-
                 Button(action: requestNarrationRecording) {
                     Label("내레이션 녹음", systemImage: "mic.fill")
                 }
                 .help("내레이션 녹음")
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .labelStyle(.iconOnly)
             .buttonStyle(.plain)
