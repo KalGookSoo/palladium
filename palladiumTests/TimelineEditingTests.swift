@@ -70,7 +70,71 @@ struct TimelineEditingTests {
         #expect(SampleData.backgroundMusic.placementDuration == SampleData.backgroundMusic.duration)
     }
 
+    @Test("삭제는 자리를 비우고, 리플 삭제는 뒤 클립을 당겨 틈을 메운다")
+    func removeAndRippleRemove() throws {
+        var sequence = try sequence(withClipsAt: [(0, 2), (2, 3), (5, 2)])
+        let middleID = sequence.tracks[0].clips[1].id
+        var rippled = sequence
+
+        sequence.removeClips([middleID], ripple: false)
+        rippled.removeClips([middleID], ripple: true)
+
+        #expect(spans(of: sequence.tracks[0]) == [[0, 2], [5, 7]])
+        #expect(spans(of: rippled.tracks[0]) == [[0, 2], [2, 4]])
+    }
+
+    @Test("재생 헤드에서 자르면 걸친 클립이 둘로 나뉘고, 고른 클립이 있으면 그 클립만 나뉜다")
+    func splitAtPlayhead() throws {
+        var sequence = try sequence(withClipsAt: [(0, 4)])
+        let otherTrackID = sequence.addTrack(kind: .audio)
+        try sequence.place(clip(at: 0, length: 4), onTrack: otherTrackID, mode: .overwrite)
+        var onlySelected = sequence
+
+        sequence.split(at: seconds(1), clipIDs: nil)
+        onlySelected.split(at: seconds(1), clipIDs: [onlySelected.tracks[0].clips[0].id])
+
+        #expect(sequence.tracks.map { spans(of: $0) } == [[[0, 1], [1, 4]], [[0, 1], [1, 4]]])
+        #expect(onlySelected.tracks.map { spans(of: $0) } == [[[0, 1], [1, 4]], [[0, 4]]])
+        #expect(sequence.tracks[0].clips[1].sourceRange.start.seconds == 1)
+    }
+
+    @Test("삽입으로 옮기면 원래 자리를 메우고 새 자리 뒤를 밀어 순서가 바뀐다")
+    func moveWithInsertReorders() throws {
+        var sequence = try sequence(withClipsAt: [(0, 2), (2, 3), (5, 1)])
+        let first = sequence.tracks[0].clips[0]
+        let trackID = sequence.tracks[0].id
+
+        // 맨 앞 클립을 세 번째 클립 앞(화면 기준 5초)으로 옮긴다.
+        sequence.moveClip(first.id, toTrack: trackID, at: seconds(5), mode: .insert)
+
+        #expect(spans(of: sequence.tracks[0]) == [[0, 3], [3, 5], [5, 6]])
+        #expect(sequence.tracks[0].clips[1].id == first.id)
+    }
+
+    @Test("덮어쓰기로 옮기면 원래 자리는 비고 새 자리를 덮으며, 종류가 다른 트랙으로는 옮기지 않는다")
+    func moveWithOverwrite() throws {
+        var sequence = try sequence(withClipsAt: [(0, 2), (4, 4)])
+        let first = sequence.tracks[0].clips[0]
+        let audioTrackID = sequence.addTrack(kind: .audio)
+        let videoTrackID = sequence.tracks[0].id
+
+        sequence.moveClip(first.id, toTrack: audioTrackID, at: .zero, mode: .overwrite)
+        #expect(sequence.trackID(containing: first.id) == videoTrackID)
+
+        sequence.moveClip(first.id, toTrack: videoTrackID, at: seconds(5), mode: .overwrite)
+        #expect(spans(of: sequence.tracks[0]) == [[4, 5], [5, 7], [7, 8]])
+    }
+
     // MARK: - Helpers
+
+    private func sequence(withClipsAt spans: [(Double, Double)]) throws -> EditSequence {
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let trackID = sequence.addTrack(kind: .video)
+        for (start, length) in spans {
+            try sequence.place(clip(at: start, length: length), onTrack: trackID, mode: .overwrite)
+        }
+        return sequence
+    }
 
     private func seconds(_ value: Double) -> CMTime {
         CMTime(seconds: value, preferredTimescale: standardTimescale)

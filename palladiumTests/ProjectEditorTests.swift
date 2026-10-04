@@ -144,6 +144,32 @@ struct ProjectEditorTests {
         #expect(editor.project == after)
     }
 
+    @Test("클립 이동·삭제·자르기는 현재 시퀀스를 바꾸고 각각 실행 취소 이름을 남긴다")
+    func clipCommands() throws {
+        let editor = try makeEditorWithSampleContent()
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+        editor.undoManager = undoManager
+        let videoTrack = try #require(editor.project.sequences[0].tracks.first { $0.kind == .video })
+        let firstClipID = videoTrack.clips[0].id
+
+        undoManager.beginUndoGrouping()
+        editor.splitClips([firstClipID], at: CMTime(value: 1, timescale: 1))
+        undoManager.endUndoGrouping()
+        #expect(undoManager.undoActionName == "자르기")
+        #expect(editor.project.sequences[0].tracks.first { $0.id == videoTrack.id }?.clips.count == videoTrack.clips.count + 1)
+
+        undoManager.beginUndoGrouping()
+        editor.deleteClips([firstClipID], ripple: true)
+        undoManager.endUndoGrouping()
+        #expect(undoManager.undoActionName == "리플 삭제")
+        #expect(editor.project.sequences[0].clip(id: firstClipID) == nil)
+
+        undoManager.undo()
+        undoManager.undo()
+        #expect(editor.project.sequences[0].tracks.first { $0.id == videoTrack.id } == videoTrack)
+    }
+
     // MARK: - Helpers
 
     /// 샘플 내용을 저장한 프로젝트를 여는 편집기.

@@ -117,6 +117,30 @@ final class ProjectEditor {
         }
     #endif
 
+    /// 클립을 다른 시각·트랙으로 옮긴다. 삽입이면 원래 자리를 메우고 새 자리 뒤를 민다(순서 바꾸기).
+    func moveClip(_ clipID: Clip.ID, toTrack trackID: Track.ID, at time: CMTime, mode: PlacementMode) {
+        perform("클립 이동") { project in
+            guard !project.sequences.isEmpty else { return }
+            project.sequences[0].moveClip(clipID, toTrack: trackID, at: time, mode: mode)
+        }
+    }
+
+    /// `ripple`이면 지운 자리 뒤의 클립을 당겨 틈을 메운다(리플 삭제).
+    func deleteClips(_ clipIDs: Set<Clip.ID>, ripple: Bool) {
+        perform(ripple ? "리플 삭제" : "클립 삭제") { project in
+            guard !project.sequences.isEmpty else { return }
+            project.sequences[0].removeClips(clipIDs, ripple: ripple)
+        }
+    }
+
+    /// `time`에서 클립을 나눈다. 고른 클립이 비어 있으면 그 시각에 걸친 모든 클립을 나눈다.
+    func splitClips(_ clipIDs: Set<Clip.ID>, at time: CMTime) {
+        perform("자르기") { project in
+            guard !project.sequences.isEmpty else { return }
+            project.sequences[0].split(at: time, clipIDs: clipIDs.isEmpty ? nil : clipIDs)
+        }
+    }
+
     private func updateAssets(_ assetIDs: Set<MediaAsset.ID>, actionName: String, _ change: (inout MediaAsset) -> Void) {
         perform(actionName) { project in
             for index in project.assets.indices where assetIDs.contains(project.assets[index].id) {

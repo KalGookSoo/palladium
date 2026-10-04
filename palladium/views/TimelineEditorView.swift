@@ -11,16 +11,33 @@ enum TimelineMetrics {
     static let trailingPaddingSeconds = 30.0
 }
 
+/// 타임라인에서 일어난 편집 요청. 실제 편집은 상위가 편집기(`ProjectEditor`) 커맨드로 한다.
+struct TimelineActions {
+    /// 미디어 패널에서 원본을 끌어다 놓았을 때. 트랙이 `nil`이면 트랙 밖(빈 곳)에 놓은 것이다.
+    var dropAsset: (MediaAsset.ID, Track.ID?, CMTime, PlacementMode) -> Void = { _, _, _, _ in }
+    var moveClip: (Clip.ID, Track.ID, CMTime, PlacementMode) -> Void = { _, _, _, _ in }
+    /// 두 번째 값이 `true`면 리플 삭제.
+    var deleteClips: (Set<Clip.ID>, Bool) -> Void = { _, _ in }
+    /// 재생 헤드에서 자른다. 비어 있으면 재생 헤드에 걸친 모든 클립을 자른다.
+    var splitClips: (Set<Clip.ID>) -> Void = { _ in }
+    var openAsset: (MediaAsset.ID) -> Void = { _ in }
+    var revealAsset: (MediaAsset.ID) -> Void = { _ in }
+}
+
+/// ⌘를 누른 채 놓거나 옮기면 덮어쓰기, 아니면 삽입이다.
+func currentPlacementMode() -> PlacementMode {
+    NSEvent.modifierFlags.contains(.command) ? .overwrite : .insert
+}
+
 /// SwiftUI의 `TimelineView`(일정 주기로 다시 그리는 View)와 이름이 겹치지 않도록 `TimelineEditorView`로 짓는다.
 /// 타임라인을 숨겼다 다시 보여도 유지되도록 선택·재생 헤드·배율은 상위(`MainWindowView`)가 소유한다.
 struct TimelineEditorView: View {
     let sequence: EditSequence
     let assets: [MediaAsset]
-    @Binding var selectedClipID: Clip.ID?
+    @Binding var selectedClipIDs: Set<Clip.ID>
     @Binding var playheadTime: CMTime
     @Binding var scale: TimelineScale
-    /// 미디어 패널에서 원본을 끌어다 놓았을 때 부른다. 트랙이 `nil`이면 트랙 밖(빈 곳)에 놓은 것이다.
-    let dropAsset: (MediaAsset.ID, Track.ID?, CMTime, PlacementMode) -> Void
+    var actions = TimelineActions()
     @State private var pinchStartScale: TimelineScale?
 
     var body: some View {
@@ -104,8 +121,16 @@ struct TimelineEditorView: View {
                         markers: sequence.markers,
                         playheadTime: $playheadTime
                     )
-                    ForEach(sequence.tracks) { track in
-                        TrackRowView(track: track, assets: assets, scale: scale, selectedClipID: $selectedClipID)
+                    ForEach(Array(sequence.tracks.enumerated()), id: \.element.id) { index, track in
+                        TrackRowView(
+                            track: track,
+                            assets: assets,
+                            scale: scale,
+                            selectedClipIDs: $selectedClipIDs,
+                            actions: actions
+                        ) { clip, translation in
+                            moveClip(clip, fromTrackAt: index, by: translation)
+                        }
                     }
                 }
                 // 내용이 패널 높이를 채워야 가로 스크롤바가 마지막 트랙 위가 아니라 패널 바닥에 놓인다.
@@ -130,13 +155,20 @@ struct TimelineEditorView: View {
         .frame(maxHeight: .infinity)
     }
 
-    /// 미디어 패널은 원본 ID를 문자열로 끌어 보낸다. ⌘를 누른 채 놓으면 삽입, 아니면 덮어쓰기다.
+    /// 미디어 패널은 원본 ID를 문자열로 끌어 보낸다.
     private func handleDrop(_ items: [String], trackID: Track.ID?, time: CMTime) -> Bool {
         let assetIDs = items.compactMap(UUID.init(uuidString:))
         guard let assetID = assetIDs.first else { return false }
-        let mode: PlacementMode = NSEvent.modifierFlags.contains(.command) ? .insert : .overwrite
-        dropAsset(assetID, trackID, time, mode)
+        actions.dropAsset(assetID, trackID, time, currentPlacementMode())
         return true
+    }
+
+    /// 끈 거리만큼 시각을, 트랙 높이 단위로 트랙을 바꾼다. 트랙 밖으로 끌면 맨 위·아래 트랙에 놓는다.
+    private func moveClip(_ clip: Clip, fromTrackAt trackIndex: Int, by translation: CGSize) {
+        let targetIndex = min(max(trackIndex + Int((translation.height / TimelineMetrics.trackHeight).rounded()), 0), sequence.tracks.count - 1)
+        let movedStart = scale.time(forX: scale.x(for: clip.timelineStart) + translation.width)
+        let time = sequence.snappedTime(movedStart, tolerance: scale.time(forX: 10), excluding: clip.id)
+        actions.moveClip(clip.id, sequence.tracks[targetIndex].id, time, currentPlacementMode())
     }
 }
 
@@ -148,8 +180,11 @@ private struct TrackHeaderColumn: View {
             Color.clear
                 .frame(height: TimelineMetrics.rulerHeight)
             ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
-                // 같은 종류 트랙끼리 1부터 번호를 매긴다(예: 영상 1, 오디오 1).
-                let number = tracks[...index].filter { $0.kind == track.kind }.count
+                // 같은 종류 트랙끼리 1부터 번호를 매긴다. 영상은 프리미어처럼 맨 아래(메인)가 1이고 위로 갈수록 커지며,
+                // 오디오는 위에서부터 1이다.
+                let number = track.kind == .video
+                    ? tracks[index...].filter { $0.kind == .video }.count
+                    : tracks[...index].filter { $0.kind == .audio }.count
 
                 Label("\(track.kind.title) \(number)", systemImage: track.kind.symbolName)
                     .font(.caption)
@@ -163,49 +198,46 @@ private struct TrackHeaderColumn: View {
 }
 
 #Preview("빈 타임라인 — 원본 있음") {
-    @Previewable @State var selectedClipID: Clip.ID?
+    @Previewable @State var selectedClipIDs: Set<Clip.ID> = []
     @Previewable @State var playheadTime = CMTime.zero
     @Previewable @State var scale = TimelineScale(pointsPerSecond: 40)
 
     TimelineEditorView(
         sequence: EditSequence(id: UUID(), name: "시퀀스 1", tracks: []),
         assets: SampleData.project.assets,
-        selectedClipID: $selectedClipID,
+        selectedClipIDs: $selectedClipIDs,
         playheadTime: $playheadTime,
-        scale: $scale,
-        dropAsset: { _, _, _, _ in }
+        scale: $scale
     )
     .frame(width: 700, height: 240)
 }
 
 #Preview("빈 타임라인 — 원본 없음") {
-    @Previewable @State var selectedClipID: Clip.ID?
+    @Previewable @State var selectedClipIDs: Set<Clip.ID> = []
     @Previewable @State var playheadTime = CMTime.zero
     @Previewable @State var scale = TimelineScale(pointsPerSecond: 40)
 
     TimelineEditorView(
         sequence: EditSequence(id: UUID(), name: "시퀀스 1", tracks: []),
         assets: [],
-        selectedClipID: $selectedClipID,
+        selectedClipIDs: $selectedClipIDs,
         playheadTime: $playheadTime,
-        scale: $scale,
-        dropAsset: { _, _, _, _ in }
+        scale: $scale
     )
     .frame(width: 700, height: 240)
 }
 
 #Preview("샘플 시퀀스") {
-    @Previewable @State var selectedClipID: Clip.ID?
+    @Previewable @State var selectedClipIDs: Set<Clip.ID> = []
     @Previewable @State var playheadTime = CMTime(seconds: 5, preferredTimescale: standardTimescale)
     @Previewable @State var scale = TimelineScale(pointsPerSecond: 40)
 
     TimelineEditorView(
         sequence: SampleData.mainSequence,
         assets: SampleData.project.assets,
-        selectedClipID: $selectedClipID,
+        selectedClipIDs: $selectedClipIDs,
         playheadTime: $playheadTime,
-        scale: $scale,
-        dropAsset: { _, _, _, _ in }
+        scale: $scale
     )
     .frame(width: 700, height: 240)
 }

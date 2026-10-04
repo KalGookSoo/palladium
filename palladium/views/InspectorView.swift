@@ -6,6 +6,8 @@ struct InspectorView: View {
     let clip: Clip?
     /// 선택한 클립이 참조하는 원본. 프로젝트에서 찾지 못하면 `nil`이다.
     let asset: MediaAsset?
+    /// 여러 클립을 골랐으면 속성 대신 고른 개수를 보여준다.
+    var selectedClipCount = 0
     @State private var selectedTab: InspectorTab = .trim
 
     var body: some View {
@@ -33,11 +35,19 @@ struct InspectorView: View {
                 }
             }
         } else {
-            ContentUnavailableView(
-                "선택한 클립 없음",
-                systemImage: "slider.horizontal.3",
-                description: Text("타임라인에서 클립을 선택하세요")
-            )
+            if selectedClipCount > 1 {
+                ContentUnavailableView(
+                    "클립 \(selectedClipCount)개 선택",
+                    systemImage: "square.stack",
+                    description: Text("속성을 보려면 클립을 하나만 선택하세요")
+                )
+            } else {
+                ContentUnavailableView(
+                    "선택한 클립 없음",
+                    systemImage: "slider.horizontal.3",
+                    description: Text("타임라인에서 클립을 선택하세요")
+                )
+            }
         }
     }
 }

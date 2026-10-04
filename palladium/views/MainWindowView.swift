@@ -32,7 +32,7 @@ struct MainWindowView: View {
     /// 프리미어 프로처럼 미디어 패널 선택, 미리보기에 연 원본, 타임라인 클립 선택은 서로 독립이다.
     @State private var selectedAssetID: MediaAsset.ID?
     @State private var openedAssetID: MediaAsset.ID?
-    @State private var selectedClipID: Clip.ID?
+    @State private var selectedClipIDs: Set<Clip.ID> = []
     @State private var playheadTime: CMTime = .zero
     @State private var timelineScale = TimelineScale(pointsPerSecond: 40)
     @State private var previewPlayer = PreviewPlayer()
@@ -61,7 +61,8 @@ struct MainWindowView: View {
         )
         let openedAsset = project.assets.first { $0.id == openedAssetID }
         let currentSequence = project.sequences.first
-        let selectedClip = currentSequence?.tracks.flatMap(\.clips).first { $0.id == selectedClipID }
+        // 인스펙터는 클립 하나를 골랐을 때만 속성을 보여준다.
+        let selectedClip = selectedClipIDs.count == 1 ? selectedClipIDs.first.flatMap { currentSequence?.clip(id: $0) } : nil
         let selectedClipAsset = project.assets.first { $0.id == selectedClip?.assetID }
 
         NavigationSplitView {
@@ -86,7 +87,7 @@ struct MainWindowView: View {
                 .clipped()
         }
         .inspector(isPresented: $isInspectorPresented) {
-            InspectorView(clip: selectedClip, asset: selectedClipAsset)
+            InspectorView(clip: selectedClip, asset: selectedClipAsset, selectedClipCount: selectedClipIDs.count)
                 .inspectorColumnWidth(
                     min: MainWindowMetrics.inspectorMinWidth,
                     ideal: MainWindowMetrics.inspectorIdealWidth,
@@ -118,7 +119,7 @@ struct MainWindowView: View {
         .focusedSceneValue(\.isInspectorPresented, $isInspectorPresented)
         .focusedSceneValue(\.timelineScale, $timelineScale)
         .task { await writeBackupsPeriodically() }
-        .modifier(PlaybackKeyHandling(handle: handlePlaybackKey))
+        .modifier(EditorKeyHandling(handle: handleEditorKey))
         // 편집기 커맨드의 실행 취소를 창의 실행 취소 관리자(편집 > 실행 취소 ⌘Z)에 남긴다.
         .onChange(of: undoManager, initial: true) { _, undoManager in
             editor.undoManager = undoManager
@@ -202,12 +203,11 @@ struct MainWindowView: View {
                     TimelineEditorView(
                         sequence: currentSequence,
                         assets: editor.project.assets,
-                        selectedClipID: $selectedClipID,
+                        selectedClipIDs: $selectedClipIDs,
                         playheadTime: $playheadTime,
-                        scale: $timelineScale
-                    ) { assetID, trackID, time, mode in
-                        selectedClipID = editor.placeAsset(assetID, onTrack: trackID, at: time, mode: mode)
-                    }
+                        scale: $timelineScale,
+                        actions: timelineActions
+                    )
                     .frame(maxWidth: .infinity)
                     .frame(height: min(timelineHeight, maxTimelineHeight))
                 }
@@ -215,13 +215,46 @@ struct MainWindowView: View {
         }
     }
 
-    /// 미리보기에 원본이 열려 있을 때만 키를 처리한다. 열린 원본이 없으면 키 입력을 그대로 넘긴다.
-    private func handlePlaybackKey(_ key: PlaybackKeyMonitor.Key) -> Bool {
-        guard case let .ready(timeline) = previewPlayer.loadState else { return false }
+    /// 타임라인의 편집 요청을 편집기 커맨드로 옮긴다. 화면 상태(선택, 미리보기에 연 원본)는 여기서 바꾼다.
+    private var timelineActions: TimelineActions {
+        TimelineActions(
+            dropAsset: { assetID, trackID, time, mode in
+                if let clipID = editor.placeAsset(assetID, onTrack: trackID, at: time, mode: mode) {
+                    selectedClipIDs = [clipID]
+                }
+            },
+            moveClip: { clipID, trackID, time, mode in
+                editor.moveClip(clipID, toTrack: trackID, at: time, mode: mode)
+            },
+            deleteClips: { clipIDs, ripple in
+                editor.deleteClips(clipIDs, ripple: ripple)
+                selectedClipIDs.subtract(clipIDs)
+            },
+            splitClips: { clipIDs in
+                editor.splitClips(clipIDs, at: playheadTime)
+            },
+            openAsset: { assetID in openedAssetID = assetID },
+            revealAsset: { assetID in selectedAssetID = assetID }
+        )
+    }
+
+    /// 처리하지 않는 키(미리보기에 원본이 없을 때의 재생 키, 고른 클립이 없을 때의 삭제)는 그대로 넘긴다.
+    private func handleEditorKey(_ key: EditorKeyMonitor.Key) -> Bool {
         switch key {
-        case .playPause: previewPlayer.togglePlayPause()
-        case .previousFrame: previewPlayer.stepFrame(by: -1, in: timeline)
-        case .nextFrame: previewPlayer.stepFrame(by: 1, in: timeline)
+        case .playPause, .previousFrame, .nextFrame:
+            guard case let .ready(timeline) = previewPlayer.loadState else { return false }
+            switch key {
+            case .playPause: previewPlayer.togglePlayPause()
+            case .previousFrame: previewPlayer.stepFrame(by: -1, in: timeline)
+            default: previewPlayer.stepFrame(by: 1, in: timeline)
+            }
+        case .deleteSelection, .rippleDeleteSelection:
+            guard !selectedClipIDs.isEmpty else { return false }
+            timelineActions.deleteClips(selectedClipIDs, key == .rippleDeleteSelection)
+        case .splitAtPlayhead:
+            timelineActions.splitClips(selectedClipIDs)
+        case .selectAll:
+            selectedClipIDs = Set(editor.project.sequences.first?.tracks.flatMap(\.clips).map(\.id) ?? [])
         }
         return true
     }
@@ -284,10 +317,10 @@ private struct TimelineResizeHandle: View {
     }
 }
 
-/// 창이 앞에 있는 동안 Space·←/→를 미리보기 조작으로 받는다.
-private struct PlaybackKeyHandling: ViewModifier {
-    let handle: (PlaybackKeyMonitor.Key) -> Bool
-    @State private var monitor = PlaybackKeyMonitor()
+/// 창이 앞에 있는 동안 Space·←/→(미리보기)와 Delete·⌘B·⌘A(타임라인)를 받는다.
+private struct EditorKeyHandling: ViewModifier {
+    let handle: (EditorKeyMonitor.Key) -> Bool
+    @State private var monitor = EditorKeyMonitor()
     @Environment(\.controlActiveState) private var controlActiveState
 
     func body(content: Content) -> some View {
