@@ -2,15 +2,19 @@
 import Testing
 
 struct MediaAssetTests {
-    @Test("별점은 0부터 5까지로 맞춘다")
-    func ratingIsClamped() {
+    @Test("이름을 바꾸면 앞뒤 공백을 빼고, 원본 파일 경로는 그대로다")
+    func renameTrimsWhitespace() {
         var asset = SampleData.introVideo
-        asset.rate(3)
-        #expect(asset.rating == 3)
-        asset.rate(9)
-        #expect(asset.rating == 5)
-        asset.rate(-1)
-        #expect(asset.rating == 0)
+        asset.rename(to: "  오프닝 인사  ")
+        #expect(asset.name == "오프닝 인사")
+        #expect(asset.sourceURL == SampleData.introVideo.sourceURL)
+    }
+
+    @Test("빈 이름으로는 바꾸지 않는다")
+    func emptyRenameIsIgnored() {
+        var asset = SampleData.introVideo
+        asset.rename(to: "   ")
+        #expect(asset.name == SampleData.introVideo.name)
     }
 
     @Test("태그는 쉼표로 나누고 공백·빈 태그·대소문자만 다른 중복을 뺀다")

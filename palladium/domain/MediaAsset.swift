@@ -13,8 +13,6 @@ nonisolated struct MediaAsset {
     var colorLabel: ColorLabel? = nil
     /// "인터뷰", "B컷"처럼 자유롭게 붙이는 분류어. 검색에 쓰인다.
     var tags: [String] = []
-    /// 0(별점 없음)부터 `maximumRating`까지.
-    var rating: Int = 0
 }
 
 nonisolated enum MediaKind: String {
@@ -44,16 +42,18 @@ nonisolated extension MediaAsset {
     func refers(to url: URL) -> Bool {
         sourceURL.standardizedFileURL == url.standardizedFileURL
     }
-
-    static let maximumRating = 5
 }
 
 // MARK: - Commands
 
 nonisolated extension MediaAsset {
-    /// 범위를 벗어난 별점은 가장 가까운 값으로 맞춘다.
-    mutating func rate(_ stars: Int) {
-        rating = min(max(stars, 0), Self.maximumRating)
+    /// 포토샵 레이어 이름처럼 프로젝트 안에서만 쓰는 이름으로 바꾼다(원본 파일 이름은 그대로).
+    /// 앞뒤 공백을 빼고, 비어 있으면 바꾸지 않는다.
+    mutating func rename(to newName: String) {
+        let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedName.isEmpty {
+            name = trimmedName
+        }
     }
 
     /// 쉼표로 나눈 태그 목록으로 바꾼다. 앞뒤 공백과 빈 태그, 중복(대소문자 무시)은 뺀다.

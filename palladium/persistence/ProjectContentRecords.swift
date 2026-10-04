@@ -18,7 +18,6 @@ final class MediaAssetRecord {
     var colorLabelRawValue: String?
     // 기본값이 있어야 이 속성이 생기기 전에 저장한 레코드도 열린다.
     var tags: [String] = []
-    var rating: Int = 0
     var project: ProjectRecord?
     var backup: ProjectBackupRecord?
 
@@ -32,8 +31,7 @@ final class MediaAssetRecord {
         durationTimescale: Int32,
         bookmarkData: Data?,
         colorLabelRawValue: String?,
-        tags: [String],
-        rating: Int
+        tags: [String]
     ) {
         self.id = id
         self.sortIndex = sortIndex
@@ -45,7 +43,6 @@ final class MediaAssetRecord {
         self.bookmarkData = bookmarkData
         self.colorLabelRawValue = colorLabelRawValue
         self.tags = tags
-        self.rating = rating
     }
 }
 
