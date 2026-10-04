@@ -4,7 +4,7 @@ import SwiftUI
 
 enum SceneID {
     static let launcher = "launcher"
-    static let shortcutGuide = "shortcut-guide"
+    static let help = "help"
 }
 
 /// Xcode의 시작 창처럼 앱을 켜면 먼저 뜨는 프로젝트 목록. 프로젝트를 열면 편집 창을 띄우고 이 창은 닫는다.

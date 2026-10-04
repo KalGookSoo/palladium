@@ -50,7 +50,8 @@ enum ShortcutGuide {
     static let renameAsset = ShortcutGuideEntry(title: "원본 이름 변경", summary: "미디어 패널에서 고른 원본의 이름을 바꿉니다", keys: "F2")
     static let filterMedia = ShortcutGuideEntry(title: "필터", summary: "색상 레이블로 원본을 거릅니다", keys: nil)
 
-    static let showShortcuts = ShortcutGuideEntry(title: "단축키 목록", summary: "모든 단축키를 봅니다", keys: "⌘/")
+    static let showShortcuts = ShortcutGuideEntry(title: "단축키 목록", summary: "도움말 창에서 모든 단축키를 봅니다", keys: "⌘/")
+    static let showHelp = ShortcutGuideEntry(title: "palladium 도움말", summary: "기능 안내와 단축키를 보고 검색합니다", keys: "⇧⌘/")
 
     /// 단축키 목록 창에 보여줄 묶음. 단축키가 없는 항목은 넣지 않는다.
     static let sections: [(title: String, entries: [ShortcutGuideEntry])] = [
@@ -59,6 +60,6 @@ enum ShortcutGuide {
         ("재생", [playPause, previousFrame, nextFrame]),
         ("편집", [undo, redo, renameAsset]),
         ("타임라인", [deleteClips, rippleDeleteClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, overwritePlacement]),
-        ("도움말", [showShortcuts]),
+        ("도움말", [showHelp, showShortcuts]),
     ]
 }

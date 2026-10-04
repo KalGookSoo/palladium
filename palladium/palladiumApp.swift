@@ -22,8 +22,8 @@ struct palladiumApp: App {
         .defaultPosition(.center)
         .modelContainer(modelContainer)
 
-        Window(ShortcutGuide.showShortcuts.title, id: SceneID.shortcutGuide) {
-            ShortcutGuideView()
+        Window("palladium 도움말", id: SceneID.help) {
+            HelpView()
         }
         .windowResizability(.contentSize)
 
