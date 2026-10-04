@@ -1,7 +1,7 @@
 import OSLog
 import SwiftUI
 
-/// `VSplitView` 안에서는 화면 구성이 바뀔 때 이 View가 다시 만들어져 `@State`를 잃으므로, 플레이어와 로드 명령은 상위(`MainWindowView`)가 소유한다.
+/// 타임라인을 숨기거나 보일 때도 재생이 끊기지 않도록 플레이어와 로드 명령은 상위(`MainWindowView`)가 소유한다.
 struct PreviewPlayerView: View {
     let asset: MediaAsset?
     let previewPlayer: PreviewPlayer

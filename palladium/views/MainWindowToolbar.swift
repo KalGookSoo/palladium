@@ -3,7 +3,6 @@ import SwiftUI
 /// 같은 위치에 이어진 툴바 항목은 시스템이 한 캡슐로 묶어 그리므로, 항목마다 `ToolbarSpacer`를 두어 개별 버튼으로 분리한다.
 struct MainWindowToolbar: ToolbarContent {
     @Binding var aspectRatio: AspectRatioPreset
-    @Binding var isTimelineVisible: Bool
     @Binding var isInspectorPresented: Bool
     let importMedia: () -> Void
 
@@ -31,17 +30,6 @@ struct MainWindowToolbar: ToolbarContent {
                 Label("내보내기", systemImage: "square.and.arrow.up")
             }
             .help(ShortcutGuide.export.helpText)
-        }
-
-        ToolbarSpacer(.fixed, placement: .primaryAction)
-
-        ToolbarItem(placement: .primaryAction) {
-            Button {
-                isTimelineVisible.toggle()
-            } label: {
-                Label("타임라인", systemImage: "rectangle.bottomhalf.inset.filled")
-            }
-            .help(ShortcutGuide.toggleTimeline.helpText)
         }
 
         ToolbarSpacer(.fixed, placement: .primaryAction)

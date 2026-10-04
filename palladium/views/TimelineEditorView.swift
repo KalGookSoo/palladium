@@ -11,7 +11,7 @@ enum TimelineMetrics {
 }
 
 /// SwiftUI의 `TimelineView`(일정 주기로 다시 그리는 View)와 이름이 겹치지 않도록 `TimelineEditorView`로 짓는다.
-/// `VSplitView` 안에서는 다시 만들어질 때 `@State`를 잃으므로 선택·재생 헤드·배율은 상위(`MainWindowView`)가 소유한다.
+/// 타임라인을 숨겼다 다시 보여도 유지되도록 선택·재생 헤드·배율은 상위(`MainWindowView`)가 소유한다.
 struct TimelineEditorView: View {
     let sequence: EditSequence
     let assets: [MediaAsset]
