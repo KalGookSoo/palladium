@@ -119,7 +119,9 @@ struct MainWindowView: View {
         .task { await writeBackupsPeriodically() }
         .modifier(PlaybackKeyHandling(handle: handlePlaybackKey))
         .task(id: openedAssetID) {
-            await previewPlayer.load(url: openedAsset.map(MediaFileAccess.resolvedURL))
+            // 이미지는 플레이어로 열지 않는다. 앞서 열려 있던 영상은 멈추고 비운다.
+            let playableAsset = openedAsset.flatMap { $0.kind == .image ? nil : $0 }
+            await previewPlayer.load(url: playableAsset.map(MediaFileAccess.resolvedURL))
         }
         .frame(minHeight: 600)
         .navigationTitle(project.name)

@@ -203,7 +203,10 @@ private struct MediaAssetRow<Name: View>: View {
     @ViewBuilder let name: Name
 
     var body: some View {
-        let durationText = Duration.seconds(asset.duration.seconds).formatted(.time(pattern: .minuteSecond))
+        // 이미지는 길이가 없어(타임라인에 놓을 기본 길이만 있음) 길이 대신 종류를 보여준다.
+        let durationText = asset.kind == .image
+            ? "이미지"
+            : Duration.seconds(asset.duration.seconds).formatted(.time(pattern: .minuteSecond))
 
         HStack {
             MediaThumbnailView(asset: asset)

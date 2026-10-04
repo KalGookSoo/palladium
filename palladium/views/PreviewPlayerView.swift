@@ -9,6 +9,16 @@ struct PreviewPlayerView: View {
     let hasProjectAssets: Bool
 
     var body: some View {
+        // 이미지는 재생할 것이 없어 플레이어 대신 정지 이미지로 보여준다.
+        if let asset, asset.kind == .image {
+            StillImagePreview(asset: asset)
+        } else {
+            playerContent
+        }
+    }
+
+    @ViewBuilder
+    private var playerContent: some View {
         switch previewPlayer.loadState {
         case .empty:
             ContentUnavailableView(
@@ -29,6 +39,30 @@ struct PreviewPlayerView: View {
                 PlayerSurfaceView(player: previewPlayer.player)
                 PlaybackControls(previewPlayer: previewPlayer, timeline: timeline)
             }
+        }
+    }
+}
+
+/// 재생 컨트롤 없이 이미지를 영상처럼 검은 바탕 가운데에 맞춰 보여준다.
+private struct StillImagePreview: View {
+    let asset: MediaAsset
+    @State private var image: NSImage?
+    @State private var isUnavailable = false
+
+    var body: some View {
+        ZStack {
+            Color.black
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+            } else if isUnavailable {
+                ContentUnavailableView("이미지를 열 수 없음", systemImage: "exclamationmark.triangle", description: Text(asset.name))
+            }
+        }
+        .task(id: asset.id) {
+            image = NSImage(contentsOf: MediaFileAccess.resolvedURL(for: asset))
+            isUnavailable = image == nil
         }
     }
 }
