@@ -94,7 +94,7 @@ macOS 표준 레이아웃 컨테이너(`NavigationSplitView`, `.toolbar`, `.insp
 | 섹션 | 예상 View | 비고 |
 |---|---|---|
 | 툴바 | `MainWindowToolbar` | `.toolbar { }` 안에 들어가는 내용은 View가 아니라 `ToolbarContent`여야 하므로 `ToolbarContent`로 구현. 앞쪽(`.navigation`)에 가져오기(⌘I)·화면비 프리셋(16:9 / 9:16 / 1:1), 뒤쪽(`.primaryAction`)에 내보내기(⌘E)와 패널 토글. 가져오기·내보내기는 파일 메뉴에도 같은 단축키로 둔다. 저장은 툴바에 두지 않고 메뉴 바의 파일 > 저장(⌘S)으로만 한다 |
-| 미디어 패널 | `MediaPanelView` | `NavigationSplitView`의 사이드바 컬럼, 검색바 + 클립 리스트 + 폴더 트리 |
+| 미디어 패널 | `MediaPanelView` | `NavigationSplitView`의 사이드바 컬럼, 검색바(이름·태그) + 필터 메뉴(색상 레이블·최소 별점) + 클립 리스트 + 폴더 트리. 원본을 우클릭해 색상 레이블·별점·태그를 바꾼다 |
 | 미리보기 플레이어 | `PreviewPlayerView` | 미디어 패널에서 더블클릭한 원본을 재생한다. 영상 표시는 AppKit `AVPlayerView`를 `NSViewRepresentable`(`PlayerSurfaceView`)로 컨트롤 없이(`controlsStyle = .none`) 감싼다 — SwiftUI `VideoPlayer`는 자체 재생 컨트롤을 함께 그려 프레임 이동·스크럽 바·내레이션 버튼 같은 우리 컨트롤과 겹치기 때문이다. 아래에 스크럽 바와 [현재/전체 시간 · 이전 프레임 · 재생/일시정지 · 다음 프레임 · 내레이션 녹음] 컨트롤. 재생/일시정지를 가로 가운데에 두고 나머지를 그 양옆에 붙인다 — 왼쪽 끝은 떠 있는 미디어 패널에 가려질 수 있기 때문이다(#42). 위치 계산은 도메인 `PlaybackTimeline`, AVPlayer 명령·관찰은 `palladium/playback/`의 `PreviewPlayer`가 맡는다 |
 | 인스펙터 | `InspectorView` | `.inspector(isPresented:)`로 구현, 타임라인에서 선택한 클립의 속성을 보여준다. 하위 탭별로 `TrimInspectorView`/`EffectInspectorView`/`TransformInspectorView`/`SubtitleInspectorView` 분리 |
 | 타임라인 | `TimelineEditorView` | 미리보기 플레이어와 `VSplitView`로 나눈다. 왼쪽에 고정된 트랙 머리(종류 아이콘 + "영상 1" 같은 레이블), 오른쪽에 가로 스크롤되는 눈금자(`TimelineRulerView`, `Canvas`)와 `TrackRowView`(트랙 한 줄)·`ClipView`(중립색 클립 블록, 선택 시 강조색 테두리), 그 위에 `PlayheadView`와 눈금자의 `MarkerView`. 시간 ↔ 좌표 변환과 줌은 도메인 `TimelineScale`이 맡는다. SwiftUI의 `TimelineView`와 이름이 겹치지 않도록 `TimelineEditorView`로 짓는다 |

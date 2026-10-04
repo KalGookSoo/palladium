@@ -69,7 +69,7 @@ struct MainWindowView: View {
         let selectedClipAsset = project.assets.first { $0.id == selectedClip?.assetID }
 
         NavigationSplitView {
-            MediaPanelView(project: project, selectedAssetID: $selectedAssetID) { assetID in
+            MediaPanelView(project: $project, selectedAssetID: $selectedAssetID) { assetID in
                 openedAssetID = assetID
             }
             // 놓을 곳을 창 전체로 잡으면 분할 뷰 경계를 덮어 크기 조절 커서가 나타나지 않으므로,
