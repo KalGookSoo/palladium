@@ -6,6 +6,10 @@ extension FocusedValues {
     @Entry var renameSelectedAsset: (() -> Void)?
 }
 
+extension KeyEquivalent {
+    static let f2 = KeyEquivalent(Character(UnicodeScalar(UInt32(NSF2FunctionKey))!))
+}
+
 struct MediaCommands: Commands {
     @FocusedValue(\.renameSelectedAsset) private var renameSelectedAsset
 
@@ -16,7 +20,7 @@ struct MediaCommands: Commands {
                 renameSelectedAsset?()
             }
             // Windows 탐색기·포토샵처럼 F2로 바로 이름을 바꾼다.
-            .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(UInt32(NSF2FunctionKey))!)), modifiers: [])
+            .keyboardShortcut(.f2, modifiers: [])
             .disabled(renameSelectedAsset == nil)
         }
     }
