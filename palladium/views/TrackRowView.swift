@@ -21,26 +21,29 @@ struct TrackRowView: View {
                 .onTapGesture { selectedClipIDs = [] }
 
             ForEach(track.clips) { clip in
-                let assetName = assets.first { $0.id == clip.assetID }?.name ?? "알 수 없는 원본"
+                let asset = assets.first { $0.id == clip.assetID }
                 let translation = dragging?.clipID == clip.id ? dragging?.translation ?? .zero : .zero
+                let width = scale.width(for: clip.sourceRange.duration)
 
-                ClipView(title: assetName, symbolName: track.kind.symbolName, isSelected: selectedClipIDs.contains(clip.id))
-                    .frame(
-                        width: scale.width(for: clip.sourceRange.duration),
-                        height: TimelineMetrics.trackHeight - TimelineMetrics.clipVerticalInset * 2
-                    )
-                    .offset(x: scale.x(for: clip.timelineStart) + translation.width, y: TimelineMetrics.clipVerticalInset + translation.height)
-                    .zIndex(dragging?.clipID == clip.id ? 1 : 0)
-                    .onTapGesture { select(clip) }
-                    .gesture(
-                        DragGesture(minimumDistance: 3)
-                            .onChanged { value in dragging = (clip.id, value.translation) }
-                            .onEnded { value in
-                                dragging = nil
-                                moveClip(clip, value.translation)
-                            }
-                    )
-                    .contextMenu { clipMenu(for: clip) }
+                ClipView(title: asset?.name ?? "알 수 없는 원본", symbolName: track.kind.symbolName, isSelected: selectedClipIDs.contains(clip.id)) {
+                    ClipContentView(asset: asset, clip: clip, width: width)
+                }
+                .frame(
+                    width: width,
+                    height: TimelineMetrics.trackHeight - TimelineMetrics.clipVerticalInset * 2
+                )
+                .offset(x: scale.x(for: clip.timelineStart) + translation.width, y: TimelineMetrics.clipVerticalInset + translation.height)
+                .zIndex(dragging?.clipID == clip.id ? 1 : 0)
+                .onTapGesture { select(clip) }
+                .gesture(
+                    DragGesture(minimumDistance: 3)
+                        .onChanged { value in dragging = (clip.id, value.translation) }
+                        .onEnded { value in
+                            dragging = nil
+                            moveClip(clip, value.translation)
+                        }
+                )
+                .contextMenu { clipMenu(for: clip) }
             }
         }
         .frame(height: TimelineMetrics.trackHeight)
