@@ -206,10 +206,7 @@ private struct MediaAssetRow<Name: View>: View {
         let durationText = Duration.seconds(asset.duration.seconds).formatted(.time(pattern: .minuteSecond))
 
         HStack {
-            // 실제 썸네일은 미디어 가져오기(#1)에서 생성하고, 그전까지 종류별 아이콘으로 자리를 잡는다.
-            Image(systemName: thumbnailSymbol)
-                .foregroundStyle(.secondary)
-                .frame(width: 24)
+            MediaThumbnailView(asset: asset)
             VStack(alignment: .leading) {
                 HStack(spacing: 4) {
                     if let colorLabel = asset.colorLabel {
@@ -234,8 +231,32 @@ private struct MediaAssetRow<Name: View>: View {
     private func detailText(durationText: String) -> String {
         asset.tags.isEmpty ? durationText : "\(durationText) · \(asset.tags.joined(separator: ", "))"
     }
+}
 
-    private var thumbnailSymbol: String {
+/// 영상은 한 장면, 이미지는 축소본을 보여준다. 만들지 못하면(오디오, 파일 없음) 종류별 아이콘을 둔다.
+private struct MediaThumbnailView: View {
+    let asset: MediaAsset
+    @State private var image: CGImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(decorative: image, scale: 2)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: fallbackSymbol)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 40, height: 24)
+        .clipShape(RoundedRectangle(cornerRadius: 3))
+        .task(id: asset.id) {
+            image = await MediaThumbnailProvider.shared.thumbnail(for: asset)
+        }
+    }
+
+    private var fallbackSymbol: String {
         switch asset.kind {
         case .video: "film"
         case .audio: "waveform"
