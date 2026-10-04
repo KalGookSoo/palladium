@@ -22,7 +22,8 @@ extension ProjectContentRecords {
                 sourceURL: asset.sourceURL,
                 kindRawValue: asset.kind.rawValue,
                 durationValue: asset.duration.value,
-                durationTimescale: asset.duration.timescale
+                durationTimescale: asset.duration.timescale,
+                bookmarkData: asset.bookmarkData
             )
         }
         folders = project.folders.enumerated().map { index, folder in
@@ -128,7 +129,8 @@ private extension MediaAssetRecord {
             name: name,
             sourceURL: sourceURL,
             kind: kind,
-            duration: CMTime(value: durationValue, timescale: durationTimescale)
+            duration: CMTime(value: durationValue, timescale: durationTimescale),
+            bookmarkData: bookmarkData
         )
     }
 }

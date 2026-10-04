@@ -5,10 +5,11 @@ struct MainWindowToolbar: ToolbarContent {
     @Binding var aspectRatio: AspectRatioPreset
     @Binding var isTimelineVisible: Bool
     @Binding var isInspectorPresented: Bool
+    let importMedia: () -> Void
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
-            Button(action: requestMediaImport) {
+            Button(action: importMedia) {
                 Label("가져오기", systemImage: "square.and.arrow.down")
             }
             .help("미디어 가져오기 (⌘I)")

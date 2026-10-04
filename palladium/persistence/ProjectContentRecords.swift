@@ -14,10 +14,20 @@ final class MediaAssetRecord {
     var kindRawValue: String
     var durationValue: Int64
     var durationTimescale: Int32
+    var bookmarkData: Data?
     var project: ProjectRecord?
     var backup: ProjectBackupRecord?
 
-    init(id: UUID, sortIndex: Int, name: String, sourceURL: URL, kindRawValue: String, durationValue: Int64, durationTimescale: Int32) {
+    init(
+        id: UUID,
+        sortIndex: Int,
+        name: String,
+        sourceURL: URL,
+        kindRawValue: String,
+        durationValue: Int64,
+        durationTimescale: Int32,
+        bookmarkData: Data?
+    ) {
         self.id = id
         self.sortIndex = sortIndex
         self.name = name
@@ -25,6 +35,7 @@ final class MediaAssetRecord {
         self.kindRawValue = kindRawValue
         self.durationValue = durationValue
         self.durationTimescale = durationTimescale
+        self.bookmarkData = bookmarkData
     }
 }
 

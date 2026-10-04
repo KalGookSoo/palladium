@@ -73,6 +73,17 @@ struct SwiftDataProjectRepositoryTests {
         #expect(try repository.project(id: created.id) == edited)
     }
 
+    @Test("원본의 북마크도 저장했다가 그대로 불러온다")
+    func assetBookmarkRoundTrips() throws {
+        let repository = SwiftDataProjectRepository(modelContext: container.mainContext)
+        var edited = try sampleContent(withID: repository.createProject(named: "샘플").id)
+        edited.assets[0].bookmarkData = Data([1, 2, 3])
+
+        try repository.save(edited)
+
+        #expect(try repository.project(id: edited.id)?.assets.first?.bookmarkData == Data([1, 2, 3]))
+    }
+
     @Test("다시 저장하면 이전 내용이 남지 않고 새 내용으로 바뀐다")
     func savingAgainReplacesContent() throws {
         let repository = SwiftDataProjectRepository(modelContext: container.mainContext)
