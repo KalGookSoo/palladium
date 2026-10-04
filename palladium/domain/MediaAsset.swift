@@ -25,5 +25,5 @@ extension MediaAsset {
     }
 }
 
-extension MediaAsset: Identifiable {}
-extension MediaAsset: Equatable {}
+nonisolated extension MediaAsset: Identifiable {}
+nonisolated extension MediaAsset: Equatable {}

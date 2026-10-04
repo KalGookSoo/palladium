@@ -6,5 +6,5 @@ nonisolated struct MediaFolder {
     var assetIDs: [MediaAsset.ID]
 }
 
-extension MediaFolder: Identifiable {}
-extension MediaFolder: Equatable {}
+nonisolated extension MediaFolder: Identifiable {}
+nonisolated extension MediaFolder: Equatable {}

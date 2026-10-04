@@ -8,5 +8,5 @@ nonisolated struct Marker {
     var name: String
 }
 
-extension Marker: Identifiable {}
-extension Marker: Equatable {}
+nonisolated extension Marker: Identifiable {}
+nonisolated extension Marker: Equatable {}

@@ -59,4 +59,4 @@ extension TimelineScale {
     }
 }
 
-extension TimelineScale: Equatable {}
+nonisolated extension TimelineScale: Equatable {}

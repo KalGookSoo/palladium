@@ -24,5 +24,5 @@ extension Track {
     }
 }
 
-extension Track: Identifiable {}
-extension Track: Equatable {}
+nonisolated extension Track: Identifiable {}
+nonisolated extension Track: Equatable {}

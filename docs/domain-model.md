@@ -98,7 +98,7 @@ classDiagram
 
 - 모든 도메인 타입은 `struct`/`enum`이다. 대입하면 복사되므로 한 곳의 변경이 다른 곳에 몰래 전파되지 않고, 실행 취소는 이전 값을 보관하는 것만으로 구현할 수 있다.
 - `SwiftUI`와 `AVFoundation`을 import하지 않는다(`Foundation`, `CoreMedia`만 허용).
-- 앱 타깃의 기본 격리가 `MainActor`이므로, 도메인 타입은 `nonisolated`로 선언해 테스트와 백그라운드 작업(내보내기 등)에서도 쓸 수 있게 한다.
+- 앱 타깃의 기본 격리가 `MainActor`이므로, 도메인 타입과 그 프로토콜 채택(`extension`)은 `nonisolated`로 선언해 테스트와 백그라운드 작업(내보내기 등)에서도 쓸 수 있게 한다. `extension`에 빠뜨리면 `Equatable` 같은 채택이 메인 액터에 묶여, 메인 액터 밖에서 비교할 때 Swift 6 모드에서 오류가 된다.
 
 ### 규칙을 어기는 값은 만들어지지 않게 한다
 
