@@ -60,9 +60,9 @@ struct MainWindowView: View {
             }
         )
         let openedAsset = project.assets.first { $0.id == openedAssetID }
-        let currentSequence = project.sequences.first
+        let currentSequence = editor.currentSequence
         // 인스펙터는 클립 하나를 골랐을 때만 속성을 보여준다.
-        let selectedClip = selectedClipIDs.count == 1 ? selectedClipIDs.first.flatMap { currentSequence?.clip(id: $0) } : nil
+        let selectedClip = selectedClipIDs.count == 1 ? selectedClipIDs.first.flatMap { currentSequence.clip(id: $0) } : nil
         let selectedClipAsset = project.assets.first { $0.id == selectedClip?.assetID }
 
         NavigationSplitView {
@@ -170,7 +170,7 @@ struct MainWindowView: View {
     /// 미리보기 아래에 타임라인을 둔다. `VSplitView`는 미리보기에 연 원본이 바뀌면 내용 크기에 맞춰 경계를 다시 나눠
     /// 사용자가 맞춘 높이가 풀리므로(#51), 타임라인 높이를 직접 들고 경계를 끌 때만 바꾼다.
     /// 창 높이가 바뀌면 미리보기가 늘거나 줄고, 미리보기가 최소 높이보다 작아지면 타임라인을 줄여 보여준다.
-    private func editorArea(openedAsset: MediaAsset?, currentSequence: EditSequence?) -> some View {
+    private func editorArea(openedAsset: MediaAsset?, currentSequence: EditSequence) -> some View {
         GeometryReader { geometry in
             let maxTimelineHeight = max(MainWindowMetrics.timelineMinHeight, geometry.size.height - MainWindowMetrics.previewMinHeight)
 
@@ -195,13 +195,14 @@ struct MainWindowView: View {
                         .help(ShortcutGuide.toggleTimeline.helpText)
                         .padding(8)
                     }
-                if isTimelineVisible, let currentSequence {
+                if isTimelineVisible {
                     TimelineResizeHandle(
                         timelineHeight: $timelineHeight,
                         heightRange: MainWindowMetrics.timelineMinHeight ... maxTimelineHeight
                     )
                     TimelineEditorView(
                         sequence: currentSequence,
+                        allSequences: editor.project.sequences,
                         assets: editor.project.assets,
                         selectedClipIDs: $selectedClipIDs,
                         playheadTime: $playheadTime,
@@ -234,7 +235,20 @@ struct MainWindowView: View {
                 editor.splitClips(clipIDs, at: playheadTime)
             },
             openAsset: { assetID in openedAssetID = assetID },
-            revealAsset: { assetID in selectedAssetID = assetID }
+            revealAsset: { assetID in selectedAssetID = assetID },
+            switchSequence: { sequenceID in
+                editor.switchToSequence(sequenceID)
+                selectedClipIDs = []
+            },
+            addSequence: {
+                editor.addSequence(named: "")
+                selectedClipIDs = []
+            },
+            renameSequence: { sequenceID, name in editor.renameSequence(sequenceID, to: name) },
+            deleteSequence: { sequenceID in
+                editor.deleteSequence(sequenceID)
+                selectedClipIDs = []
+            }
         )
     }
 
@@ -254,7 +268,7 @@ struct MainWindowView: View {
         case .splitAtPlayhead:
             timelineActions.splitClips(selectedClipIDs)
         case .selectAll:
-            selectedClipIDs = Set(editor.project.sequences.first?.tracks.flatMap(\.clips).map(\.id) ?? [])
+            selectedClipIDs = Set(editor.currentSequence.tracks.flatMap(\.clips).map(\.id))
         }
         return true
     }

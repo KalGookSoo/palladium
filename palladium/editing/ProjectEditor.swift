@@ -14,6 +14,8 @@ final class ProjectEditor {
     private(set) var savedProject: Project
     /// 마지막으로 백업본에 쓴 내용. 같은 내용을 다시 쓰지 않기 위해 기억한다.
     private var lastBackedUpProject: Project?
+    /// 타임라인에 보이고 클립 편집 커맨드가 적용되는 시퀀스.
+    private(set) var currentSequenceID: EditSequence.ID
     @ObservationIgnored private let repository: ProjectRepository
     /// 창의 실행 취소 관리자. 메뉴의 실행 취소(⌘Z)·다시 실행(⇧⌘Z)이 이것을 쓴다. 없으면 실행 취소를 남기지 않는다.
     @ObservationIgnored weak var undoManager: UndoManager?
@@ -24,12 +26,18 @@ final class ProjectEditor {
         savedProject = project
         lastBackedUpProject = recoveredContent
         self.repository = repository
+        currentSequenceID = (recoveredContent ?? project).sequences[0].id
     }
 
     // MARK: - Queries
 
     var hasUnsavedChanges: Bool {
         project != savedProject
+    }
+
+    /// 현재 시퀀스가 지워졌거나 실행 취소로 사라졌으면 첫 시퀀스를 현재 시퀀스로 본다.
+    var currentSequence: EditSequence {
+        project.sequences.first { $0.id == currentSequenceID } ?? project.sequences[0]
     }
 
     func asset(id: MediaAsset.ID) -> MediaAsset? {
@@ -77,11 +85,10 @@ final class ProjectEditor {
                   timelineStart: CMTimeMaximum(time, .zero)
               )
         else { return nil }
-        perform("클립 배치") { project in
-            guard !project.sequences.isEmpty else { return }
-            let matchingTrackID = project.sequences[0].tracks.first { $0.id == trackID && $0.kind == asset.trackKind }?.id
-            let targetTrackID = matchingTrackID ?? project.sequences[0].addTrack(kind: asset.trackKind)
-            project.sequences[0].place(clip, onTrack: targetTrackID, mode: mode)
+        editCurrentSequence("클립 배치") { sequence in
+            let matchingTrackID = sequence.tracks.first { $0.id == trackID && $0.kind == asset.trackKind }?.id
+            let targetTrackID = matchingTrackID ?? sequence.addTrack(kind: asset.trackKind)
+            sequence.place(clip, onTrack: targetTrackID, mode: mode)
         }
         return clip.id
     }
@@ -119,25 +126,51 @@ final class ProjectEditor {
 
     /// 클립을 다른 시각·트랙으로 옮긴다. 삽입이면 원래 자리를 메우고 새 자리 뒤를 민다(순서 바꾸기).
     func moveClip(_ clipID: Clip.ID, toTrack trackID: Track.ID, at time: CMTime, mode: PlacementMode) {
-        perform("클립 이동") { project in
-            guard !project.sequences.isEmpty else { return }
-            project.sequences[0].moveClip(clipID, toTrack: trackID, at: time, mode: mode)
-        }
+        editCurrentSequence("클립 이동") { $0.moveClip(clipID, toTrack: trackID, at: time, mode: mode) }
     }
 
     /// `ripple`이면 지운 자리 뒤의 클립을 당겨 틈을 메운다(리플 삭제).
     func deleteClips(_ clipIDs: Set<Clip.ID>, ripple: Bool) {
-        perform(ripple ? "리플 삭제" : "클립 삭제") { project in
-            guard !project.sequences.isEmpty else { return }
-            project.sequences[0].removeClips(clipIDs, ripple: ripple)
-        }
+        editCurrentSequence(ripple ? "리플 삭제" : "클립 삭제") { $0.removeClips(clipIDs, ripple: ripple) }
     }
 
     /// `time`에서 클립을 나눈다. 고른 클립이 비어 있으면 그 시각에 걸친 모든 클립을 나눈다.
     func splitClips(_ clipIDs: Set<Clip.ID>, at time: CMTime) {
-        perform("자르기") { project in
-            guard !project.sequences.isEmpty else { return }
-            project.sequences[0].split(at: time, clipIDs: clipIDs.isEmpty ? nil : clipIDs)
+        editCurrentSequence("자르기") { $0.split(at: time, clipIDs: clipIDs.isEmpty ? nil : clipIDs) }
+    }
+
+    /// 빈 시퀀스를 만들고 현재 시퀀스로 바꾼다. 이름이 비어 있으면 "시퀀스 N".
+    @discardableResult
+    func addSequence(named name: String) -> EditSequence.ID {
+        var newSequenceID = currentSequenceID
+        perform("새 시퀀스") { newSequenceID = $0.addSequence(named: name) }
+        currentSequenceID = newSequenceID
+        return newSequenceID
+    }
+
+    func renameSequence(_ sequenceID: EditSequence.ID, to newName: String) {
+        perform("시퀀스 이름 변경") { $0.renameSequence(sequenceID, to: newName) }
+    }
+
+    /// 마지막 남은 시퀀스는 지우지 않는다. 현재 시퀀스를 지우면 첫 시퀀스로 바꾼다.
+    func deleteSequence(_ sequenceID: EditSequence.ID) {
+        perform("시퀀스 삭제") { $0.deleteSequence(sequenceID) }
+        if sequenceID == currentSequenceID {
+            currentSequenceID = project.sequences[0].id
+        }
+    }
+
+    /// 타임라인에 보일 시퀀스를 바꾼다. 프로젝트 내용은 바뀌지 않는다.
+    func switchToSequence(_ sequenceID: EditSequence.ID) {
+        guard project.sequences.contains(where: { $0.id == sequenceID }) else { return }
+        currentSequenceID = sequenceID
+    }
+
+    private func editCurrentSequence(_ actionName: String, _ change: (inout EditSequence) -> Void) {
+        let sequenceID = currentSequence.id
+        perform(actionName) { project in
+            guard let index = project.sequences.firstIndex(where: { $0.id == sequenceID }) else { return }
+            change(&project.sequences[index])
         }
     }
 

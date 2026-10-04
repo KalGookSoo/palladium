@@ -22,6 +22,10 @@ struct TimelineActions {
     var splitClips: (Set<Clip.ID>) -> Void = { _ in }
     var openAsset: (MediaAsset.ID) -> Void = { _ in }
     var revealAsset: (MediaAsset.ID) -> Void = { _ in }
+    var switchSequence: (EditSequence.ID) -> Void = { _ in }
+    var addSequence: () -> Void = {}
+    var renameSequence: (EditSequence.ID, String) -> Void = { _, _ in }
+    var deleteSequence: (EditSequence.ID) -> Void = { _ in }
 }
 
 /// ⌘를 누른 채 놓거나 옮기면 덮어쓰기, 아니면 삽입이다.
@@ -33,12 +37,17 @@ func currentPlacementMode() -> PlacementMode {
 /// 타임라인을 숨겼다 다시 보여도 유지되도록 선택·재생 헤드·배율은 상위(`MainWindowView`)가 소유한다.
 struct TimelineEditorView: View {
     let sequence: EditSequence
+    /// 시퀀스 메뉴에 보일 프로젝트의 모든 시퀀스.
+    var allSequences: [EditSequence] = []
     let assets: [MediaAsset]
     @Binding var selectedClipIDs: Set<Clip.ID>
     @Binding var playheadTime: CMTime
     @Binding var scale: TimelineScale
     var actions = TimelineActions()
     @State private var pinchStartScale: TimelineScale?
+    @State private var isRenamingSequence = false
+    @State private var sequenceNameText = ""
+    @State private var isConfirmingSequenceDeletion = false
 
     var body: some View {
         let paddedDuration = sequence.duration + CMTime(seconds: TimelineMetrics.trailingPaddingSeconds, preferredTimescale: standardTimescale)
@@ -53,8 +62,7 @@ struct TimelineEditorView: View {
 
         VStack(spacing: 0) {
             HStack {
-                Text(sequence.name)
-                    .font(.headline)
+                sequenceMenu
                 Spacer()
                 Button {
                     scale = scale.zoomedOut
@@ -107,6 +115,49 @@ struct TimelineEditorView: View {
             }
         }
         .simultaneousGesture(pinch)
+        .alert("시퀀스 이름 변경", isPresented: $isRenamingSequence) {
+            TextField("시퀀스 이름", text: $sequenceNameText)
+            Button("변경") { actions.renameSequence(sequence.id, sequenceNameText) }
+            Button("취소", role: .cancel) {}
+        }
+        .confirmationDialog("\"\(sequence.name)\" 시퀀스를 삭제하시겠습니까?", isPresented: $isConfirmingSequenceDeletion) {
+            Button("삭제", role: .destructive) { actions.deleteSequence(sequence.id) }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("시퀀스의 클립 배치가 사라집니다. 미디어 패널의 원본은 그대로 남습니다. 실행 취소(⌘Z)로 되돌릴 수 있습니다.")
+        }
+    }
+
+    /// 타임라인 머리의 시퀀스 이름. 눌러서 시퀀스를 바꾸거나 만들고, 이름을 바꾸거나 지운다.
+    private var sequenceMenu: some View {
+        Menu {
+            ForEach(allSequences) { item in
+                Toggle(item.name, isOn: Binding(
+                    get: { item.id == sequence.id },
+                    set: { isOn in
+                        if isOn {
+                            actions.switchSequence(item.id)
+                        }
+                    }
+                ))
+            }
+            Divider()
+            Button("새 시퀀스") { actions.addSequence() }
+            Button("이름 변경…") {
+                sequenceNameText = sequence.name
+                isRenamingSequence = true
+            }
+            // 시퀀스는 최소 하나 있어야 하므로 마지막 남은 시퀀스는 지울 수 없다.
+            Button("삭제…", role: .destructive) { isConfirmingSequenceDeletion = true }
+                .disabled(allSequences.count <= 1)
+        } label: {
+            Text(sequence.name)
+                .font(.headline)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.borderless)
+        .fixedSize()
+        .help("시퀀스 — 바꾸기·새로 만들기·이름 변경·삭제")
     }
 
     private func timelineContent(contentWidth: Double) -> some View {

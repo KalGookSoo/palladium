@@ -40,8 +40,16 @@ nav_order: 9
 
 ## 관련 커맨드/쿼리
 
-- 커맨드: `createProject(named:)`(만드는 즉시 목록에 저장), `deleteProject(id:)`(프로젝트·내용·백업본 영구 삭제, 원본 파일은 그대로), `ProjectEditor.save()`(열린 프로젝트 저장 후 백업본 삭제), `ProjectEditor.writeBackupIfNeeded()`, `ProjectEditor.discardBackup()`, `addSequence(name:)`, `deleteSequence(id:)`, `relinkMedia(clip:newURL:)`
+- 커맨드: `createProject(named:)`(만드는 즉시 목록에 저장), `deleteProject(id:)`(프로젝트·내용·백업본 영구 삭제, 원본 파일은 그대로), `ProjectEditor.save()`(열린 프로젝트 저장 후 백업본 삭제), `ProjectEditor.writeBackupIfNeeded()`, `ProjectEditor.discardBackup()`, `ProjectEditor.addSequence(named:)`·`renameSequence(_:to:)`·`deleteSequence(_:)`·`switchToSequence(_:)`(도메인 `Project.addSequence`·`renameSequence`·`deleteSequence`), `relinkMedia(clip:newURL:)`
 - 쿼리: `projectSummaries() -> [ProjectSummary]`(최근 수정 순), `project(id:) -> Project?`, `ProjectEditor.hasUnsavedChanges`, `sequences() -> [EditSequence]`, `unresolvedMediaReferences() -> [Clip]`
+
+## 결정 사항(여러 시퀀스, #37)
+
+- 타임라인 머리의 시퀀스 이름을 누르면 메뉴가 열린다: 시퀀스 목록(현재 시퀀스에 체크, 고르면 전환) · 새 시퀀스 · 이름 변경… · 삭제…(확인 창, 마지막 남은 시퀀스는 비활성).
+- 새 시퀀스는 빈 시퀀스로 끝에 추가되고 바로 현재 시퀀스가 된다. 이름은 "시퀀스 N"이고 나중에 바꾼다.
+- 현재 시퀀스는 편집기(`ProjectEditor.currentSequenceID`)가 들고, 클립 배치·이동·삭제·자르기는 현재 시퀀스에만 적용된다. 현재 시퀀스는 저장하지 않으며 프로젝트를 열면 첫 시퀀스로 시작한다.
+- 추가·이름 변경·삭제는 저장하지 않은 변경이 되고 실행 취소할 수 있다. 시퀀스 전환은 프로젝트 내용을 바꾸지 않는다.
+- 시퀀스별 화면비 같은 설정은 아직 두지 않는다(화면비는 툴바의 프로젝트 전체 값).
 
 ## 결정 사항(프로젝트 삭제, #35)
 

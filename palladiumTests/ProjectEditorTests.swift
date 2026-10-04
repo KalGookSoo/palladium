@@ -170,6 +170,29 @@ struct ProjectEditorTests {
         #expect(editor.project.sequences[0].tracks.first { $0.id == videoTrack.id } == videoTrack)
     }
 
+    @Test("새 시퀀스를 만들면 현재 시퀀스가 되고, 클립 편집은 현재 시퀀스에만 적용되며, 지우면 첫 시퀀스로 돌아간다")
+    func sequenceCommands() throws {
+        let editor = try makeEditorWithSampleContent()
+        let firstSequence = editor.currentSequence
+
+        let newID = editor.addSequence(named: "하이라이트")
+        #expect(editor.currentSequenceID == newID)
+        editor.placeAsset(SampleData.introVideo.id, onTrack: nil, at: .zero, mode: .insert)
+        #expect(editor.currentSequence.tracks.flatMap(\.clips).count == 1)
+        #expect(editor.project.sequences[0] == firstSequence)
+
+        editor.renameSequence(newID, to: "쇼츠")
+        #expect(editor.currentSequence.name == "쇼츠")
+
+        editor.switchToSequence(firstSequence.id)
+        #expect(editor.currentSequence == firstSequence)
+
+        editor.switchToSequence(newID)
+        editor.deleteSequence(newID)
+        #expect(editor.currentSequenceID == firstSequence.id)
+        #expect(editor.project.sequences.count == 1)
+    }
+
     // MARK: - Helpers
 
     /// 샘플 내용을 저장한 프로젝트를 여는 편집기.

@@ -53,3 +53,38 @@ struct ProjectTests {
         #expect(summary.id == SampleData.project.id)
     }
 }
+
+struct ProjectSequenceCommandTests {
+    @Test("시퀀스를 추가하면 끝에 빈 시퀀스가 생기고, 이름이 비어 있으면 '시퀀스 N'이다")
+    func addSequence() {
+        var project = Project.makeNew(name: "프로젝트")
+        let namedID = project.addSequence(named: "  하이라이트 ")
+        project.addSequence(named: "")
+
+        #expect(project.sequences.map(\.name) == ["시퀀스 1", "하이라이트", "시퀀스 3"])
+        #expect(project.sequences[1].id == namedID)
+        #expect(project.sequences[1].tracks.isEmpty)
+    }
+
+    @Test("시퀀스 이름은 공백을 빼고 바꾸며, 비어 있으면 바꾸지 않는다")
+    func renameSequence() {
+        var project = Project.makeNew(name: "프로젝트")
+        let sequenceID = project.sequences[0].id
+        project.renameSequence(sequenceID, to: " 통합본 ")
+        project.renameSequence(sequenceID, to: "  ")
+        #expect(project.sequences[0].name == "통합본")
+    }
+
+    @Test("시퀀스를 지워도 원본은 남고, 마지막 남은 시퀀스는 지우지 않는다")
+    func deleteSequence() {
+        var project = SampleData.project
+        let firstID = project.sequences[0].id
+        let addedID = project.addSequence(named: "하이라이트")
+
+        project.deleteSequence(firstID)
+        project.deleteSequence(addedID)
+
+        #expect(project.sequences.map(\.id) == [addedID])
+        #expect(project.assets == SampleData.project.assets)
+    }
+}
