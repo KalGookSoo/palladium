@@ -257,7 +257,9 @@ struct MainWindowView: View {
             deleteSequence: { sequenceID in
                 editor.deleteSequence(sequenceID)
                 selectedClipIDs = []
-            }
+            },
+            addTrack: { kind in editor.addTrack(kind: kind) },
+            deleteTrack: { trackID in editor.deleteTrack(trackID) }
         )
     }
 

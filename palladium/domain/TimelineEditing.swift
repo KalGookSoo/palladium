@@ -91,6 +91,20 @@ nonisolated extension EditSequence {
         return track.id
     }
 
+    /// 비어 있는 트랙만 지운다. 클립이 있는 트랙을 지우면 편집 내용을 잃기 쉬워 막는다.
+    mutating func removeTrack(_ trackID: Track.ID) {
+        tracks.removeAll { $0.id == trackID && $0.clips.isEmpty }
+    }
+
+    /// `rowIndex`번째 행에 가장 가까운 `kind` 트랙. 그런 트랙이 없으면 `nil`.
+    /// 놓는 위치가 트랙 사이나 아래 빈 곳이어도 새 트랙을 만들지 않고 가까운 트랙에 넣기 위함이다.
+    func nearestTrackID(kind: TrackKind, toRow rowIndex: Int) -> Track.ID? {
+        tracks.indices
+            .filter { tracks[$0].kind == kind }
+            .min { abs($0 - rowIndex) < abs($1 - rowIndex) }
+            .map { tracks[$0].id }
+    }
+
     /// 클립을 트랙의 경계(또는 틈)에 넣고 뒤 클립을 민다. 없는 트랙이면 아무것도 하지 않는다.
     mutating func place(_ clip: Clip, onTrack trackID: Track.ID) {
         guard let index = tracks.firstIndex(where: { $0.id == trackID }) else { return }

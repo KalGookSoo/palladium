@@ -74,13 +74,15 @@ final class ProjectEditor {
     }
 
     /// 원본을 현재 시퀀스의 트랙에 클립으로 넣는다. 클립 안에 놓으면 가까운 경계로 옮기고 뒤 클립을 민다(삽입만 한다).
-    /// `trackID`가 없거나 원본 종류와 맞지 않는 트랙이면 맞는 종류의 새 트랙을 만들어 넣는다. 영상 소리는 영상 클립에 포함된다.
+    /// `trackID`가 없거나 원본 종류와 맞지 않으면 같은 종류의 첫 트랙에 넣고, 그런 트랙이 하나도 없을 때만 새로 만든다.
+    /// 그 밖의 새 트랙은 `addTrack(kind:)`로 사용자가 직접 만든다. 영상 소리는 영상 클립에 포함된다.
     /// 반환값은 새로 만든 클립의 ID이고, 원본이 없거나 놓을 수 없으면 `nil`이다.
     @discardableResult
     func placeAsset(_ assetID: MediaAsset.ID, onTrack trackID: Track.ID?, at time: CMTime) -> Clip.ID? {
         guard let asset = asset(id: assetID), let clip = asset.makeClip(at: time) else { return nil }
         editCurrentSequence("클립 배치") { sequence in
             let matchingTrackID = sequence.tracks.first { $0.id == trackID && $0.kind == asset.trackKind }?.id
+                ?? sequence.tracks.first { $0.kind == asset.trackKind }?.id
             let targetTrackID = matchingTrackID ?? sequence.addTrack(kind: asset.trackKind)
             sequence.place(clip, onTrack: targetTrackID)
         }
@@ -117,6 +119,19 @@ final class ProjectEditor {
             change(&project)
         }
     #endif
+
+    /// 새 영상 트랙은 기존 영상 트랙 위(오버레이용), 새 오디오 트랙은 맨 아래에 만든다.
+    @discardableResult
+    func addTrack(kind: TrackKind) -> Track.ID {
+        var trackID = UUID()
+        editCurrentSequence("트랙 추가") { trackID = $0.addTrack(kind: kind) }
+        return trackID
+    }
+
+    /// 비어 있는 트랙만 지운다.
+    func deleteTrack(_ trackID: Track.ID) {
+        editCurrentSequence("트랙 삭제") { $0.removeTrack(trackID) }
+    }
 
     /// 클립을 다른 시각·트랙으로 옮긴다. 원래 자리를 메우고 새 자리 경계에 넣어 뒤 클립을 민다(순서 바꾸기).
     func moveClip(_ clipID: Clip.ID, toTrack trackID: Track.ID, at time: CMTime) {

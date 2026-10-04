@@ -1,3 +1,4 @@
+import CoreMedia
 import SwiftUI
 
 enum ClipViewMetrics {
@@ -88,7 +89,9 @@ struct ClipContentView: View {
         }
         // 칸 개수(줌)·클립 구간·보기 설정이 바뀔 때만 다시 만든다.
         .task(id: ContentKey(
-            clip: clip,
+            // 끄는 동안 클립이 밀려 위치(타임라인 시각)만 바뀌면 내용은 같으므로 다시 만들지 않는다.
+            clipID: clip.id,
+            sourceRange: clip.sourceRange,
             tileCount: Int((width / Self.tileWidth).rounded(.up)),
             bucketCount: Int(width / 2),
             showsFilmstrip: drawsFilmstrip,
@@ -133,7 +136,8 @@ struct ClipContentView: View {
     }
 
     private struct ContentKey: Equatable {
-        let clip: Clip
+        let clipID: Clip.ID
+        let sourceRange: CMTimeRange
         let tileCount: Int
         let bucketCount: Int
         let showsFilmstrip: Bool

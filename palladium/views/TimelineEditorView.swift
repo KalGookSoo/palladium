@@ -26,6 +26,9 @@ struct TimelineActions {
     var addSequence: () -> Void = {}
     var renameSequence: (EditSequence.ID, String) -> Void = { _, _ in }
     var deleteSequence: (EditSequence.ID) -> Void = { _ in }
+    var addTrack: (TrackKind) -> Void = { _ in }
+    /// 비어 있는 트랙만 지운다.
+    var deleteTrack: (Track.ID) -> Void = { _ in }
 }
 
 /// 끄는 중인 편집의 미리보기. 손을 떼기 전에 결과(들어갈 자리와 뒤로 밀린 클립)를 보여준다.
@@ -201,7 +204,7 @@ struct TimelineEditorView: View {
         let shownSequence = dragPreview?.sequence ?? sequence
 
         return HStack(alignment: .top, spacing: 0) {
-            TrackHeaderColumn(tracks: shownSequence.tracks)
+            TrackHeaderColumn(tracks: shownSequence.tracks, actions: actions)
             Divider()
             ScrollView(.horizontal) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -283,6 +286,8 @@ struct TimelineEditorView: View {
         isDragging = true
         draggedClip = (clip, translation)
         let target = clipMoveTarget(clip, fromTrackAt: trackIndex, by: translation)
+        // 놓을 트랙·시각이 그대로면 미리보기를 다시 만들지 않는다(마우스가 움직일 때마다 클립 내용을 다시 그리지 않기 위함).
+        guard dragPreview?.trackID != target.trackID || dragPreview?.time != target.time else { return }
         var preview = sequence
         preview.moveClip(clip.id, toTrack: target.trackID, at: target.time)
         dragPreview = DragPreview(sequence: preview, placeholderID: clip.id, trackID: target.trackID, time: target.time)
@@ -298,17 +303,20 @@ struct TimelineEditorView: View {
         actions.moveClip(clip.id, target.trackID, target.time)
     }
 
-    /// 놓을 트랙(없으면 `nil` — 새 트랙)과 시각. 원본 종류와 다른 트랙이면 새 트랙이 된다.
+    /// 놓을 트랙과 시각. 놓은 높이에서 가장 가까운 같은 종류의 트랙에 넣고, 새 트랙은 만들지 않는다(트랙 머리 우클릭으로 직접 만든다).
+    /// 같은 종류의 트랙이 하나도 없을 때만 `nil`(새 트랙)이다. 행 위치는 미리보기가 아닌 원래 시퀀스 기준이라 미리보기가 위치 판단을 바꾸지 않는다.
     private func assetDropTarget(at location: CGPoint, asset: MediaAsset) -> (trackID: Track.ID?, time: CMTime) {
-        let trackIndex = Int(((location.y - TimelineMetrics.rulerHeight) / TimelineMetrics.trackHeight).rounded(.down))
-        let track = sequence.tracks.indices.contains(trackIndex) ? sequence.tracks[trackIndex] : nil
-        let trackID = track?.kind == asset.trackKind ? track?.id : nil
+        let rowIndex = Int(((location.y - TimelineMetrics.rulerHeight) / TimelineMetrics.trackHeight).rounded(.down))
+        let trackID = sequence.nearestTrackID(kind: asset.trackKind, toRow: rowIndex)
         return (trackID, snappedStart(scale.time(forX: location.x), duration: asset.placementDuration, excluding: nil))
     }
 
     private func previewAssetDrop(at location: CGPoint) {
         guard let asset = assets.first(where: { $0.id == hoveringAssetID }) else { return }
         let target = assetDropTarget(at: location, asset: asset)
+        if let dragPreview, target.trackID == nil || dragPreview.trackID == target.trackID, dragPreview.time == target.time {
+            return
+        }
         guard let clip = asset.makeClip(at: target.time) else { return }
         var preview = sequence
         let trackID = target.trackID ?? preview.addTrack(kind: asset.trackKind)
@@ -365,8 +373,10 @@ private struct AssetDropDelegate: DropDelegate {
     }
 }
 
+/// 트랙 이름 열. 우클릭으로 트랙을 직접 추가하거나 빈 트랙을 지운다(놓기로는 새 트랙을 만들지 않는다).
 private struct TrackHeaderColumn: View {
     let tracks: [Track]
+    let actions: TimelineActions
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -381,12 +391,33 @@ private struct TrackHeaderColumn: View {
 
                 Label("\(track.kind.title) \(number)", systemImage: track.kind.symbolName)
                     .font(.caption)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(height: TimelineMetrics.trackHeight)
                     .padding(.horizontal, 8)
+                    .contentShape(Rectangle())
+                    .contextMenu {
+                        addTrackButtons
+                        Divider()
+                        // 클립이 있는 트랙을 지우면 편집 내용을 잃기 쉬워 빈 트랙만 지운다.
+                        Button("트랙 삭제") { actions.deleteTrack(track.id) }
+                            .disabled(!track.clips.isEmpty)
+                    }
             }
+            // 트랙 아래 빈 곳에서도 트랙을 추가할 수 있다.
+            Color.clear
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .contextMenu { addTrackButtons }
         }
         .frame(width: TimelineMetrics.trackHeaderWidth, alignment: .leading)
         .frame(maxHeight: .infinity, alignment: .top)
+        .help("트랙 — 우클릭해 영상·오디오 트랙을 추가하거나 빈 트랙을 지웁니다")
+    }
+
+    @ViewBuilder
+    private var addTrackButtons: some View {
+        Button("영상 트랙 추가") { actions.addTrack(.video) }
+        Button("오디오 트랙 추가") { actions.addTrack(.audio) }
     }
 }
 

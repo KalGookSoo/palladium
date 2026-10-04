@@ -36,7 +36,7 @@ nav_order: 3
 - 4단계로 나눠 진행한다: 1) 미디어 패널 → 타임라인 끌어다 놓기와 트랙 추가, 실행 취소 2) 클립 선택·이동·삭제와 순서 바꾸기 3) 마커 추가·목록 이동 4) 오디오-비디오 링크 해제. 중첩 시퀀스와 장면 전환 자동 감지는 별도 이슈로 분리한다.
 - 놓기는 삽입만 한다: 미디어 패널의 원본을 트랙의 클립 위에 놓으면, 클립 앞쪽 절반이면 그 클립 앞 경계에, 뒤쪽 절반이면 뒤 경계에 들어가고 뒤 클립들이 밀린다. 클립 사이 틈이나 맨 뒤에 놓으면 그 시각에 놓고, 뒤 클립과 겹치는 만큼만 민다. 기존 클립을 자동으로 나누지 않고, 덮어쓰기는 두지 않는다(요구사항 변경 — 자동화가 과하다는 판단). 오버레이 트랙에서도 클립 위에 놓으면 뒤 오버레이가 밀리므로, 시간에 맞춰 얹을 때는 빈 시간대에 놓는다.
 - 끄는 동안 미리보기: 원본이나 클립을 끄는 동안 들어갈 자리를 점선 테두리와 삽입선으로 보여주고, 뒤 클립들이 밀려난 모습을 미리 그린다. 타임라인 안에서 옮길 때는 원래 자리가 메워진 모습도 보이고, 옮기는 클립은 포인터를 따라 반투명하게 움직인다. Esc를 누르면 끌기를 취소한다.
-- 트랙: 트랙 아래 빈 곳이나 빈 타임라인에 놓거나, 원본 종류와 다른 트랙(영상 트랙에 오디오 등)에 놓으면 맞는 종류의 새 트랙을 만든다. 새 영상 트랙은 기존 영상 트랙 위(겹칠 때 앞에 그려짐 — 오버레이용), 새 오디오 트랙은 맨 아래에 생긴다.
+- 트랙: 시퀀스(결과물)는 하나이고 트랙은 그 안의 층이다. 영상 1이 메인이고 그 위 영상 트랙은 겹쳐 그려지는 오버레이용이다. 놓기로는 새 트랙을 만들지 않는다 — 트랙 사이나 아래 빈 곳에 놓아도 놓은 높이에서 가장 가까운 같은 종류의 트랙에 넣고, 같은 종류의 트랙이 하나도 없을 때(첫 클립, 첫 오디오)만 새로 만든다. 그 밖의 트랙은 트랙 이름 열을 우클릭해 "영상 트랙 추가"(기존 영상 트랙 위)·"오디오 트랙 추가"(맨 아래)로 직접 만들고, 빈 트랙은 "트랙 삭제"로 지운다(클립이 있는 트랙은 지우지 않는다).
 - 영상의 소리는 영상 클립에 포함된다(Final Cut Pro 방식). 따로 다루려면 4단계의 링크 해제로 오디오 클립을 분리한다.
 - 자석처럼 붙기: 끄는 동안 놓을 클립의 앞 끝이나 뒤 끝이 10pt 안의 다른 클립 경계·재생 헤드·0초에 닿으면 그 자리에 붙는다.
 - 이미지는 `MediaAsset.stillImageDuration`(5초) 길이로 놓이고, 이후 원본 길이 제한 없이 늘릴 수 있어야 한다(트림 #2에서 규칙 확정).
@@ -60,8 +60,8 @@ nav_order: 3
 
 ## 관련 커맨드/쿼리
 
-- 커맨드(구현): `ProjectEditor.placeAsset(_:onTrack:at:)`, `moveClip(_:toTrack:at:)`, `deleteClips(_:ripple:)`, `splitClips(_:at:)`, 도메인 `EditSequence.addTrack(kind:)`·`place(_:onTrack:mode:)`·`moveClip`·`removeClips`·`split(at:clipIDs:)`
-- 쿼리(구현): `Track.insertionPoint(for:)`, `EditSequence.snappedStart(_:duration:tolerance:excluding:extraEdges:)`, `canSplit(at:clipIDs:)`, `clip(id:)`, `trackID(containing:)`
+- 커맨드(구현): `ProjectEditor.placeAsset(_:onTrack:at:)`, `moveClip(_:toTrack:at:)`, `addTrack(kind:)`, `deleteTrack(_:)`(빈 트랙만), `deleteClips(_:ripple:)`, `splitClips(_:at:)`, 도메인 `EditSequence.addTrack(kind:)`·`place(_:onTrack:mode:)`·`moveClip`·`removeClips`·`split(at:clipIDs:)`
+- 쿼리(구현): `Track.insertionPoint(for:)`, `EditSequence.nearestTrackID(kind:toRow:)`, `EditSequence.snappedStart(_:duration:tolerance:excluding:extraEdges:)`, `canSplit(at:clipIDs:)`, `clip(id:)`, `trackID(containing:)`
 - 커맨드(예정): `groupIntoNestedSequence(clips:)`, `addMarker(at:label:)`, `unlinkAudio(clip:)`, `detectSceneChanges(clip:)`
 - 쿼리: `timelineDuration() -> CMTime`, `tracks() -> [Track]`, `markers() -> [Marker]`
 

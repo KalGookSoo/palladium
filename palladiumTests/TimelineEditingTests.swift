@@ -61,6 +61,23 @@ struct TimelineEditingTests {
         #expect(sequence.snappedStart(seconds(7), duration: length, tolerance: tolerance) == seconds(7))
     }
 
+    @Test("빈 트랙만 지우고, 놓은 행에서 가장 가까운 같은 종류의 트랙을 찾는다")
+    func trackRemovalAndNearestTrack() throws {
+        var sequence = try sequence(withClipsAt: [(0, 2)])
+        let mainVideoID = sequence.tracks[0].id
+        let overlayID = sequence.addTrack(kind: .video)
+        let audioID = sequence.addTrack(kind: .audio)
+
+        // 행 순서: 영상 2(0), 영상 1(1), 오디오 1(2)
+        #expect(sequence.nearestTrackID(kind: .video, toRow: 5) == mainVideoID)
+        #expect(sequence.nearestTrackID(kind: .video, toRow: -1) == overlayID)
+        #expect(sequence.nearestTrackID(kind: .audio, toRow: 0) == audioID)
+
+        sequence.removeTrack(mainVideoID)
+        sequence.removeTrack(overlayID)
+        #expect(sequence.tracks.map(\.id) == [mainVideoID, audioID])
+    }
+
     @Test("이미지는 영상 트랙에 정해진 길이로, 오디오는 오디오 트랙에 원본 길이로 놓인다")
     func placementDefaults() {
         let image = MediaAsset(id: UUID(), name: "logo.png", sourceURL: URL(filePath: "/logo.png"), kind: .image, duration: .zero)

@@ -122,6 +122,20 @@ struct ProjectEditorTests {
         #expect(tracks[0].clips[0].sourceRange.duration == SampleData.introVideo.duration)
     }
 
+    @Test("트랙 밖에 놓아도 같은 종류 트랙이 있으면 새 트랙을 만들지 않고, 트랙은 직접 추가·삭제한다")
+    func tracksAreAddedOnlyOnRequest() throws {
+        let editor = try makeEditorWithSampleContent()
+        let trackCount = editor.currentSequence.tracks.count
+
+        editor.placeAsset(SampleData.introVideo.id, onTrack: nil, at: .zero)
+        #expect(editor.currentSequence.tracks.count == trackCount)
+
+        let newTrackID = editor.addTrack(kind: .video)
+        #expect(editor.currentSequence.tracks.first?.id == newTrackID)
+        editor.deleteTrack(newTrackID)
+        #expect(editor.currentSequence.tracks.count == trackCount)
+    }
+
     @Test("편집 커맨드는 실행 취소와 다시 실행으로 되돌릴 수 있다")
     func editsCanBeUndoneAndRedone() throws {
         let editor = try makeEditorWithSampleContent()
