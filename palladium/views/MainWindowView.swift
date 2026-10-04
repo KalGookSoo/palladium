@@ -36,6 +36,7 @@ struct MainWindowView: View {
     @State private var playheadTime: CMTime = .zero
     @State private var timelineScale = TimelineScale(pointsPerSecond: 40)
     @State private var previewPlayer = PreviewPlayer()
+    @Environment(\.undoManager) private var undoManager
 
     var body: some View {
         let project = editor.project
@@ -118,6 +119,10 @@ struct MainWindowView: View {
         .focusedSceneValue(\.timelineScale, $timelineScale)
         .task { await writeBackupsPeriodically() }
         .modifier(PlaybackKeyHandling(handle: handlePlaybackKey))
+        // 편집기 커맨드의 실행 취소를 창의 실행 취소 관리자(편집 > 실행 취소 ⌘Z)에 남긴다.
+        .onChange(of: undoManager, initial: true) { _, undoManager in
+            editor.undoManager = undoManager
+        }
         .task(id: openedAssetID) {
             // 이미지는 플레이어로 열지 않는다. 앞서 열려 있던 영상은 멈추고 비운다.
             let playableAsset = openedAsset.flatMap { $0.kind == .image ? nil : $0 }
@@ -200,7 +205,9 @@ struct MainWindowView: View {
                         selectedClipID: $selectedClipID,
                         playheadTime: $playheadTime,
                         scale: $timelineScale
-                    )
+                    ) { assetID, trackID, time, mode in
+                        selectedClipID = editor.placeAsset(assetID, onTrack: trackID, at: time, mode: mode)
+                    }
                     .frame(maxWidth: .infinity)
                     .frame(height: min(timelineHeight, maxTimelineHeight))
                 }

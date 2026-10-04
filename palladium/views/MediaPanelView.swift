@@ -40,6 +40,7 @@ struct MediaPanelView: View {
                     Section(section.folder.name) {
                         ForEach(section.assets) { asset in
                             MediaAssetRow(asset: asset) { nameView(for: asset) }
+                                .draggable(asset.id.uuidString)
                         }
                     }
                 }
@@ -48,6 +49,8 @@ struct MediaPanelView: View {
                 Section("분류 안 됨") {
                     ForEach(unfiledAssets) { asset in
                         MediaAssetRow(asset: asset) { nameView(for: asset) }
+                            // 타임라인에 놓으면 클립이 된다. 원본 ID만 문자열로 보낸다.
+                            .draggable(asset.id.uuidString)
                     }
                 }
             }

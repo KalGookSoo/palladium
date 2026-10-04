@@ -106,6 +106,44 @@ struct ProjectEditorTests {
         #expect(editor.project.assets.count == SampleData.project.assets.count + 1)
     }
 
+    @Test("빈 시퀀스에 원본을 놓으면 맞는 종류의 트랙이 생기고 원본 길이의 클립이 놓인다")
+    func placeAssetCreatesTrack() throws {
+        let editor = try ProjectEditor(project: repository.createProject(named: "빈 프로젝트"), repository: repository)
+        editor.applyDebugChange { $0.assets = [SampleData.introVideo, SampleData.backgroundMusic] }
+
+        let videoClipID = try #require(editor.placeAsset(SampleData.introVideo.id, onTrack: nil, at: .zero, mode: .overwrite))
+        // 영상 트랙에 오디오를 놓으려 하면 오디오 트랙을 새로 만든다.
+        let videoTrackID = try #require(editor.project.sequences[0].tracks.first?.id)
+        editor.placeAsset(SampleData.backgroundMusic.id, onTrack: videoTrackID, at: .zero, mode: .overwrite)
+
+        let tracks = editor.project.sequences[0].tracks
+        #expect(tracks.map(\.kind) == [.video, .audio])
+        #expect(tracks[0].clips.map(\.id) == [videoClipID])
+        #expect(tracks[0].clips[0].sourceRange.duration == SampleData.introVideo.duration)
+    }
+
+    @Test("편집 커맨드는 실행 취소와 다시 실행으로 되돌릴 수 있다")
+    func editsCanBeUndoneAndRedone() throws {
+        let editor = try makeEditorWithSampleContent()
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+        editor.undoManager = undoManager
+        let videoTrackID = try #require(editor.project.sequences[0].tracks.first { $0.kind == .video }?.id)
+        let before = editor.project
+
+        undoManager.beginUndoGrouping()
+        editor.placeAsset(SampleData.bRollVideo.id, onTrack: videoTrackID, at: .zero, mode: .insert)
+        undoManager.endUndoGrouping()
+        let after = editor.project
+        #expect(after != before)
+        #expect(undoManager.undoActionName == "클립 배치")
+
+        undoManager.undo()
+        #expect(editor.project == before)
+        undoManager.redo()
+        #expect(editor.project == after)
+    }
+
     // MARK: - Helpers
 
     /// 샘플 내용을 저장한 프로젝트를 여는 편집기.

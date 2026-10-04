@@ -1,3 +1,4 @@
+import CoreMedia
 import Foundation
 import Observation
 import OSLog
@@ -5,6 +6,7 @@ import OSLog
 /// 편집 창 하나에 열린 프로젝트를 편집한다. 열린 프로젝트·마지막 저장본·마지막 백업을 소유하고,
 /// 편집 동작은 모두 이 객체의 커맨드로만 한다. View와 이후 MCP 서버가 같은 커맨드·쿼리를 부르기 위함이다.
 /// 선택, 패널 표시처럼 화면에만 필요한 상태는 View가 가진다.
+/// 프로젝트를 바꾸는 커맨드는 모두 실행 취소할 수 있다(편집 전 프로젝트 값을 `undoManager`에 남긴다).
 @Observable
 final class ProjectEditor {
     private(set) var project: Project
@@ -13,6 +15,8 @@ final class ProjectEditor {
     /// 마지막으로 백업본에 쓴 내용. 같은 내용을 다시 쓰지 않기 위해 기억한다.
     private var lastBackedUpProject: Project?
     @ObservationIgnored private let repository: ProjectRepository
+    /// 창의 실행 취소 관리자. 메뉴의 실행 취소(⌘Z)·다시 실행(⇧⌘Z)이 이것을 쓴다. 없으면 실행 취소를 남기지 않는다.
+    @ObservationIgnored weak var undoManager: UndoManager?
 
     /// `recoveredContent`가 있으면 백업본에서 복구한 내용으로 열고, 저장하지 않은 변경 상태로 시작한다.
     init(project: Project, recoveredContent: Project? = nil, repository: ProjectRepository) {
@@ -42,23 +46,44 @@ final class ProjectEditor {
     /// 반환값은 무엇을 가져오고 건너뛰고 실패했는지 알리기 위한 결과다.
     func importMedia(from urls: [URL]) async -> MediaImportReport {
         let report = await MediaImporter.importMedia(from: urls, existingAssets: project.assets)
-        project.assets.append(contentsOf: report.imported)
+        perform("가져오기") { $0.assets.append(contentsOf: report.imported) }
         return report
     }
 
     /// 프로젝트 안에서 쓰는 원본 이름만 바꾼다(원본 파일 이름은 그대로). 비어 있으면 바꾸지 않는다.
     func renameAsset(_ assetID: MediaAsset.ID, to newName: String) {
-        updateAssets([assetID]) { $0.rename(to: newName) }
+        updateAssets([assetID], actionName: "이름 변경") { $0.rename(to: newName) }
     }
 
     /// `nil`이면 색상 레이블을 뗀다.
     func setColorLabel(_ colorLabel: ColorLabel?, for assetIDs: Set<MediaAsset.ID>) {
-        updateAssets(assetIDs) { $0.colorLabel = colorLabel }
+        updateAssets(assetIDs, actionName: "색상 레이블") { $0.colorLabel = colorLabel }
     }
 
     /// 쉼표로 나눈 태그 목록으로 바꾼다.
     func setTags(from text: String, for assetID: MediaAsset.ID) {
-        updateAssets([assetID]) { $0.setTags(from: text) }
+        updateAssets([assetID], actionName: "태그 편집") { $0.setTags(from: text) }
+    }
+
+    /// 원본을 현재 시퀀스(첫 시퀀스)의 트랙에 클립으로 놓는다. `trackID`가 없거나 원본 종류와 맞지 않는 트랙이면
+    /// 맞는 종류의 새 트랙을 만들어 놓는다. 영상 소리는 영상 클립에 포함된다.
+    /// 반환값은 새로 만든 클립의 ID이고, 원본이 없거나 놓을 수 없으면 `nil`이다.
+    @discardableResult
+    func placeAsset(_ assetID: MediaAsset.ID, onTrack trackID: Track.ID?, at time: CMTime, mode: PlacementMode) -> Clip.ID? {
+        guard let asset = asset(id: assetID),
+              let clip = Clip(
+                  assetID: assetID,
+                  sourceRange: CMTimeRange(start: .zero, duration: asset.placementDuration),
+                  timelineStart: CMTimeMaximum(time, .zero)
+              )
+        else { return nil }
+        perform("클립 배치") { project in
+            guard !project.sequences.isEmpty else { return }
+            let matchingTrackID = project.sequences[0].tracks.first { $0.id == trackID && $0.kind == asset.trackKind }?.id
+            let targetTrackID = matchingTrackID ?? project.sequences[0].addTrack(kind: asset.trackKind)
+            project.sequences[0].place(clip, onTrack: targetTrackID, mode: mode)
+        }
+        return clip.id
     }
 
     /// 저장소에 저장하고, 더 이상 필요 없는 백업본을 지운다.
@@ -92,9 +117,32 @@ final class ProjectEditor {
         }
     #endif
 
-    private func updateAssets(_ assetIDs: Set<MediaAsset.ID>, _ change: (inout MediaAsset) -> Void) {
-        for index in project.assets.indices where assetIDs.contains(project.assets[index].id) {
-            change(&project.assets[index])
+    private func updateAssets(_ assetIDs: Set<MediaAsset.ID>, actionName: String, _ change: (inout MediaAsset) -> Void) {
+        perform(actionName) { project in
+            for index in project.assets.indices where assetIDs.contains(project.assets[index].id) {
+                change(&project.assets[index])
+            }
         }
+    }
+
+    // MARK: - Undo
+
+    /// 프로젝트를 바꾸고, 바뀌었으면 바꾸기 전 값으로 되돌리는 실행 취소를 남긴다.
+    private func perform(_ actionName: String, _ change: (inout Project) -> Void) {
+        let previous = project
+        change(&project)
+        if project != previous {
+            registerUndo(restoring: previous, actionName: actionName)
+        }
+    }
+
+    /// 실행 취소 중에 남긴 실행 취소는 실행 관리자가 다시 실행으로 쓴다.
+    private func registerUndo(restoring previous: Project, actionName: String) {
+        undoManager?.registerUndo(withTarget: self) { editor in
+            let current = editor.project
+            editor.project = previous
+            editor.registerUndo(restoring: current, actionName: actionName)
+        }
+        undoManager?.setActionName(actionName)
     }
 }

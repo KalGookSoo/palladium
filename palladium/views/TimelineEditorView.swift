@@ -1,3 +1,4 @@
+import AppKit
 import CoreMedia
 import SwiftUI
 
@@ -18,6 +19,8 @@ struct TimelineEditorView: View {
     @Binding var selectedClipID: Clip.ID?
     @Binding var playheadTime: CMTime
     @Binding var scale: TimelineScale
+    /// 미디어 패널에서 원본을 끌어다 놓았을 때 부른다. 트랙이 `nil`이면 트랙 밖(빈 곳)에 놓은 것이다.
+    let dropAsset: (MediaAsset.ID, Track.ID?, CMTime, PlacementMode) -> Void
     @State private var pinchStartScale: TimelineScale?
 
     var body: some View {
@@ -78,6 +81,10 @@ struct TimelineEditorView: View {
                 }
                 // 안내가 남은 높이를 채워야 헤더가 미리보기와의 경계 바로 아래에 붙는다.
                 .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .dropDestination(for: String.self) { items, _ in
+                    handleDrop(items, trackID: nil, time: .zero)
+                }
             } else {
                 timelineContent(contentWidth: contentWidth)
             }
@@ -104,6 +111,15 @@ struct TimelineEditorView: View {
                 // 내용이 패널 높이를 채워야 가로 스크롤바가 마지막 트랙 위가 아니라 패널 바닥에 놓인다.
                 .frame(width: contentWidth, alignment: .leading)
                 .frame(maxHeight: .infinity, alignment: .top)
+                // 놓은 높이로 트랙을, 가로 위치로 시각을 정한다. 트랙 아래 빈 곳에 놓으면 새 트랙을 만든다.
+                .contentShape(Rectangle())
+                .dropDestination(for: String.self) { items, location in
+                    let trackIndex = Int(((location.y - TimelineMetrics.rulerHeight) / TimelineMetrics.trackHeight).rounded(.down))
+                    let trackID = sequence.tracks.indices.contains(trackIndex) ? sequence.tracks[trackIndex].id : nil
+                    // 10pt 안의 클립 경계나 0초에 붙여 클립 사이에 틈이 생기지 않게 한다.
+                    let time = sequence.snappedTime(scale.time(forX: location.x), tolerance: scale.time(forX: 10))
+                    return handleDrop(items, trackID: trackID, time: time)
+                }
                 .overlay(alignment: .topLeading) {
                     PlayheadView()
                         .offset(x: scale.x(for: playheadTime) - 1)
@@ -112,6 +128,15 @@ struct TimelineEditorView: View {
             }
         }
         .frame(maxHeight: .infinity)
+    }
+
+    /// 미디어 패널은 원본 ID를 문자열로 끌어 보낸다. ⌘를 누른 채 놓으면 삽입, 아니면 덮어쓰기다.
+    private func handleDrop(_ items: [String], trackID: Track.ID?, time: CMTime) -> Bool {
+        let assetIDs = items.compactMap(UUID.init(uuidString:))
+        guard let assetID = assetIDs.first else { return false }
+        let mode: PlacementMode = NSEvent.modifierFlags.contains(.command) ? .insert : .overwrite
+        dropAsset(assetID, trackID, time, mode)
+        return true
     }
 }
 
@@ -147,7 +172,8 @@ private struct TrackHeaderColumn: View {
         assets: SampleData.project.assets,
         selectedClipID: $selectedClipID,
         playheadTime: $playheadTime,
-        scale: $scale
+        scale: $scale,
+        dropAsset: { _, _, _, _ in }
     )
     .frame(width: 700, height: 240)
 }
@@ -162,7 +188,8 @@ private struct TrackHeaderColumn: View {
         assets: [],
         selectedClipID: $selectedClipID,
         playheadTime: $playheadTime,
-        scale: $scale
+        scale: $scale,
+        dropAsset: { _, _, _, _ in }
     )
     .frame(width: 700, height: 240)
 }
@@ -177,7 +204,8 @@ private struct TrackHeaderColumn: View {
         assets: SampleData.project.assets,
         selectedClipID: $selectedClipID,
         playheadTime: $playheadTime,
-        scale: $scale
+        scale: $scale,
+        dropAsset: { _, _, _, _ in }
     )
     .frame(width: 700, height: 240)
 }

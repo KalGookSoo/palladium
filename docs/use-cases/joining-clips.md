@@ -31,6 +31,16 @@ nav_order: 3
 - 오디오-비디오 링크 해제 후 오디오만 이동해도 원래 영상 클립은 그대로 남는다.
 - 장면 전환 자동 감지는 네트워크 연결 없이 온디바이스에서 동작하며, 결과를 사용자가 확인 후 되돌리거나 수정할 수 있다.
 
+## 결정 사항
+
+- 4단계로 나눠 진행한다: 1) 미디어 패널 → 타임라인 끌어다 놓기와 트랙 추가, 실행 취소 2) 클립 선택·이동·삭제와 순서 바꾸기 3) 마커 추가·목록 이동 4) 오디오-비디오 링크 해제. 중첩 시퀀스와 장면 전환 자동 감지는 별도 이슈로 분리한다.
+- 놓기: 미디어 패널의 원본을 타임라인 트랙 위에 놓으면 그 트랙의 놓은 시각에 클립이 생긴다. 기본은 덮어쓰기(놓는 구간의 기존 클립을 잘라내고 덮음)이고, ⌘를 누른 채 놓으면 삽입(뒤 클립을 밀어냄, 지점에 걸친 클립은 둘로 나눔)이다(프리미어 프로와 같은 기본값).
+- 트랙: 트랙 아래 빈 곳이나 빈 타임라인에 놓거나, 원본 종류와 다른 트랙(영상 트랙에 오디오 등)에 놓으면 맞는 종류의 새 트랙을 만든다. 새 영상 트랙은 기존 영상 트랙 위(겹칠 때 앞에 그려짐 — 오버레이용), 새 오디오 트랙은 맨 아래에 생긴다.
+- 영상의 소리는 영상 클립에 포함된다(Final Cut Pro 방식). 따로 다루려면 4단계의 링크 해제로 오디오 클립을 분리한다.
+- 놓는 위치는 10pt 안의 클립 경계나 0초에 붙어 클립 사이에 틈이 생기지 않는다.
+- 이미지는 `MediaAsset.stillImageDuration`(5초) 길이로 놓이고, 이후 원본 길이 제한 없이 늘릴 수 있어야 한다(트림 #2에서 규칙 확정).
+- 모든 편집은 실행 취소(⌘Z)·다시 실행(⇧⌘Z)할 수 있다. 편집기(`ProjectEditor`)가 편집 전 프로젝트 값을 창의 실행 취소 관리자에 남기고, 메뉴에는 "실행 취소 클립 배치"처럼 동작 이름이 보인다.
+
 ## 엣지 케이스
 
 - 삽입 편집으로 다른 트랙의 클립까지 밀어야 하는 경우, 어느 트랙까지 영향을 줄지.
@@ -40,7 +50,9 @@ nav_order: 3
 
 ## 관련 커맨드/쿼리
 
-- 커맨드: `place(clip:track:at:)`, `insert(clip:at:)`, `overwrite(clip:at:)`, `groupIntoNestedSequence(clips:)`, `addMarker(at:label:)`, `unlinkAudio(clip:)`, `detectSceneChanges(clip:)`
+- 커맨드(구현): `ProjectEditor.placeAsset(_:onTrack:at:mode:)`(`PlacementMode.overwrite`/`.insert`), 도메인 `EditSequence.addTrack(kind:)`·`place(_:onTrack:mode:)`
+- 쿼리(구현): `EditSequence.snappedTime(_:tolerance:)`
+- 커맨드(예정): `groupIntoNestedSequence(clips:)`, `addMarker(at:label:)`, `unlinkAudio(clip:)`, `detectSceneChanges(clip:)`
 - 쿼리: `timelineDuration() -> CMTime`, `tracks() -> [Track]`, `markers() -> [Marker]`
 
 ## 미정 사항

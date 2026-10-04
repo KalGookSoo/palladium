@@ -38,6 +38,8 @@ enum ShortcutGuide {
     static let zoomInTimeline = ShortcutGuideEntry(title: "타임라인 확대", summary: "타임라인을 더 자세히 봅니다", keys: "⌘=")
     static let zoomOutTimeline = ShortcutGuideEntry(title: "타임라인 축소", summary: "타임라인을 더 넓게 봅니다", keys: "⌘-")
 
+    static let undo = ShortcutGuideEntry(title: "실행 취소", summary: "마지막 편집을 되돌립니다", keys: "⌘Z")
+    static let redo = ShortcutGuideEntry(title: "다시 실행", summary: "되돌린 편집을 다시 합니다", keys: "⇧⌘Z")
     static let renameAsset = ShortcutGuideEntry(title: "원본 이름 변경", summary: "미디어 패널에서 고른 원본의 이름을 바꿉니다", keys: "F2")
     static let filterMedia = ShortcutGuideEntry(title: "필터", summary: "색상 레이블로 원본을 거릅니다", keys: nil)
 
@@ -48,7 +50,7 @@ enum ShortcutGuide {
         ("파일", [openProjectList, newProject, save, close, importMedia, export]),
         ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline]),
         ("재생", [playPause, previousFrame, nextFrame]),
-        ("편집", [renameAsset]),
+        ("편집", [undo, redo, renameAsset]),
         ("도움말", [showShortcuts]),
     ]
 }
