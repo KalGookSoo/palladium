@@ -51,8 +51,9 @@ nav_order: 1
 
 ## 관련 커맨드/쿼리
 
-- 커맨드: `importMedia(urls:)`, `renameAsset(_:to:)`, `assignFolder(clip:folder:)`, `setLabel(clip:label:)`, `generateProxy(clip:)`
-- 쿼리: `search(query:) -> [Clip]`, `unsupportedReason(url:) -> String?`, `shouldGenerateProxy(for:) -> Bool`(해상도 임계값과 비교해 자동 생성 여부를 판단)
+- 커맨드(`ProjectEditor`): `importMedia(from:) -> MediaImportReport`, `renameAsset(_:to:)`, `setColorLabel(_:for:)`, `setTags(from:for:)`
+- 쿼리(`ProjectEditor`): `asset(id:)`, `assets(matching: MediaFilter) -> [MediaAsset]`
+- 이후 기능에서 추가: `assignFolder(_:to:)`(#24), `generateProxy(for:)`·`shouldGenerateProxy(for:) -> Bool`(#43)
 
 ## 미정 사항
 

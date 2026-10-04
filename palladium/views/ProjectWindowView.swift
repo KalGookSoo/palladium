@@ -11,8 +11,8 @@ struct ProjectWindowView: View {
     @State private var project: Project?
     @State private var isMissing = false
     @State private var pendingBackup: ProjectBackup?
-    @State private var recoveredContent: Project?
-    @State private var hasResolvedBackup = false
+    /// 백업본을 복구할지 정한 뒤에 만든다.
+    @State private var editor: ProjectEditor?
 
     var body: some View {
         let isAskingToRecover = Binding<Bool>(
@@ -20,8 +20,8 @@ struct ProjectWindowView: View {
             set: { _ in }
         )
 
-        if let project, hasResolvedBackup {
-            MainWindowView(project: project, recoveredContent: recoveredContent)
+        if let editor {
+            MainWindowView(editor: editor)
         } else if isMissing || projectID == nil {
             ContentUnavailableView(
                 "프로젝트를 찾을 수 없음",
@@ -50,7 +50,9 @@ struct ProjectWindowView: View {
             project = try repository.project(id: projectID)
             isMissing = project == nil
             pendingBackup = try repository.recoverableBackup(for: projectID)
-            hasResolvedBackup = pendingBackup == nil
+            if pendingBackup == nil {
+                openEditor(recoveredContent: nil)
+            }
         } catch {
             Logger.project.error("프로젝트 불러오기 실패: \(error.localizedDescription, privacy: .public)")
             isMissing = true
@@ -58,9 +60,8 @@ struct ProjectWindowView: View {
     }
 
     private func recover(_ backup: ProjectBackup) {
-        recoveredContent = backup.project
         pendingBackup = nil
-        hasResolvedBackup = true
+        openEditor(recoveredContent: backup.project)
     }
 
     private func discardBackup() {
@@ -72,6 +73,15 @@ struct ProjectWindowView: View {
             }
         }
         pendingBackup = nil
-        hasResolvedBackup = true
+        openEditor(recoveredContent: nil)
+    }
+
+    private func openEditor(recoveredContent: Project?) {
+        guard let project else { return }
+        editor = ProjectEditor(
+            project: project,
+            recoveredContent: recoveredContent,
+            repository: SwiftDataProjectRepository(modelContext: modelContext)
+        )
     }
 }

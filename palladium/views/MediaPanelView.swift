@@ -1,10 +1,12 @@
 import CoreMedia
+import SwiftData
 import SwiftUI
 
 /// 프리미어 프로의 프로젝트 패널처럼 한 번 클릭은 선택만 하고, 더블클릭하면 원본을 미리보기(소스 모니터)에서 연다.
 /// 포토샵 레이어처럼 원본 이름을 목록에서 바로 바꿔 정리한다(F2 또는 우클릭 > 이름 변경).
 struct MediaPanelView: View {
-    @Binding var project: Project
+    /// 원본 정리(이름·색상 레이블·태그)는 편집기 커맨드로 한다.
+    let editor: ProjectEditor
     @Binding var selectedAssetID: MediaAsset.ID?
     let openAsset: (MediaAsset.ID) -> Void
     @State private var filter = MediaFilter()
@@ -17,6 +19,7 @@ struct MediaPanelView: View {
     @FocusState private var isRenameFieldFocused: Bool
 
     var body: some View {
+        let project = editor.project
         let folderSections = project.folders.map { folder in
             (folder: folder, assets: project.assets(in: folder).filter(filter.matches))
         }
@@ -73,7 +76,7 @@ struct MediaPanelView: View {
             TextField("인터뷰, B컷", text: $tagText)
             Button("저장") {
                 if let tagEditingAssetID {
-                    updateAssets([tagEditingAssetID]) { $0.setTags(from: tagText) }
+                    editor.setTags(from: tagText, for: tagEditingAssetID)
                 }
             }
             Button("취소", role: .cancel) {}
@@ -105,13 +108,13 @@ struct MediaPanelView: View {
     }
 
     private func beginRenaming(_ assetID: MediaAsset.ID) {
-        renameText = project.assets.first { $0.id == assetID }?.name ?? ""
+        renameText = editor.asset(id: assetID)?.name ?? ""
         renamingAssetID = assetID
     }
 
     private func commitRename() {
         guard let renamingAssetID else { return }
-        updateAssets([renamingAssetID]) { $0.rename(to: renameText) }
+        editor.renameAsset(renamingAssetID, to: renameText)
         self.renamingAssetID = nil
     }
 
@@ -119,12 +122,12 @@ struct MediaPanelView: View {
     private func assetMenu(for assetIDs: Set<MediaAsset.ID>) -> some View {
         Menu("색상 레이블") {
             Button("없음") {
-                updateAssets(assetIDs) { $0.colorLabel = nil }
+                editor.setColorLabel(nil, for: assetIDs)
             }
             Divider()
             ForEach(ColorLabel.allCases, id: \.self) { label in
                 Button {
-                    updateAssets(assetIDs) { $0.colorLabel = label }
+                    editor.setColorLabel(label, for: assetIDs)
                 } label: {
                     Label(label.title, systemImage: "circle.fill")
                         .tint(label.color)
@@ -139,15 +142,9 @@ struct MediaPanelView: View {
             // 메뉴 오른쪽에 단축키를 보여준다. 실제 단축키는 편집 메뉴의 "원본 이름 변경"이 맡는다.
             .keyboardShortcut(.f2, modifiers: [])
             Button("태그 편집…") {
-                tagText = project.assets.first { $0.id == assetID }?.tags.joined(separator: ", ") ?? ""
+                tagText = editor.asset(id: assetID)?.tags.joined(separator: ", ") ?? ""
                 tagEditingAssetID = assetID
             }
-        }
-    }
-
-    private func updateAssets(_ assetIDs: Set<MediaAsset.ID>, _ change: (inout MediaAsset) -> Void) {
-        for index in project.assets.indices where assetIDs.contains(project.assets[index].id) {
-            change(&project.assets[index])
         }
     }
 }
@@ -247,6 +244,14 @@ private struct MediaAssetRow<Name: View>: View {
 }
 
 #Preview {
-    @Previewable @State var project = SampleData.project
-    MediaPanelView(project: $project, selectedAssetID: .constant(nil), openAsset: { _ in })
+    // 미리보기에서는 저장하지 않도록 메모리 안의 저장소를 쓴다.
+    let container = try! ModelContainer(
+        for: ProjectRecord.self, ProjectBackupRecord.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+    )
+    MediaPanelView(
+        editor: ProjectEditor(project: SampleData.project, repository: SwiftDataProjectRepository(modelContext: container.mainContext)),
+        selectedAssetID: .constant(nil),
+        openAsset: { _ in }
+    )
 }
