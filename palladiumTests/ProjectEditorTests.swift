@@ -1,0 +1,128 @@
+import AVFoundation
+import Foundation
+@testable import palladium
+import SwiftData
+import Testing
+
+/// 편집기는 View 없이 커맨드·쿼리만으로 프로젝트를 편집할 수 있어야 한다(MCP 대비).
+@MainActor
+struct ProjectEditorTests {
+    private let container: ModelContainer
+    private let repository: SwiftDataProjectRepository
+
+    init() throws {
+        container = try ModelContainer(
+            for: ProjectRecord.self, ProjectBackupRecord.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        var clock = Date(timeIntervalSince1970: 0)
+        repository = SwiftDataProjectRepository(modelContext: container.mainContext) {
+            clock = clock.addingTimeInterval(60)
+            return clock
+        }
+    }
+
+    @Test("원본 이름·색상 레이블·태그를 바꾸면 저장하지 않은 변경이 된다")
+    func assetCommandsMakeUnsavedChanges() throws {
+        let editor = try makeEditorWithSampleContent()
+        let introID = SampleData.introVideo.id
+        let bRollID = SampleData.bRollVideo.id
+
+        editor.renameAsset(introID, to: "오프닝")
+        editor.setColorLabel(.red, for: [introID, bRollID])
+        editor.setTags(from: "인터뷰, B컷", for: bRollID)
+
+        #expect(editor.asset(id: introID)?.name == "오프닝")
+        #expect(editor.asset(id: introID)?.colorLabel == .red)
+        #expect(editor.asset(id: bRollID)?.colorLabel == .red)
+        #expect(editor.asset(id: bRollID)?.tags == ["인터뷰", "B컷"])
+        #expect(editor.assets(matching: MediaFilter(query: "인터뷰")).map(\.id) == [bRollID])
+        #expect(editor.hasUnsavedChanges)
+    }
+
+    @Test("저장하면 저장소에 반영되고 저장하지 않은 변경이 없어지며 백업본도 지워진다")
+    func saveClearsUnsavedChangesAndBackup() throws {
+        let editor = try makeEditorWithSampleContent()
+        editor.renameAsset(SampleData.introVideo.id, to: "오프닝")
+        try editor.writeBackupIfNeeded()
+        #expect(try repository.recoverableBackup(for: editor.project.id) != nil)
+
+        try editor.save()
+
+        #expect(!editor.hasUnsavedChanges)
+        #expect(try repository.project(id: editor.project.id) == editor.project)
+        #expect(try repository.recoverableBackup(for: editor.project.id) == nil)
+    }
+
+    @Test("저장하지 않은 변경이 없거나 마지막 백업 이후 바뀌지 않았으면 백업본을 쓰지 않는다")
+    func backupIsWrittenOnlyWhenNeeded() throws {
+        let editor = try makeEditorWithSampleContent()
+        try editor.writeBackupIfNeeded()
+        #expect(try repository.recoverableBackup(for: editor.project.id) == nil)
+
+        editor.renameAsset(SampleData.introVideo.id, to: "오프닝")
+        try editor.writeBackupIfNeeded()
+        let firstBackup = try #require(try repository.recoverableBackup(for: editor.project.id))
+
+        try editor.writeBackupIfNeeded()
+        #expect(try repository.recoverableBackup(for: editor.project.id) == firstBackup)
+    }
+
+    @Test("변경을 버리면 백업본이 지워진다")
+    func discardBackupDeletesBackup() throws {
+        let editor = try makeEditorWithSampleContent()
+        editor.renameAsset(SampleData.introVideo.id, to: "오프닝")
+        try editor.writeBackupIfNeeded()
+
+        editor.discardBackup()
+
+        #expect(try repository.recoverableBackup(for: editor.project.id) == nil)
+    }
+
+    @Test("복구한 내용으로 열면 저장하지 않은 변경 상태로 시작한다")
+    func recoveredContentStartsAsUnsavedChange() throws {
+        let saved = try repository.createProject(named: "샘플")
+        var recovered = saved
+        recovered.name = "복구한 이름"
+
+        let editor = ProjectEditor(project: saved, recoveredContent: recovered, repository: repository)
+
+        #expect(editor.project == recovered)
+        #expect(editor.hasUnsavedChanges)
+    }
+
+    @Test("가져온 원본은 프로젝트에 추가되고, 이미 있는 파일은 건너뛴다")
+    func importMediaAddsAssets() async throws {
+        let editor = try makeEditorWithSampleContent()
+        let url = try makeSilentAudio()
+
+        let first = await editor.importMedia(from: [url])
+        let second = await editor.importMedia(from: [url])
+
+        let importedID = try #require(first.imported.first?.id)
+        #expect(editor.asset(id: importedID)?.name == url.lastPathComponent)
+        #expect(second.imported.isEmpty)
+        #expect(second.duplicateIDs == [importedID])
+        #expect(editor.project.assets.count == SampleData.project.assets.count + 1)
+    }
+
+    // MARK: - Helpers
+
+    /// 샘플 내용을 저장한 프로젝트를 여는 편집기.
+    private func makeEditorWithSampleContent() throws -> ProjectEditor {
+        let created = try repository.createProject(named: "샘플")
+        let sample = SampleData.project
+        let project = try #require(Project(id: created.id, name: created.name, assets: sample.assets, folders: sample.folders, sequences: sample.sequences))
+        try repository.save(project)
+        return ProjectEditor(project: project, repository: repository)
+    }
+
+    private func makeSilentAudio() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).wav")
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1))
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44100))
+        buffer.frameLength = 44100
+        try AVAudioFile(forWriting: url, settings: format.settings).write(from: buffer)
+        return url
+    }
+}

@@ -40,8 +40,8 @@ nav_order: 9
 
 ## 관련 커맨드/쿼리
 
-- 커맨드: `createProject(named:)`(만드는 즉시 목록에 저장), `save(_:)`(프로젝트 내용 저장), `addSequence(name:)`, `deleteSequence(id:)`, `relinkMedia(clip:newURL:)`
-- 쿼리: `projectSummaries() -> [ProjectSummary]`(최근 수정 순), `project(id:) -> Project?`, `sequences() -> [EditSequence]`, `unresolvedMediaReferences() -> [Clip]`
+- 커맨드: `createProject(named:)`(만드는 즉시 목록에 저장), `ProjectEditor.save()`(열린 프로젝트 저장 후 백업본 삭제), `ProjectEditor.writeBackupIfNeeded()`, `ProjectEditor.discardBackup()`, `addSequence(name:)`, `deleteSequence(id:)`, `relinkMedia(clip:newURL:)`
+- 쿼리: `projectSummaries() -> [ProjectSummary]`(최근 수정 순), `project(id:) -> Project?`, `ProjectEditor.hasUnsavedChanges`, `sequences() -> [EditSequence]`, `unresolvedMediaReferences() -> [Clip]`
 
 ## 미정 사항
 
