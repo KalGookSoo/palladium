@@ -12,7 +12,7 @@ struct MainWindowToolbar: ToolbarContent {
             Button(action: importMedia) {
                 Label("가져오기", systemImage: "square.and.arrow.down")
             }
-            .help("미디어 가져오기 (⌘I)")
+            .help(ShortcutGuide.importMedia.helpText)
         }
 
         ToolbarSpacer(.fixed, placement: .navigation)
@@ -23,14 +23,14 @@ struct MainWindowToolbar: ToolbarContent {
                     Text("\(preset.widthRatio):\(preset.heightRatio)").tag(preset)
                 }
             }
-            .help("화면비 프리셋")
+            .help(ShortcutGuide.aspectRatio.helpText)
         }
 
         ToolbarItem(placement: .primaryAction) {
             Button(action: requestExport) {
                 Label("내보내기", systemImage: "square.and.arrow.up")
             }
-            .help("내보내기 (⌘E)")
+            .help(ShortcutGuide.export.helpText)
         }
 
         ToolbarSpacer(.fixed, placement: .primaryAction)
@@ -41,7 +41,7 @@ struct MainWindowToolbar: ToolbarContent {
             } label: {
                 Label("타임라인", systemImage: "rectangle.bottomhalf.inset.filled")
             }
-            .help("타임라인 보기/가리기 (⌥⌘2)")
+            .help(ShortcutGuide.toggleTimeline.helpText)
         }
 
         ToolbarSpacer(.fixed, placement: .primaryAction)
@@ -52,7 +52,7 @@ struct MainWindowToolbar: ToolbarContent {
             } label: {
                 Label("인스펙터", systemImage: "sidebar.trailing")
             }
-            .help("인스펙터 보기/가리기 (⌥⌘I)")
+            .help(ShortcutGuide.toggleInspector.helpText)
         }
     }
 }

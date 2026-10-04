@@ -62,7 +62,7 @@ private struct PlaybackControls: View {
                     Label("이전 프레임", systemImage: "backward.frame.fill")
                 }
                 .disabled(!timeline.canStepFrames)
-                .help("이전 프레임")
+                .help(ShortcutGuide.previousFrame.helpText)
 
                 Button(action: previewPlayer.togglePlayPause) {
                     Label(
@@ -70,7 +70,7 @@ private struct PlaybackControls: View {
                         systemImage: previewPlayer.isPlaying ? "pause.fill" : "play.fill"
                     )
                 }
-                .help(previewPlayer.isPlaying ? "일시정지" : "재생")
+                .help(ShortcutGuide.playPause.helpText)
 
                 Button {
                     previewPlayer.stepFrame(by: 1, in: timeline)
@@ -78,12 +78,12 @@ private struct PlaybackControls: View {
                     Label("다음 프레임", systemImage: "forward.frame.fill")
                 }
                 .disabled(!timeline.canStepFrames)
-                .help("다음 프레임")
+                .help(ShortcutGuide.nextFrame.helpText)
 
                 Button(action: requestNarrationRecording) {
                     Label("내레이션 녹음", systemImage: "mic.fill")
                 }
-                .help("내레이션 녹음")
+                .help(ShortcutGuide.narration.helpText)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .labelStyle(.iconOnly)

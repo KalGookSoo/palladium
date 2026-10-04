@@ -130,6 +130,7 @@ struct MainWindowView: View {
         .focusedSceneValue(\.isInspectorPresented, $isInspectorPresented)
         .focusedSceneValue(\.timelineScale, $timelineScale)
         .task { await writeBackupsPeriodically() }
+        .modifier(PlaybackKeyHandling(handle: handlePlaybackKey))
         .task(id: openedAssetID) {
             await previewPlayer.load(url: openedAsset.map(MediaFileAccess.resolvedURL))
         }
@@ -171,6 +172,17 @@ struct MainWindowView: View {
         }
     }
 
+    /// 미리보기에 원본이 열려 있을 때만 키를 처리한다. 열린 원본이 없으면 키 입력을 그대로 넘긴다.
+    private func handlePlaybackKey(_ key: PlaybackKeyMonitor.Key) -> Bool {
+        guard case let .ready(timeline) = previewPlayer.loadState else { return false }
+        switch key {
+        case .playPause: previewPlayer.togglePlayPause()
+        case .previousFrame: previewPlayer.stepFrame(by: -1, in: timeline)
+        case .nextFrame: previewPlayer.stepFrame(by: 1, in: timeline)
+        }
+        return true
+    }
+
     /// 저장에 성공하면 `true`. 닫기·종료 확인 창은 실패하면 창을 닫지 않는다.
     private func saveProject() -> Bool {
         do {
@@ -196,6 +208,22 @@ struct MainWindowView: View {
                 Logger.project.error("백업본 기록 실패: \(error.localizedDescription, privacy: .public)")
             }
         }
+    }
+}
+
+/// 창이 앞에 있는 동안 Space·←/→를 미리보기 조작으로 받는다.
+private struct PlaybackKeyHandling: ViewModifier {
+    let handle: (PlaybackKeyMonitor.Key) -> Bool
+    @State private var monitor = PlaybackKeyMonitor()
+    @Environment(\.controlActiveState) private var controlActiveState
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear { monitor.start(handler: handle) }
+            .onDisappear { monitor.stop() }
+            .onChange(of: controlActiveState, initial: true) { _, state in
+                monitor.isWindowActive = state == .key
+            }
     }
 }
 

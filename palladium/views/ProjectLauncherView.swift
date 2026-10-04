@@ -4,6 +4,7 @@ import SwiftUI
 
 enum SceneID {
     static let launcher = "launcher"
+    static let shortcutGuide = "shortcut-guide"
 }
 
 /// Xcode의 시작 창처럼 앱을 켜면 먼저 뜨는 프로젝트 목록. 프로젝트를 열면 편집 창을 띄우고 이 창은 닫는다.
@@ -55,9 +56,10 @@ struct ProjectLauncherView: View {
                     newProjectName = ""
                     isNamingNewProject = true
                 } label: {
-                    Label("새 프로젝트 만들기", systemImage: "plus")
+                    Label(ShortcutGuide.newProject.title, systemImage: "plus")
                 }
-                .help("새 프로젝트 만들기")
+                .keyboardShortcut("n")
+                .help(ShortcutGuide.newProject.helpText)
             }
         }
         .task { reloadSummaries() }
