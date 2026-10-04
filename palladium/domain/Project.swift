@@ -65,5 +65,5 @@ extension Project {
     }
 }
 
-extension Project: Identifiable {}
-extension Project: Equatable {}
+nonisolated extension Project: Identifiable {}
+nonisolated extension Project: Equatable {}

@@ -10,5 +10,5 @@ nonisolated struct ProjectSummary {
     var sequenceCount: Int
 }
 
-extension ProjectSummary: Identifiable {}
-extension ProjectSummary: Equatable {}
+nonisolated extension ProjectSummary: Identifiable {}
+nonisolated extension ProjectSummary: Equatable {}

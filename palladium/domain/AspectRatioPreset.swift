@@ -26,7 +26,7 @@ extension AspectRatioPreset {
     }
 }
 
-extension AspectRatioPreset: Identifiable {
+nonisolated extension AspectRatioPreset: Identifiable {
     var id: Self {
         self
     }

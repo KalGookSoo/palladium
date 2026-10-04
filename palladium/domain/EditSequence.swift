@@ -21,5 +21,5 @@ extension EditSequence {
     }
 }
 
-extension EditSequence: Identifiable {}
-extension EditSequence: Equatable {}
+nonisolated extension EditSequence: Identifiable {}
+nonisolated extension EditSequence: Equatable {}

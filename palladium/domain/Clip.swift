@@ -27,5 +27,5 @@ extension Clip {
     }
 }
 
-extension Clip: Identifiable {}
-extension Clip: Equatable {}
+nonisolated extension Clip: Identifiable {}
+nonisolated extension Clip: Equatable {}

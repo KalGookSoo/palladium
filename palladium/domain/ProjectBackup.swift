@@ -6,7 +6,7 @@ nonisolated struct ProjectBackup {
     let backedUpAt: Date
 }
 
-extension ProjectBackup: Equatable {}
+nonisolated extension ProjectBackup: Equatable {}
 
 /// 저장하지 않은 변경을 백업본에 쓰는 규칙.
 nonisolated enum BackupPolicy {
