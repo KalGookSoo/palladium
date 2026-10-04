@@ -138,6 +138,23 @@ struct SwiftDataProjectRepositoryTests {
 
     // MARK: - Backups
 
+    @Test("프로젝트를 삭제하면 목록·내용·백업본이 모두 사라지고, 없는 프로젝트를 삭제해도 오류가 아니다")
+    func deleteProjectRemovesEverything() throws {
+        let repository = makeTickingRepository()
+        let kept = try repository.createProject(named: "남길 프로젝트")
+        let deleted = try repository.createProject(named: "지울 프로젝트")
+        try repository.save(sampleContent(withID: deleted.id))
+        try repository.writeBackup(of: sampleContent(withID: deleted.id))
+
+        try repository.deleteProject(id: deleted.id)
+        try repository.deleteProject(id: UUID())
+
+        #expect(try repository.projectSummaries().map(\.id) == [kept.id])
+        #expect(try repository.project(id: deleted.id) == nil)
+        #expect(try repository.recoverableBackup(for: deleted.id) == nil)
+        #expect(try container.mainContext.fetch(FetchDescriptor<MediaAssetRecord>()).isEmpty)
+    }
+
     @Test("백업본이 없으면 복구할 것이 없다")
     func noBackupMeansNothingToRecover() throws {
         let repository = SwiftDataProjectRepository(modelContext: container.mainContext)

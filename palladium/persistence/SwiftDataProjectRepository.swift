@@ -45,6 +45,18 @@ final class SwiftDataProjectRepository: ProjectRepository {
         Logger.project.notice("프로젝트 저장: \(project.id, privacy: .public)")
     }
 
+    func deleteProject(id: Project.ID) throws {
+        if let record = try record(id: id) {
+            // 원본·폴더·시퀀스 레코드는 관계의 삭제 규칙(cascade)으로 함께 지워진다.
+            modelContext.delete(record)
+        }
+        if let backup = try backupRecord(projectID: id) {
+            modelContext.delete(backup)
+        }
+        try modelContext.save()
+        Logger.project.notice("프로젝트 삭제: \(id, privacy: .public)")
+    }
+
     // MARK: - Backups
 
     func recoverableBackup(for projectID: Project.ID) throws -> ProjectBackup? {

@@ -40,8 +40,13 @@ nav_order: 9
 
 ## 관련 커맨드/쿼리
 
-- 커맨드: `createProject(named:)`(만드는 즉시 목록에 저장), `ProjectEditor.save()`(열린 프로젝트 저장 후 백업본 삭제), `ProjectEditor.writeBackupIfNeeded()`, `ProjectEditor.discardBackup()`, `addSequence(name:)`, `deleteSequence(id:)`, `relinkMedia(clip:newURL:)`
+- 커맨드: `createProject(named:)`(만드는 즉시 목록에 저장), `deleteProject(id:)`(프로젝트·내용·백업본 영구 삭제, 원본 파일은 그대로), `ProjectEditor.save()`(열린 프로젝트 저장 후 백업본 삭제), `ProjectEditor.writeBackupIfNeeded()`, `ProjectEditor.discardBackup()`, `addSequence(name:)`, `deleteSequence(id:)`, `relinkMedia(clip:newURL:)`
 - 쿼리: `projectSummaries() -> [ProjectSummary]`(최근 수정 순), `project(id:) -> Project?`, `ProjectEditor.hasUnsavedChanges`, `sequences() -> [EditSequence]`, `unresolvedMediaReferences() -> [Clip]`
+
+## 결정 사항(프로젝트 삭제, #35)
+
+- 시작 창에서 확인 창을 거쳐 바로 영구 삭제한다. 휴지통처럼 되돌리는 기능은 두지 않는다 — 원본 미디어 파일은 지우지 않으므로, 잃는 것은 편집 내용뿐임을 확인 창에서 알린다.
+- 삭제한 프로젝트의 편집 창이 열려 있으면 그 창은 그대로 두고, 저장하려 하면 "저장하지 못했습니다" 오류가 난다(저장소에 없는 프로젝트). 시작 창이 편집 창 상태를 알지 못해 막지 않는다.
 
 ## 미정 사항
 

@@ -15,6 +15,9 @@ protocol ProjectRepository {
     /// 프로젝트 내용을 통째로 저장하고 수정 시각을 갱신한다. 저장소에 없는 프로젝트면 `ProjectRepositoryError.projectNotFound`.
     func save(_ project: Project) throws
 
+    /// 프로젝트와 그 내용·백업본을 영구히 지운다. 원본 미디어 파일은 건드리지 않는다. 없는 프로젝트면 아무 일도 하지 않는다.
+    func deleteProject(id: Project.ID) throws
+
     // MARK: - 백업본
 
     /// 마지막 저장 이후에 쓴 백업본이 있으면 돌려준다. 저장보다 오래된 백업본은 없는 것으로 본다.

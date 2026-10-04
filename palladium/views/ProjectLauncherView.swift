@@ -17,8 +17,18 @@ struct ProjectLauncherView: View {
     @State private var isNamingNewProject = false
     @State private var newProjectName = ""
     @State private var errorMessage: String?
+    /// 삭제를 확인 중인 프로젝트.
+    @State private var projectPendingDeletion: ProjectSummary?
 
     var body: some View {
+        let isConfirmingDeletion = Binding<Bool>(
+            get: { projectPendingDeletion != nil },
+            set: {
+                if !$0 {
+                    projectPendingDeletion = nil
+                }
+            }
+        )
         let isShowingError = Binding<Bool>(
             get: { errorMessage != nil },
             set: {
@@ -39,11 +49,19 @@ struct ProjectLauncherView: View {
                 List(summaries, selection: $selectedProjectID) { summary in
                     ProjectSummaryRow(summary: summary)
                 }
-                .contextMenu(forSelectionType: Project.ID.self) { _ in
-                    EmptyView()
+                .contextMenu(forSelectionType: Project.ID.self) { projectIDs in
+                    if let projectID = projectIDs.first {
+                        Button("삭제…", role: .destructive) { askToDelete(projectID) }
+                            .keyboardShortcut(.delete, modifiers: [])
+                    }
                 } primaryAction: { projectIDs in
                     if let projectID = projectIDs.first {
                         openProject(projectID)
+                    }
+                }
+                .onDeleteCommand {
+                    if let selectedProjectID {
+                        askToDelete(selectedProjectID)
                     }
                 }
             }
@@ -70,6 +88,16 @@ struct ProjectLauncherView: View {
         } message: {
             Text("만들면 바로 저장됩니다.")
         }
+        .confirmationDialog(
+            "\"\(projectPendingDeletion?.name ?? "")\" 프로젝트를 삭제하시겠습니까?",
+            isPresented: isConfirmingDeletion,
+            presenting: projectPendingDeletion
+        ) { summary in
+            Button("삭제", role: .destructive) { deleteProject(summary.id) }
+            Button("취소", role: .cancel) {}
+        } message: { _ in
+            Text("삭제한 프로젝트는 되돌릴 수 없습니다. 프로젝트가 참조하던 원본 미디어 파일은 지워지지 않습니다.")
+        }
         .alert("오류", isPresented: isShowingError) {
             Button("확인", role: .cancel) {}
         } message: {
@@ -93,6 +121,21 @@ struct ProjectLauncherView: View {
         } catch {
             Logger.project.error("프로젝트 생성 실패: \(error.localizedDescription, privacy: .public)")
             errorMessage = "프로젝트를 만들지 못했습니다."
+        }
+    }
+
+    private func askToDelete(_ projectID: Project.ID) {
+        projectPendingDeletion = summaries.first { $0.id == projectID }
+    }
+
+    private func deleteProject(_ projectID: Project.ID) {
+        do {
+            try SwiftDataProjectRepository(modelContext: modelContext).deleteProject(id: projectID)
+            selectedProjectID = nil
+            reloadSummaries()
+        } catch {
+            Logger.project.error("프로젝트 삭제 실패: \(error.localizedDescription, privacy: .public)")
+            errorMessage = "프로젝트를 삭제하지 못했습니다."
         }
     }
 
