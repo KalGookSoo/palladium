@@ -22,6 +22,11 @@ struct palladiumApp: App {
         .defaultPosition(.center)
         .modelContainer(modelContainer)
 
+        Window(ShortcutGuide.showShortcuts.title, id: SceneID.shortcutGuide) {
+            ShortcutGuideView()
+        }
+        .windowResizability(.contentSize)
+
         WindowGroup(for: Project.ID.self) { $projectID in
             ProjectWindowView(projectID: projectID)
         }
@@ -31,6 +36,7 @@ struct palladiumApp: App {
             MediaCommands()
             PanelVisibilityCommands()
             TimelineZoomCommands()
+            HelpCommands()
             #if DEBUG
                 DebugCommands()
             #endif

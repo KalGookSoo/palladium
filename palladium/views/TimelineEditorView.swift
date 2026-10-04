@@ -42,7 +42,7 @@ struct TimelineEditorView: View {
                     Label("축소", systemImage: "minus.magnifyingglass")
                 }
                 .disabled(!scale.canZoomOut)
-                .help("타임라인 축소 (⌘-)")
+                .help(ShortcutGuide.zoomOutTimeline.helpText)
 
                 Button {
                     scale = scale.zoomedIn
@@ -50,7 +50,7 @@ struct TimelineEditorView: View {
                     Label("확대", systemImage: "plus.magnifyingglass")
                 }
                 .disabled(!scale.canZoomIn)
-                .help("타임라인 확대 (⌘=)")
+                .help(ShortcutGuide.zoomInTimeline.helpText)
             }
             .labelStyle(.iconOnly)
             .buttonStyle(.plain)

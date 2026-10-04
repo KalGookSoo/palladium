@@ -180,6 +180,7 @@ private struct MediaFilterBar: View {
             .menuStyle(.button)
             .buttonStyle(.borderless)
             .fixedSize()
+            .help(ShortcutGuide.filterMedia.helpText)
 
             Spacer()
 
