@@ -42,6 +42,13 @@ nav_order: 2
 - 커맨드: `trim(clip:range:)`, `ripple(clip:delta:)`, `roll(edgeBetween:delta:)`, `slip(clip:delta:)`, `slide(clip:delta:)`, `split(clip:at:)`, `setSpeed(clip:rate:reversed:)`
 - 쿼리: `sourceFrame(for:at:) -> CMTime`(Match Frame용), `trimmableRange(clip:) -> ClosedRange<CMTime>`
 
+## 범위 조정
+
+- #2는 기본 트림만 한다: 클립 끝 끌기(삽입만 하는 타임라인 규칙에 맞춰 뒤 클립이 따라오는 리플), 인스펙터 트림 탭의 정밀 시간 입력, ⌥ 정밀 조정.
+- 레이저 도구(클립 분할)는 편집 > 클립 분할(⌘B, #3)로 이미 됐다.
+- 롤·슬립·슬라이드 트림과 재생 속도·역재생·타임 리맵은 #58로 분리했다.
+- Match Frame(사용자 흐름 7번, 수용 기준)은 원본 전용 미리보기를 두지 않기로 해(#5) 범위에서 뺐다.
+
 ## 미정 사항
 
 - 프레임 단위 정밀도 필요 여부(타임코드 표시 방식 포함)

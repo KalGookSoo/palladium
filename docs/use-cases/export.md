@@ -38,6 +38,11 @@ nav_order: 8
 - 커맨드: `export(sequence:preset:destination:)`, `enqueueExport(sequence:preset:)`, `cancelExport(id:)`, `extractStillFrame(at:destination:)`
 - 쿼리: `exportProgress(id:) -> Double`, `availablePresets() -> [ExportPreset]`
 
+## 진행 단계
+
+1. 현재 시퀀스 하나를 화면비 프리셋으로 내보내고 진행률을 보여준다. 기본 내보내기 프리셋은 환경설정에 둔다(#19에서 옮김).
+2. 여러 시퀀스(하이라이트)를 큐에 담아 순서대로 내보내는 배치 내보내기, 정지 프레임 추출.
+
 ## 미정 사항
 
 - 내보내기 해상도/비트레이트 프리셋 범위
