@@ -16,6 +16,9 @@ final class PreviewPlayer {
     private(set) var loadState: LoadState = .empty
     private(set) var currentTime: CMTime = .zero
     private(set) var isPlaying = false
+    /// 미리보기에서 듣는 소리 크기(0~1). 결과물에는 영향이 없고 저장하지 않는다(#44).
+    private(set) var volume: Float = 1
+    private(set) var isMuted = false
 
     @ObservationIgnored private var timeObserver: Any?
     @ObservationIgnored private var requestedURL: URL?
@@ -79,6 +82,21 @@ final class PreviewPlayer {
             player.pause()
         }
         isPlaying = player.rate != 0
+    }
+
+    /// 0~1 밖의 값은 가장 가까운 값으로 맞춘다. 음량을 올리면 음소거를 푼다.
+    func setVolume(_ newVolume: Float) {
+        volume = min(max(newVolume, 0), 1)
+        player.volume = volume
+        if volume > 0, isMuted {
+            isMuted = false
+            player.isMuted = false
+        }
+    }
+
+    func toggleMute() {
+        isMuted.toggle()
+        player.isMuted = isMuted
     }
 
     func stepFrame(by frameCount: Int, in timeline: PlaybackTimeline) {

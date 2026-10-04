@@ -114,16 +114,52 @@ private struct PlaybackControls: View {
                 .disabled(!timeline.canStepFrames)
                 .help(ShortcutGuide.nextFrame.helpText)
 
-                Button(action: requestNarrationRecording) {
-                    Label("내레이션 녹음", systemImage: "mic.fill")
+                HStack {
+                    Button(action: requestNarrationRecording) {
+                        Label("내레이션 녹음", systemImage: "mic.fill")
+                    }
+                    .help(ShortcutGuide.narration.helpText)
+
+                    VolumeControl(previewPlayer: previewPlayer)
                 }
-                .help(ShortcutGuide.narration.helpText)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .labelStyle(.iconOnly)
             .buttonStyle(.plain)
         }
         .padding()
+    }
+}
+
+/// 미리보기에서 듣는 소리만 바꾼다(결과물 음량은 오디오 믹싱 #44 2단계).
+private struct VolumeControl: View {
+    let previewPlayer: PreviewPlayer
+
+    var body: some View {
+        let volume = Binding<Double>(
+            get: { previewPlayer.isMuted ? 0 : Double(previewPlayer.volume) },
+            set: { previewPlayer.setVolume(Float($0)) }
+        )
+
+        HStack(spacing: 4) {
+            Button(action: previewPlayer.toggleMute) {
+                Label(previewPlayer.isMuted ? "음소거 해제" : "음소거", systemImage: speakerSymbol)
+            }
+            .help(previewPlayer.isMuted ? "음소거 해제 — 미리보기 소리를 다시 켭니다" : "음소거 — 미리보기 소리를 끕니다")
+
+            Slider(value: volume, in: 0 ... 1)
+                .controlSize(.mini)
+                .frame(width: 70)
+                .accessibilityLabel("미리보기 음량")
+                .help("미리보기 음량 — 지금 듣는 소리만 바꾸고 결과물에는 영향이 없습니다")
+        }
+    }
+
+    private var speakerSymbol: String {
+        if previewPlayer.isMuted || previewPlayer.volume == 0 {
+            return "speaker.slash.fill"
+        }
+        return previewPlayer.volume < 0.5 ? "speaker.wave.1.fill" : "speaker.wave.3.fill"
     }
 }
 
