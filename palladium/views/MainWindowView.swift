@@ -72,6 +72,12 @@ struct MainWindowView: View {
             MediaPanelView(project: project, selectedAssetID: $selectedAssetID) { assetID in
                 openedAssetID = assetID
             }
+            // 놓을 곳을 창 전체로 잡으면 분할 뷰 경계를 덮어 크기 조절 커서가 나타나지 않으므로,
+            // Finder에서 끌어온 파일은 미디어 패널과 미리보기에 놓을 때만 가져온다.
+            .dropDestination(for: URL.self) { urls, _ in
+                importMedia(from: urls)
+                return true
+            }
             .navigationSplitViewColumnWidth(
                 min: MainWindowMetrics.sidebarMinWidth,
                 ideal: MainWindowMetrics.sidebarIdealWidth,
@@ -81,6 +87,10 @@ struct MainWindowView: View {
             VSplitView {
                 PreviewPlayerView(asset: openedAsset, previewPlayer: previewPlayer, hasProjectAssets: !project.assets.isEmpty)
                     .frame(maxWidth: .infinity, minHeight: 240, maxHeight: .infinity)
+                    .dropDestination(for: URL.self) { urls, _ in
+                        importMedia(from: urls)
+                        return true
+                    }
                 if isTimelineVisible, let currentSequence {
                     TimelineEditorView(
                         sequence: currentSequence,
@@ -111,11 +121,6 @@ struct MainWindowView: View {
                 isInspectorPresented: $isInspectorPresented,
                 importMedia: { isImporterPresented = true }
             )
-        }
-        // Finder에서 창 어디로든 끌어다 놓으면 가져온다.
-        .dropDestination(for: URL.self) { urls, _ in
-            importMedia(from: urls)
-            return true
         }
         .fileImporter(
             isPresented: $isImporterPresented,
