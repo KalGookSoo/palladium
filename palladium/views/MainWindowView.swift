@@ -124,14 +124,8 @@ struct MainWindowView: View {
         } message: {
             Text(saveErrorMessage ?? "")
         }
-        // 디버그 메뉴에서 이름 끝에 표시를 붙여 저장하지 않은 변경 상태를 만들거나, 내용을 샘플 데이터로 바꾼다.
         #if DEBUG
-        .focusedSceneValue(\.makeUnsavedChange) { project.name += " ✎" }
-            .focusedSceneValue(\.fillSampleData) {
-                project.assets = SampleData.project.assets
-                project.folders = SampleData.project.folders
-                project.sequences = SampleData.project.sequences
-            }
+        .debugCommandValues(project: $project)
         #endif
     }
 
@@ -176,6 +170,20 @@ struct MainWindowView: View {
         }
     }
 }
+
+#if DEBUG
+    private extension View {
+        /// 디버그 메뉴에서 이름 끝에 표시를 붙여 저장하지 않은 변경 상태를 만들거나, 내용을 샘플 데이터로 바꾼다.
+        func debugCommandValues(project: Binding<Project>) -> some View {
+            focusedSceneValue(\.makeUnsavedChange) { project.wrappedValue.name += " ✎" }
+                .focusedSceneValue(\.fillSampleData) {
+                    project.wrappedValue.assets = SampleData.project.assets
+                    project.wrappedValue.folders = SampleData.project.folders
+                    project.wrappedValue.sequences = SampleData.project.sequences
+                }
+        }
+    }
+#endif
 
 #Preview {
     MainWindowView(project: SampleData.project)
