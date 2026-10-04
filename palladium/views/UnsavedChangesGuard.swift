@@ -20,6 +20,12 @@ struct UnsavedChangesGuard: NSViewRepresentable {
         NSView()
     }
 
+    /// 창을 찾는 데만 쓰므로 크기를 0으로 둔다. 창 전체를 덮으면 그 위에서 분할 뷰 경계의
+    /// 크기 조절 커서가 나타나지 않고 경계를 끌 수도 없다.
+    func sizeThatFits(_: ProposedViewSize, nsView _: NSView, context _: Context) -> CGSize? {
+        .zero
+    }
+
     func updateNSView(_ view: NSView, context: Context) {
         let coordinator = context.coordinator
         coordinator.hasUnsavedChanges = hasUnsavedChanges
