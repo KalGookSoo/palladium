@@ -22,6 +22,10 @@ struct palladiumApp: App {
         .defaultPosition(.center)
         .modelContainer(modelContainer)
 
+        Settings {
+            SettingsView()
+        }
+
         Window("palladium 도움말", id: SceneID.help) {
             HelpView()
         }

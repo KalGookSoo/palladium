@@ -293,7 +293,9 @@ struct MainWindowView: View {
     /// 창이 열려 있는 동안 정해진 간격마다 저장하지 않은 변경을 백업본에 쓴다. 창이 닫히면 Task가 취소되어 멈춘다.
     private func writeBackupsPeriodically() async {
         while !Task.isCancelled {
-            try? await Task.sleep(for: BackupPolicy.defaultInterval)
+            // 환경설정에서 바꾼 간격은 다음 백업부터 반영된다.
+            let storedSeconds = UserDefaults.standard.integer(forKey: AppPreferences.backupIntervalSecondsKey)
+            try? await Task.sleep(for: BackupPolicy.interval(fromStoredSeconds: storedSeconds))
             guard !Task.isCancelled else { return }
             do {
                 try editor.writeBackupIfNeeded()

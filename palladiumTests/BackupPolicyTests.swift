@@ -23,3 +23,12 @@ struct BackupPolicyTests {
         #expect(!BackupPolicy.shouldWriteBackup(current: edited, saved: saved, lastBackedUp: edited))
     }
 }
+
+struct BackupIntervalTests {
+    @Test("저장된 간격이 고를 수 있는 값이면 그대로 쓰고, 없거나 엉뚱한 값이면 기본 1분을 쓴다")
+    func storedIntervalFallsBackToDefault() {
+        #expect(BackupPolicy.interval(fromStoredSeconds: 300) == .seconds(300))
+        #expect(BackupPolicy.interval(fromStoredSeconds: 0) == BackupPolicy.defaultInterval)
+        #expect(BackupPolicy.interval(fromStoredSeconds: 7) == BackupPolicy.defaultInterval)
+    }
+}
