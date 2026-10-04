@@ -6,7 +6,6 @@ struct MediaFilterTests {
         var asset = SampleData.bRollVideo
         asset.colorLabel = .red
         asset.tags = ["인터뷰"]
-        asset.rating = 4
         return asset
     }()
 
@@ -14,7 +13,6 @@ struct MediaFilterTests {
     func emptyFilterMatchesEverything() {
         #expect(MediaFilter().matches(SampleData.introVideo))
         #expect(MediaFilter(query: "   ").matches(SampleData.introVideo))
-        #expect(!MediaFilter().hasAttributeConditions)
     }
 
     @Test("검색어는 이름이나 태그의 일부와 대소문자 구분 없이 일치한다")
@@ -30,18 +28,11 @@ struct MediaFilterTests {
         #expect(filter.matches(interview))
         #expect(!filter.matches(SampleData.introVideo))
         #expect(!MediaFilter(colorLabels: [.green]).matches(interview))
-        #expect(filter.hasAttributeConditions)
-    }
-
-    @Test("최소 별점 이상인 원본만 일치한다")
-    func minimumRatingFilter() {
-        #expect(MediaFilter(minimumRating: 4).matches(interview))
-        #expect(!MediaFilter(minimumRating: 5).matches(interview))
     }
 
     @Test("여러 조건은 모두 만족해야 일치한다")
     func conditionsAreCombined() {
-        #expect(MediaFilter(query: "인터뷰", colorLabels: [.red], minimumRating: 3).matches(interview))
+        #expect(MediaFilter(query: "인터뷰", colorLabels: [.red]).matches(interview))
         #expect(!MediaFilter(query: "인터뷰", colorLabels: [.blue]).matches(interview))
     }
 }

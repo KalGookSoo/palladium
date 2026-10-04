@@ -73,14 +73,14 @@ struct SwiftDataProjectRepositoryTests {
         #expect(try repository.project(id: created.id) == edited)
     }
 
-    @Test("원본의 북마크·색상 레이블·태그·별점도 저장했다가 그대로 불러온다")
+    @Test("원본의 바꾼 이름·북마크·색상 레이블·태그도 저장했다가 그대로 불러온다")
     func assetAttributesRoundTrip() throws {
         let repository = SwiftDataProjectRepository(modelContext: container.mainContext)
         var edited = try sampleContent(withID: repository.createProject(named: "샘플").id)
         edited.assets[0].bookmarkData = Data([1, 2, 3])
         edited.assets[0].colorLabel = .purple
         edited.assets[0].tags = ["인터뷰", "B컷"]
-        edited.assets[0].rating = 4
+        edited.assets[0].rename(to: "오프닝 인사")
 
         try repository.save(edited)
 

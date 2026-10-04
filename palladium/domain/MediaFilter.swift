@@ -6,13 +6,6 @@ nonisolated struct MediaFilter {
     var query = ""
     /// 비어 있으면 색상 레이블로 거르지 않는다.
     var colorLabels: Set<ColorLabel> = []
-    /// 0이면 별점으로 거르지 않는다.
-    var minimumRating = 0
-
-    /// 검색어를 뺀 필터 메뉴의 조건이 걸려 있는지.
-    var hasAttributeConditions: Bool {
-        !colorLabels.isEmpty || minimumRating > 0
-    }
 
     func matches(_ asset: MediaAsset) -> Bool {
         let trimmedQuery = query.trimmingCharacters(in: .whitespaces)
@@ -20,7 +13,7 @@ nonisolated struct MediaFilter {
             || asset.name.localizedStandardContains(trimmedQuery)
             || asset.tags.contains { $0.localizedStandardContains(trimmedQuery) }
         let matchesColor = colorLabels.isEmpty || asset.colorLabel.map(colorLabels.contains) == true
-        return matchesQuery && matchesColor && asset.rating >= minimumRating
+        return matchesQuery && matchesColor
     }
 }
 

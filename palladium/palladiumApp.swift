@@ -28,6 +28,7 @@ struct palladiumApp: App {
         .modelContainer(modelContainer)
         .commands {
             FileCommands()
+            MediaCommands()
             PanelVisibilityCommands()
             TimelineZoomCommands()
             #if DEBUG
