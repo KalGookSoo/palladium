@@ -13,10 +13,15 @@ enum MainWindowMetrics {
     static let inspectorMinWidth = 240.0
     static let inspectorIdealWidth = 280.0
     static let inspectorMaxWidth = 320.0
+    static let previewMinHeight = 240.0
+    static let timelineMinHeight = 160.0
+    static let timelineIdealHeight = 240.0
 }
 
 struct MainWindowView: View {
     @State private var isTimelineVisible = true
+    /// 사용자가 경계를 끌었을 때만 바뀐다. 미리보기에 무엇을 열든 이 높이를 유지한다.
+    @State private var timelineHeight = MainWindowMetrics.timelineIdealHeight
     @State private var isInspectorPresented = true
     @State private var aspectRatio: AspectRatioPreset = .landscape16x9
     /// 열린 프로젝트와 편집 동작. 이 View는 화면 상태만 갖고 편집은 모두 편집기 커맨드로 한다.
@@ -74,27 +79,10 @@ struct MainWindowView: View {
                 max: MainWindowMetrics.sidebarMaxWidth
             )
         } detail: {
-            VSplitView {
-                PreviewPlayerView(asset: openedAsset, previewPlayer: previewPlayer, hasProjectAssets: !project.assets.isEmpty)
-                    .frame(maxWidth: .infinity, minHeight: 240, maxHeight: .infinity)
-                    .dropDestination(for: URL.self) { urls, _ in
-                        importMedia(from: urls)
-                        return true
-                    }
-                if isTimelineVisible, let currentSequence {
-                    TimelineEditorView(
-                        sequence: currentSequence,
-                        assets: project.assets,
-                        selectedClipID: $selectedClipID,
-                        playheadTime: $playheadTime,
-                        scale: $timelineScale
-                    )
-                    .frame(maxWidth: .infinity, minHeight: 160, idealHeight: 240, maxHeight: .infinity)
-                }
-            }
-            // 가운데 영역은 0까지 줄어들 수 있게 해 양쪽 패널 폭을 먼저 지키고, 넘치는 내용은 잘라낸다.
-            .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
+            editorArea(openedAsset: openedAsset, currentSequence: currentSequence)
+                // 가운데 영역은 0까지 줄어들 수 있게 해 양쪽 패널 폭을 먼저 지키고, 넘치는 내용은 잘라낸다.
+                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
         }
         .inspector(isPresented: $isInspectorPresented) {
             InspectorView(clip: selectedClip, asset: selectedClipAsset)
@@ -107,7 +95,6 @@ struct MainWindowView: View {
         .toolbar {
             MainWindowToolbar(
                 aspectRatio: $aspectRatio,
-                isTimelineVisible: $isTimelineVisible,
                 isInspectorPresented: $isInspectorPresented,
                 importMedia: { isImporterPresented = true }
             )
@@ -172,6 +159,53 @@ struct MainWindowView: View {
         }
     }
 
+    /// 미리보기 아래에 타임라인을 둔다. `VSplitView`는 미리보기에 연 원본이 바뀌면 내용 크기에 맞춰 경계를 다시 나눠
+    /// 사용자가 맞춘 높이가 풀리므로(#51), 타임라인 높이를 직접 들고 경계를 끌 때만 바꾼다.
+    /// 창 높이가 바뀌면 미리보기가 늘거나 줄고, 미리보기가 최소 높이보다 작아지면 타임라인을 줄여 보여준다.
+    private func editorArea(openedAsset: MediaAsset?, currentSequence: EditSequence?) -> some View {
+        GeometryReader { geometry in
+            let maxTimelineHeight = max(MainWindowMetrics.timelineMinHeight, geometry.size.height - MainWindowMetrics.previewMinHeight)
+
+            VStack(spacing: 0) {
+                PreviewPlayerView(asset: openedAsset, previewPlayer: previewPlayer, hasProjectAssets: !editor.project.assets.isEmpty)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .dropDestination(for: URL.self) { urls, _ in
+                        importMedia(from: urls)
+                        return true
+                    }
+                    // 타임라인을 접고 펴는 버튼은 툴바가 아니라 타임라인과 맞닿은 미리보기 오른쪽 위에 둔다.
+                    .overlay(alignment: .topTrailing) {
+                        Button {
+                            isTimelineVisible.toggle()
+                        } label: {
+                            Label("타임라인", systemImage: "rectangle.bottomhalf.inset.filled")
+                                .labelStyle(.iconOnly)
+                                .padding(6)
+                                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 6))
+                        }
+                        .buttonStyle(.plain)
+                        .help(ShortcutGuide.toggleTimeline.helpText)
+                        .padding(8)
+                    }
+                if isTimelineVisible, let currentSequence {
+                    TimelineResizeHandle(
+                        timelineHeight: $timelineHeight,
+                        heightRange: MainWindowMetrics.timelineMinHeight ... maxTimelineHeight
+                    )
+                    TimelineEditorView(
+                        sequence: currentSequence,
+                        assets: editor.project.assets,
+                        selectedClipID: $selectedClipID,
+                        playheadTime: $playheadTime,
+                        scale: $timelineScale
+                    )
+                    .frame(maxWidth: .infinity)
+                    .frame(height: min(timelineHeight, maxTimelineHeight))
+                }
+            }
+        }
+    }
+
     /// 미리보기에 원본이 열려 있을 때만 키를 처리한다. 열린 원본이 없으면 키 입력을 그대로 넘긴다.
     private func handlePlaybackKey(_ key: PlaybackKeyMonitor.Key) -> Bool {
         guard case let .ready(timeline) = previewPlayer.loadState else { return false }
@@ -208,6 +242,36 @@ struct MainWindowView: View {
                 Logger.project.error("백업본 기록 실패: \(error.localizedDescription, privacy: .public)")
             }
         }
+    }
+}
+
+/// 미리보기와 타임라인 사이의 경계. 위아래로 끌어 타임라인 높이를 바꾼다.
+/// 기본 구분선보다 조금 굵은 막대로 그려, 두 영역이 다른 부품이고 이 막대를 잡을 수 있다는 걸 드러낸다.
+/// 막대만으로는 잡기 어려워 위아래 여백까지 끌기를 받는다.
+private struct TimelineResizeHandle: View {
+    static let thickness = 2.0
+
+    @Binding var timelineHeight: Double
+    let heightRange: ClosedRange<Double>
+    @State private var dragStartHeight: Double?
+
+    var body: some View {
+        Rectangle()
+            .fill(.separator)
+            .frame(height: Self.thickness)
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+            .pointerStyle(.rowResize)
+            .gesture(
+                // 경계가 끌리며 움직이므로 이동량은 창 기준 좌표로 잰다.
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { value in
+                        let startHeight = dragStartHeight ?? timelineHeight
+                        dragStartHeight = startHeight
+                        timelineHeight = min(max(startHeight - value.translation.height, heightRange.lowerBound), heightRange.upperBound)
+                    }
+                    .onEnded { _ in dragStartHeight = nil }
+            )
     }
 }
 
