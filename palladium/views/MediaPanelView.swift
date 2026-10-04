@@ -136,6 +136,8 @@ struct MediaPanelView: View {
             Button("이름 변경") {
                 beginRenaming(assetID)
             }
+            // 메뉴 오른쪽에 단축키를 보여준다. 실제 단축키는 편집 메뉴의 "원본 이름 변경"이 맡는다.
+            .keyboardShortcut(.f2, modifiers: [])
             Button("태그 편집…") {
                 tagText = project.assets.first { $0.id == assetID }?.tags.joined(separator: ", ") ?? ""
                 tagEditingAssetID = assetID
