@@ -70,7 +70,7 @@ classDiagram
 | 타입             | 책임                                                          | 비고                                                                      |
 |----------------|-------------------------------------------------------------|-------------------------------------------------------------------------|
 | `Project`      | 가져온 원본 미디어와 시퀀스를 담는 저장 단위                                   | 새 프로젝트는 빈 시퀀스 하나로 시작한다([프로젝트 저장/불러오기](use-cases/project-management.md)) |
-| `MediaAsset`   | 가져온 원본 파일 하나(영상/오디오/이미지)의 정보                                | 미디어 패널에 보이는 항목. 타임라인 배치 정보는 갖지 않는다. `name`은 가져올 때 파일 이름으로 채우고 이후 바꿀 수 있다 |
+| `MediaAsset`   | 가져온 원본 파일 하나(영상/오디오/이미지)의 정보                                | 미디어 패널에 보이는 항목. 타임라인 배치 정보는 갖지 않는다. `name`은 가져올 때 파일 이름으로 채우고 이후 바꿀 수 있다. 원본 위치는 `sourceURL`과 함께 security-scoped bookmark(`bookmarkData`)로 들고 있어 앱을 다시 켜도 연다([파일 접근 권한](file-access-and-sandboxing.md)) |
 | `MediaFolder`  | 미디어 패널에서 원본을 분류하는 폴더(빈) 하나                                   | 원본을 복사하지 않고 `assetIDs`로 참조한다. 어느 폴더에도 없는 원본은 "분류 안 됨"으로 보여준다        |
 | `EditSequence` | 독립된 편집 결과물 하나(통합본 또는 하이라이트)                                 | Swift 표준 라이브러리의 `Sequence` 프로토콜과 이름이 겹치지 않도록 `EditSequence`로 짓는다        |
 | `Track`        | 시퀀스 안에서 클립이 시간순으로 놓이는 레인 하나                                 | `TrackKind`: `video`, `audio`                                           |
@@ -144,5 +144,4 @@ classDiagram
 
 ## 미정 사항
 
-- `MediaAsset`이 원본 위치를 `URL`로만 들고 있을지, security-scoped bookmark 데이터까지 들고 있을지([파일 접근 권한](file-access-and-sandboxing.md) 참고)
 - 트랙 안의 클립 배열을 항상 `timelineStart` 순으로 정렬된 상태로 유지할지, 조회할 때 정렬할지
