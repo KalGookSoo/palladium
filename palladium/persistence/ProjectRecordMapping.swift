@@ -23,7 +23,10 @@ extension ProjectContentRecords {
                 kindRawValue: asset.kind.rawValue,
                 durationValue: asset.duration.value,
                 durationTimescale: asset.duration.timescale,
-                bookmarkData: asset.bookmarkData
+                bookmarkData: asset.bookmarkData,
+                colorLabelRawValue: asset.colorLabel?.rawValue,
+                tags: asset.tags,
+                rating: asset.rating
             )
         }
         folders = project.folders.enumerated().map { index, folder in
@@ -130,7 +133,11 @@ private extension MediaAssetRecord {
             sourceURL: sourceURL,
             kind: kind,
             duration: CMTime(value: durationValue, timescale: durationTimescale),
-            bookmarkData: bookmarkData
+            bookmarkData: bookmarkData,
+            // 알 수 없는 색 값은 레이블 없음으로 연다.
+            colorLabel: colorLabelRawValue.flatMap(ColorLabel.init(rawValue:)),
+            tags: tags,
+            rating: rating
         )
     }
 }
