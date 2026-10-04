@@ -139,6 +139,27 @@ final class ProjectEditor {
         editCurrentSequence("자르기") { $0.split(at: time, clipIDs: clipIDs.isEmpty ? nil : clipIDs) }
     }
 
+    @discardableResult
+    func addFolder(named name: String) -> MediaFolder.ID {
+        var folderID = UUID()
+        perform("새 폴더") { folderID = $0.addFolder(named: name) }
+        return folderID
+    }
+
+    func renameFolder(_ folderID: MediaFolder.ID, to newName: String) {
+        perform("폴더 이름 변경") { $0.renameFolder(folderID, to: newName) }
+    }
+
+    /// 안에 있던 원본은 "분류 안 됨"으로 돌아간다.
+    func deleteFolder(_ folderID: MediaFolder.ID) {
+        perform("폴더 삭제") { $0.deleteFolder(folderID) }
+    }
+
+    /// `folderID`가 `nil`이면 "분류 안 됨"으로 뺀다. `beforeAssetID`가 주어지면 그 원본 앞에 넣는다.
+    func moveAssets(_ assetIDs: [MediaAsset.ID], toFolder folderID: MediaFolder.ID?, before beforeAssetID: MediaAsset.ID? = nil) {
+        perform("폴더로 이동") { $0.moveAssets(assetIDs, toFolder: folderID, before: beforeAssetID) }
+    }
+
     /// 빈 시퀀스를 만들고 현재 시퀀스로 바꾼다. 이름이 비어 있으면 "시퀀스 N".
     @discardableResult
     func addSequence(named name: String) -> EditSequence.ID {

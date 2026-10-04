@@ -84,6 +84,39 @@ nonisolated extension Project {
         sequences[index].name = trimmedName
     }
 
+    /// 미디어 패널에 빈 폴더를 끝에 추가한다. 이름이 비어 있으면 "새 폴더". 폴더 안에 폴더는 두지 않는다(한 단계).
+    @discardableResult
+    mutating func addFolder(named name: String) -> MediaFolder.ID {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let folder = MediaFolder(id: UUID(), name: trimmedName.isEmpty ? "새 폴더" : trimmedName, assetIDs: [])
+        folders.append(folder)
+        return folder.id
+    }
+
+    /// 앞뒤 공백을 빼고, 비어 있으면 바꾸지 않는다.
+    mutating func renameFolder(_ folderID: MediaFolder.ID, to newName: String) {
+        let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, let index = folders.firstIndex(where: { $0.id == folderID }) else { return }
+        folders[index].name = trimmedName
+    }
+
+    /// 폴더만 지운다. 안에 있던 원본은 프로젝트에 남아 "분류 안 됨"으로 돌아간다.
+    mutating func deleteFolder(_ folderID: MediaFolder.ID) {
+        folders.removeAll { $0.id == folderID }
+    }
+
+    /// 원본을 폴더로 옮긴다. 원본은 한 폴더에만 속하므로 다른 폴더에서는 빠진다. `folderID`가 `nil`이면 "분류 안 됨"으로 뺀다.
+    /// `beforeAssetID`가 같은 폴더에 있으면 그 앞에, 아니면 폴더 끝에 넣는다(폴더 안 순서 바꾸기에도 쓴다).
+    mutating func moveAssets(_ assetIDs: [MediaAsset.ID], toFolder folderID: MediaFolder.ID?, before beforeAssetID: MediaAsset.ID? = nil) {
+        let movingIDs = assetIDs.filter { assetID in assets.contains { $0.id == assetID } }
+        for index in folders.indices {
+            folders[index].assetIDs.removeAll { movingIDs.contains($0) }
+        }
+        guard let folderID, let folderIndex = folders.firstIndex(where: { $0.id == folderID }) else { return }
+        let insertIndex = beforeAssetID.flatMap { folders[folderIndex].assetIDs.firstIndex(of: $0) } ?? folders[folderIndex].assetIDs.endIndex
+        folders[folderIndex].assetIDs.insert(contentsOf: movingIDs, at: insertIndex)
+    }
+
     /// 시퀀스가 최소 하나는 있어야 하므로 마지막 남은 시퀀스는 지우지 않는다. 원본은 그대로 남는다.
     mutating func deleteSequence(_ sequenceID: EditSequence.ID) {
         guard sequences.count > 1 else { return }

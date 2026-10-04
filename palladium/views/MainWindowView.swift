@@ -66,9 +66,12 @@ struct MainWindowView: View {
         let selectedClipAsset = project.assets.first { $0.id == selectedClip?.assetID }
 
         NavigationSplitView {
-            MediaPanelView(editor: editor, selectedAssetID: $selectedAssetID) { assetID in
-                openedAssetID = assetID
-            }
+            MediaPanelView(
+                editor: editor,
+                selectedAssetID: $selectedAssetID,
+                openAsset: { assetID in openedAssetID = assetID },
+                importFiles: importMedia(from:)
+            )
             // 놓을 곳을 창 전체로 잡으면 분할 뷰 경계를 덮어 크기 조절 커서가 나타나지 않으므로,
             // Finder에서 끌어온 파일은 미디어 패널과 미리보기에 놓을 때만 가져온다.
             .dropDestination(for: URL.self) { urls, _ in

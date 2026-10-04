@@ -88,3 +88,44 @@ struct ProjectSequenceCommandTests {
         #expect(project.assets == SampleData.project.assets)
     }
 }
+
+struct ProjectFolderCommandTests {
+    @Test("폴더를 만들고 이름을 바꾸며, 이름이 비어 있으면 '새 폴더'이고 빈 이름으로는 바꾸지 않는다")
+    func addAndRenameFolder() {
+        var project = Project.makeNew(name: "프로젝트")
+        let folderID = project.addFolder(named: "")
+        project.renameFolder(folderID, to: " 촬영본 ")
+        project.renameFolder(folderID, to: " ")
+        #expect(project.folders.map(\.name) == ["촬영본"])
+    }
+
+    @Test("원본은 한 폴더에만 속하고, 폴더로 옮기면 다른 폴더에서 빠지며, nil이면 분류 안 됨으로 돌아간다")
+    func moveAssetsBetweenFolders() {
+        var project = SampleData.project
+        let footageID = SampleData.footageFolder.id
+        let musicID = project.addFolder(named: "음악")
+
+        project.moveAssets([SampleData.introVideo.id], toFolder: musicID)
+        #expect(project.folders.map(\.assetIDs) == [[SampleData.bRollVideo.id], [SampleData.introVideo.id]])
+
+        project.moveAssets([SampleData.introVideo.id], toFolder: nil)
+        #expect(project.unfiledAssets.map(\.id).contains(SampleData.introVideo.id))
+        #expect(project.folders.first { $0.id == footageID }?.assetIDs == [SampleData.bRollVideo.id])
+    }
+
+    @Test("같은 폴더 안에서 다른 원본 앞으로 옮기면 순서가 바뀐다")
+    func reorderWithinFolder() {
+        var project = SampleData.project
+        project.moveAssets([SampleData.bRollVideo.id], toFolder: SampleData.footageFolder.id, before: SampleData.introVideo.id)
+        #expect(project.folders[0].assetIDs == [SampleData.bRollVideo.id, SampleData.introVideo.id])
+    }
+
+    @Test("폴더를 지워도 안의 원본은 프로젝트에 남아 분류 안 됨이 된다")
+    func deleteFolderKeepsAssets() {
+        var project = SampleData.project
+        project.deleteFolder(SampleData.footageFolder.id)
+        #expect(project.folders.isEmpty)
+        #expect(project.assets == SampleData.project.assets)
+        #expect(project.unfiledAssets.count == project.assets.count)
+    }
+}

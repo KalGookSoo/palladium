@@ -4,11 +4,14 @@ import SwiftUI
 
 /// 프리미어 프로의 프로젝트 패널처럼 한 번 클릭은 선택만 하고, 더블클릭하면 원본을 미리보기(소스 모니터)에서 연다.
 /// 포토샵 레이어처럼 원본 이름을 목록에서 바로 바꿔 정리한다(F2 또는 우클릭 > 이름 변경).
+/// 폴더(한 단계)를 만들어 원본을 끌어다 넣거나 우클릭 > 폴더로 이동으로 분류한다. 원본은 한 폴더에만 속한다.
 struct MediaPanelView: View {
     /// 원본 정리(이름·색상 레이블·태그)는 편집기 커맨드로 한다.
     let editor: ProjectEditor
     @Binding var selectedAssetID: MediaAsset.ID?
     let openAsset: (MediaAsset.ID) -> Void
+    /// 행·폴더 머리는 원본 ID를 받으려고 문자열 놓기를 받는데, Finder에서 끈 파일도 문자열(파일 URL)로 들어오므로 가져오기로 넘긴다.
+    var importFiles: ([URL]) -> Void = { _ in }
     @State private var filter = MediaFilter()
     /// 태그를 편집 중인 원본. 편집 창이 닫히면 `nil`.
     @State private var tagEditingAssetID: MediaAsset.ID?
@@ -17,6 +20,9 @@ struct MediaPanelView: View {
     @State private var renamingAssetID: MediaAsset.ID?
     @State private var renameText = ""
     @FocusState private var isRenameFieldFocused: Bool
+    /// 이름을 바꾸는 중인 폴더.
+    @State private var renamingFolderID: MediaFolder.ID?
+    @State private var folderNameText = ""
 
     var body: some View {
         let project = editor.project
@@ -25,6 +31,16 @@ struct MediaPanelView: View {
         }
         let unfiledAssets = project.unfiledAssets.filter(filter.matches)
         let hasNoResults = folderSections.allSatisfy(\.assets.isEmpty) && unfiledAssets.isEmpty
+        // 거르는 중이 아니면 빈 폴더와 빈 "분류 안 됨"도 보여 원본을 끌어다 놓을 수 있게 한다.
+        let isFiltering = filter != MediaFilter()
+        let isRenamingFolder = Binding<Bool>(
+            get: { renamingFolderID != nil },
+            set: {
+                if !$0 {
+                    renamingFolderID = nil
+                }
+            }
+        )
         let isEditingTags = Binding<Bool>(
             get: { tagEditingAssetID != nil },
             set: {
@@ -36,22 +52,28 @@ struct MediaPanelView: View {
 
         List(selection: $selectedAssetID) {
             ForEach(folderSections, id: \.folder.id) { section in
-                if !section.assets.isEmpty {
-                    Section(section.folder.name) {
+                if !section.assets.isEmpty || !isFiltering {
+                    Section {
                         ForEach(section.assets) { asset in
-                            MediaAssetRow(asset: asset) { nameView(for: asset) }
-                                .draggable(asset.id.uuidString)
+                            assetRow(asset, folderID: section.folder.id)
                         }
+                    } header: {
+                        folderHeader(section.folder)
                     }
                 }
             }
-            if !unfiledAssets.isEmpty {
-                Section("분류 안 됨") {
+            if !unfiledAssets.isEmpty || (!isFiltering && !project.folders.isEmpty) {
+                Section {
                     ForEach(unfiledAssets) { asset in
-                        MediaAssetRow(asset: asset) { nameView(for: asset) }
-                            // 타임라인에 놓으면 클립이 된다. 원본 ID만 문자열로 보낸다.
-                            .draggable(asset.id.uuidString)
+                        assetRow(asset, folderID: nil)
                     }
+                } header: {
+                    Text("분류 안 됨")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .dropDestination(for: String.self) { items, _ in
+                            moveDroppedAssets(items, toFolder: nil, before: nil)
+                        }
                 }
             }
         }
@@ -68,7 +90,12 @@ struct MediaPanelView: View {
         .searchable(text: $filter.query, placement: .sidebar, prompt: "이름·태그 검색")
         // 검색창 바로 아래에 색상 레이블 필터를 둔다.
         .safeAreaInset(edge: .top) {
-            MediaFilterBar(filter: $filter)
+            MediaFilterBar(filter: $filter) {
+                let folderID = editor.addFolder(named: "")
+                // 만들자마자 이름을 정하게 한다.
+                folderNameText = editor.project.folders.first { $0.id == folderID }?.name ?? ""
+                renamingFolderID = folderID
+            }
         }
         .overlay {
             if hasNoResults, filter != MediaFilter() {
@@ -86,7 +113,55 @@ struct MediaPanelView: View {
         } message: {
             Text("태그는 쉼표로 나눠 입력하세요.")
         }
+        .alert("폴더 이름", isPresented: isRenamingFolder) {
+            TextField("폴더 이름", text: $folderNameText)
+            Button("확인") {
+                if let renamingFolderID {
+                    editor.renameFolder(renamingFolderID, to: folderNameText)
+                }
+            }
+            Button("취소", role: .cancel) {}
+        }
         .focusedSceneValue(\.renameSelectedAsset, selectedAssetID.map { assetID in { beginRenaming(assetID) } })
+    }
+
+    /// 타임라인에 놓으면 클립이 되고, 다른 원본 위에 놓으면 그 원본이 있는 폴더의 그 자리로 옮긴다. 원본 ID만 문자열로 보낸다.
+    private func assetRow(_ asset: MediaAsset, folderID: MediaFolder.ID?) -> some View {
+        MediaAssetRow(asset: asset) { nameView(for: asset) }
+            .draggable(asset.id.uuidString)
+            .dropDestination(for: String.self) { items, _ in
+                moveDroppedAssets(items, toFolder: folderID, before: folderID == nil ? nil : asset.id)
+            }
+    }
+
+    /// 폴더 머리. 원본을 끌어다 놓으면 폴더 끝에 넣고, 우클릭으로 이름을 바꾸거나 지운다.
+    private func folderHeader(_ folder: MediaFolder) -> some View {
+        Label(folder.name, systemImage: "folder")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .dropDestination(for: String.self) { items, _ in
+                moveDroppedAssets(items, toFolder: folder.id, before: nil)
+            }
+            .contextMenu {
+                Button("폴더 이름 변경…") {
+                    folderNameText = folder.name
+                    renamingFolderID = folder.id
+                }
+                // 안의 원본은 "분류 안 됨"으로 돌아가고, 실행 취소(⌘Z)로 되돌릴 수 있어 확인 창을 띄우지 않는다.
+                Button("폴더 삭제") { editor.deleteFolder(folder.id) }
+            }
+    }
+
+    private func moveDroppedAssets(_ items: [String], toFolder folderID: MediaFolder.ID?, before beforeAssetID: MediaAsset.ID?) -> Bool {
+        let fileURLs = items.compactMap(URL.init(string:)).filter(\.isFileURL)
+        if !fileURLs.isEmpty {
+            importFiles(fileURLs)
+            return true
+        }
+        let assetIDs = items.compactMap(UUID.init(uuidString:)).filter { $0 != beforeAssetID }
+        guard !assetIDs.isEmpty else { return false }
+        editor.moveAssets(assetIDs, toFolder: folderID, before: beforeAssetID)
+        return true
     }
 
     @ViewBuilder
@@ -149,11 +224,19 @@ struct MediaPanelView: View {
                 tagEditingAssetID = assetID
             }
         }
+        Menu("폴더로 이동") {
+            Button("분류 안 됨") { editor.moveAssets(Array(assetIDs), toFolder: nil) }
+            Divider()
+            ForEach(editor.project.folders) { folder in
+                Button(folder.name) { editor.moveAssets(Array(assetIDs), toFolder: folder.id) }
+            }
+        }
     }
 }
 
 private struct MediaFilterBar: View {
     @Binding var filter: MediaFilter
+    let addFolder: () -> Void
 
     var body: some View {
         HStack {
@@ -194,6 +277,13 @@ private struct MediaFilterBar: View {
                 .buttonStyle(.borderless)
                 .font(.caption)
             }
+
+            Button(action: addFolder) {
+                Label("새 폴더", systemImage: "folder.badge.plus")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.borderless)
+            .help("새 폴더 — 원본을 분류할 폴더를 만듭니다")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
