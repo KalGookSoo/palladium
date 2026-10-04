@@ -1,14 +1,6 @@
 import CoreMedia
 import Foundation
 
-/// 이미 클립이 있는 자리에 새 클립을 놓는 방식.
-nonisolated enum PlacementMode {
-    /// 놓는 지점 뒤의 클립을 새 클립 길이만큼 뒤로 민다. 놓는 지점에 걸친 클립은 둘로 나눈다(기본).
-    case insert
-    /// 놓는 구간의 기존 클립을 잘라내고 덮는다. 오버레이처럼 다른 것과 시간을 맞춰 둔 트랙에 쓴다.
-    case overwrite
-}
-
 // MARK: - Clip
 
 nonisolated extension Clip {
@@ -31,23 +23,27 @@ nonisolated extension Clip {
 // MARK: - Track
 
 nonisolated extension Track {
-    mutating func place(_ clip: Clip, mode: PlacementMode) {
-        switch mode {
-        case .overwrite: overwrite(with: clip)
-        case .insert: insert(clip)
+    /// 클립을 넣을 지점. 클립 안에 떨어지면 앞쪽 절반은 그 클립 앞 경계, 뒤쪽 절반은 뒤 경계로 옮긴다.
+    /// 클립 사이 틈이나 맨 뒤라면 그 시각 그대로다. 삽입은 클립을 자동으로 나누지 않기 위함이다.
+    func insertionPoint(for time: CMTime) -> CMTime {
+        guard let clip = clips.first(where: { $0.timelineStart < time && time < $0.timelineRange.end }) else {
+            return CMTimeMaximum(time, .zero)
         }
+        let middle = clip.timelineStart + CMTimeMultiplyByRatio(clip.sourceRange.duration, multiplier: 1, divisor: 2)
+        return time < middle ? clip.timelineStart : clip.timelineRange.end
     }
 
-    /// 놓는 구간과 겹치는 클립은 겹치지 않는 앞뒤 부분만 남긴다. 구간을 감싸는 클립은 둘로 나뉜다.
-    private mutating func overwrite(with clip: Clip) {
-        let range = clip.timelineRange
-        clips = clips.flatMap { existing -> [Clip] in
-            guard existing.timelineRange.end > range.start, existing.timelineStart < range.end else { return [existing] }
-            let head = existing.portion(from: existing.timelineStart, to: range.start, id: existing.id)
-            let tail = existing.portion(from: range.end, to: existing.timelineRange.end, id: head == nil ? existing.id : UUID())
-            return [head, tail].compactMap(\.self)
+    /// 클립을 경계(또는 틈)에 넣고, 뒤 클립과 겹치면 겹치는 만큼 뒤 클립들을 뒤로 민다. 기존 클립은 나누지 않는다.
+    mutating func insert(_ clip: Clip) {
+        var inserted = clip
+        let point = insertionPoint(for: clip.timelineStart)
+        inserted.timelineStart = point
+        let nextStart = clips.filter { $0.timelineStart >= point }.map(\.timelineStart).min()
+        let shift = nextStart.map { CMTimeMaximum(.zero, inserted.timelineRange.end - $0) } ?? .zero
+        for index in clips.indices where clips[index].timelineStart >= point {
+            clips[index].timelineStart = clips[index].timelineStart + shift
         }
-        clips.append(clip)
+        clips.append(inserted)
         clips.sort { $0.timelineStart < $1.timelineStart }
     }
 
@@ -64,32 +60,18 @@ nonisolated extension Track {
     /// `time`에 걸친 클립을 둘로 나눈다. 고른 클립(`clipIDs`)이 있으면 그 클립만 나눈다.
     mutating func split(at time: CMTime, clipIDs: Set<Clip.ID>?) {
         clips = clips.flatMap { clip -> [Clip] in
-            guard clipIDs?.contains(clip.id) ?? true, clip.timelineStart < time, time < clip.timelineRange.end else { return [clip] }
+            guard clip.canSplit(at: time, clipIDs: clipIDs) else { return [clip] }
             return [
                 clip.portion(from: clip.timelineStart, to: time, id: clip.id),
                 clip.portion(from: time, to: clip.timelineRange.end, id: UUID()),
             ].compactMap(\.self)
         }
     }
+}
 
-    private mutating func insert(_ clip: Clip) {
-        let point = clip.timelineStart
-        let shift = clip.sourceRange.duration
-        clips = clips.flatMap { existing -> [Clip] in
-            if existing.timelineStart >= point {
-                var moved = existing
-                moved.timelineStart = existing.timelineStart + shift
-                return [moved]
-            }
-            guard existing.timelineRange.end > point else { return [existing] }
-            // 놓는 지점에 걸친 클립은 지점에서 나눠 뒷부분만 민다.
-            let head = existing.portion(from: existing.timelineStart, to: point, id: existing.id)
-            var tail = existing.portion(from: point, to: existing.timelineRange.end, id: UUID())
-            tail?.timelineStart = point + shift
-            return [head, tail].compactMap(\.self)
-        }
-        clips.append(clip)
-        clips.sort { $0.timelineStart < $1.timelineStart }
+nonisolated extension Clip {
+    func canSplit(at time: CMTime, clipIDs: Set<Clip.ID>?) -> Bool {
+        (clipIDs?.contains(id) ?? true) && timelineStart < time && time < timelineRange.end
     }
 }
 
@@ -109,10 +91,10 @@ nonisolated extension EditSequence {
         return track.id
     }
 
-    /// 없는 트랙이면 아무것도 하지 않는다.
-    mutating func place(_ clip: Clip, onTrack trackID: Track.ID, mode: PlacementMode) {
+    /// 클립을 트랙의 경계(또는 틈)에 넣고 뒤 클립을 민다. 없는 트랙이면 아무것도 하지 않는다.
+    mutating func place(_ clip: Clip, onTrack trackID: Track.ID) {
         guard let index = tracks.firstIndex(where: { $0.id == trackID }) else { return }
-        tracks[index].place(clip, mode: mode)
+        tracks[index].insert(clip)
     }
 
     func clip(id: Clip.ID) -> Clip? {
@@ -134,6 +116,11 @@ nonisolated extension EditSequence {
         }
     }
 
+    /// 그 시각에서 나눌 클립이 있는지. 메뉴를 비활성화하는 데 쓴다.
+    func canSplit(at time: CMTime, clipIDs: Set<Clip.ID>?) -> Bool {
+        tracks.contains { $0.clips.contains { $0.canSplit(at: time, clipIDs: clipIDs) } }
+    }
+
     /// 재생 헤드 같은 시각에서 클립을 나눈다. 고른 클립이 없으면(`nil`) 그 시각에 걸친 모든 클립을 나눈다.
     mutating func split(at time: CMTime, clipIDs: Set<Clip.ID>?) {
         for index in tracks.indices {
@@ -141,34 +128,41 @@ nonisolated extension EditSequence {
         }
     }
 
-    /// 클립을 다른 시각·트랙으로 옮긴다. 삽입이면 원래 자리의 틈을 메우고 새 자리 뒤를 밀며(순서 바꾸기),
-    /// 덮어쓰기면 원래 자리를 비우고 새 자리를 덮는다. 종류가 다른 트랙으로는 옮기지 않는다.
-    /// `time`은 옮기기 전 화면 기준 시각이다.
-    mutating func moveClip(_ clipID: Clip.ID, toTrack trackID: Track.ID, at time: CMTime, mode: PlacementMode) {
+    /// 클립을 다른 시각·트랙으로 옮긴다. 원래 자리의 틈을 메우고(뒤 클립을 당김) 새 자리 경계에 넣어 뒤 클립을 민다.
+    /// 같은 트랙에서는 순서 바꾸기가 된다. 종류가 다른 트랙으로는 옮기지 않는다. `time`은 옮기기 전 화면 기준 시각이다.
+    mutating func moveClip(_ clipID: Clip.ID, toTrack trackID: Track.ID, at time: CMTime) {
         guard let sourceTrackID = self.trackID(containing: clipID),
               var clip = clip(id: clipID),
               let sourceKind = tracks.first(where: { $0.id == sourceTrackID })?.kind,
               tracks.contains(where: { $0.id == trackID && $0.kind == sourceKind })
         else { return }
-        let ripple = mode == .insert
-        removeClips([clipID], ripple: ripple)
+        removeClips([clipID], ripple: true)
         var destination = CMTimeMaximum(time, .zero)
         // 같은 트랙에서 뒤로 옮기면 틈을 메우며 당겨진 만큼 놓을 시각도 앞으로 온다.
-        if ripple, trackID == sourceTrackID, destination >= clip.timelineRange.end {
+        if trackID == sourceTrackID, destination >= clip.timelineRange.end {
             destination = destination - clip.sourceRange.duration
-        } else if ripple, trackID == sourceTrackID, destination > clip.timelineStart {
+        } else if trackID == sourceTrackID, destination > clip.timelineStart {
             destination = clip.timelineStart
         }
         clip.timelineStart = destination
-        place(clip, onTrack: trackID, mode: mode)
+        place(clip, onTrack: trackID)
     }
 
-    /// 0초와 클립 경계 중 `tolerance` 안에 있는 가장 가까운 시각으로 붙인다. 가까운 경계가 없으면 그대로 돌려준다.
-    /// 옮기는 중인 클립 자신의 경계(`excluding`)에는 붙지 않는다.
-    func snappedTime(_ time: CMTime, tolerance: CMTime, excluding excludedClipID: Clip.ID? = nil) -> CMTime {
-        let edges = [CMTime.zero] + tracks.flatMap(\.clips).filter { $0.id != excludedClipID }.flatMap { [$0.timelineStart, $0.timelineRange.end] }
-        let nearest = edges.min { abs(($0 - time).seconds) < abs(($1 - time).seconds) }
-        guard let nearest, abs((nearest - time).seconds) <= tolerance.seconds else { return time }
+    /// 길이 `duration`인 클립을 `start`에 놓으려 할 때, 클립의 앞 끝이나 뒤 끝이 `tolerance` 안의 경계
+    /// (0초, 다른 클립의 앞뒤 끝, `extraEdges` — 재생 헤드 등)에 닿으면 그 경계에 붙인 시작 시각을 돌려준다(자석처럼 붙기).
+    /// 옮기는 중인 클립 자신(`excluding`)의 경계에는 붙지 않는다.
+    func snappedStart(
+        _ start: CMTime,
+        duration: CMTime,
+        tolerance: CMTime,
+        excluding excludedClipID: Clip.ID? = nil,
+        extraEdges: [CMTime] = []
+    ) -> CMTime {
+        let edges = [CMTime.zero] + extraEdges
+            + tracks.flatMap(\.clips).filter { $0.id != excludedClipID }.flatMap { [$0.timelineStart, $0.timelineRange.end] }
+        let candidates = edges.flatMap { [$0, $0 - duration] }.filter { $0 >= .zero }
+        let nearest = candidates.min { abs(($0 - start).seconds) < abs(($1 - start).seconds) }
+        guard let nearest, abs((nearest - start).seconds) <= tolerance.seconds else { return CMTimeMaximum(start, .zero) }
         return nearest
     }
 }
@@ -184,5 +178,10 @@ nonisolated extension MediaAsset {
     /// 타임라인에 처음 놓을 때의 길이. 이미지는 길이가 없어 정해진 길이를 쓴다.
     var placementDuration: CMTime {
         kind == .image ? Self.stillImageDuration : duration
+    }
+
+    /// 이 원본 전체를 `time`에 놓는 새 클립. 길이가 0이면 `nil`.
+    func makeClip(at time: CMTime) -> Clip? {
+        Clip(assetID: id, sourceRange: CMTimeRange(start: .zero, duration: placementDuration), timelineStart: CMTimeMaximum(time, .zero))
     }
 }

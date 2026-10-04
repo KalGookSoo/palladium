@@ -3,6 +3,8 @@ import SwiftUI
 /// 앱 전역 설정의 저장 키. 값은 `UserDefaults`에 두어 앱을 다시 켜도 유지된다.
 enum AppPreferences {
     static let backupIntervalSecondsKey = "backupIntervalSeconds"
+    static let timelineShowsFilmstripKey = "timelineShowsFilmstrip"
+    static let timelineShowsWaveformKey = "timelineShowsWaveform"
 }
 
 /// palladium > 설정…(⌘,)에서 여는 환경설정 창. 바꾸면 바로 저장된다(별도 저장 버튼 없음).

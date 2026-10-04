@@ -111,10 +111,10 @@ struct ProjectEditorTests {
         let editor = try ProjectEditor(project: repository.createProject(named: "빈 프로젝트"), repository: repository)
         editor.applyDebugChange { $0.assets = [SampleData.introVideo, SampleData.backgroundMusic] }
 
-        let videoClipID = try #require(editor.placeAsset(SampleData.introVideo.id, onTrack: nil, at: .zero, mode: .overwrite))
+        let videoClipID = try #require(editor.placeAsset(SampleData.introVideo.id, onTrack: nil, at: .zero))
         // 영상 트랙에 오디오를 놓으려 하면 오디오 트랙을 새로 만든다.
         let videoTrackID = try #require(editor.project.sequences[0].tracks.first?.id)
-        editor.placeAsset(SampleData.backgroundMusic.id, onTrack: videoTrackID, at: .zero, mode: .overwrite)
+        editor.placeAsset(SampleData.backgroundMusic.id, onTrack: videoTrackID, at: .zero)
 
         let tracks = editor.project.sequences[0].tracks
         #expect(tracks.map(\.kind) == [.video, .audio])
@@ -132,7 +132,7 @@ struct ProjectEditorTests {
         let before = editor.project
 
         undoManager.beginUndoGrouping()
-        editor.placeAsset(SampleData.bRollVideo.id, onTrack: videoTrackID, at: .zero, mode: .insert)
+        editor.placeAsset(SampleData.bRollVideo.id, onTrack: videoTrackID, at: .zero)
         undoManager.endUndoGrouping()
         let after = editor.project
         #expect(after != before)
@@ -177,7 +177,7 @@ struct ProjectEditorTests {
 
         let newID = editor.addSequence(named: "하이라이트")
         #expect(editor.currentSequenceID == newID)
-        editor.placeAsset(SampleData.introVideo.id, onTrack: nil, at: .zero, mode: .insert)
+        editor.placeAsset(SampleData.introVideo.id, onTrack: nil, at: .zero)
         #expect(editor.currentSequence.tracks.flatMap(\.clips).count == 1)
         #expect(editor.project.sequences[0] == firstSequence)
 

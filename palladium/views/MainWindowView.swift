@@ -33,6 +33,9 @@ struct MainWindowView: View {
     @State private var selectedAssetID: MediaAsset.ID?
     @State private var openedAssetID: MediaAsset.ID?
     @State private var selectedClipIDs: Set<Clip.ID> = []
+    /// 타임라인에서 클립·원본을 끄는 중인지. Esc로 끌기를 취소할 때 쓴다.
+    @State private var isTimelineDragging = false
+    @State private var timelineDragCancelCount = 0
     @State private var playheadTime: CMTime = .zero
     @State private var timelineScale = TimelineScale(pointsPerSecond: 40)
     @State private var previewPlayer = PreviewPlayer()
@@ -118,6 +121,7 @@ struct MainWindowView: View {
         }
         .focusedSceneValue(\.saveProject, saveAction)
         .focusedSceneValue(\.importMedia) { isImporterPresented = true }
+        .focusedSceneValue(\.splitClips, splitAction)
         .focusedSceneValue(\.isTimelineVisible, $isTimelineVisible)
         .focusedSceneValue(\.isInspectorPresented, $isInspectorPresented)
         .focusedSceneValue(\.timelineScale, $timelineScale)
@@ -210,6 +214,8 @@ struct MainWindowView: View {
                         selectedClipIDs: $selectedClipIDs,
                         playheadTime: $playheadTime,
                         scale: $timelineScale,
+                        isDragging: $isTimelineDragging,
+                        dragCancelCount: timelineDragCancelCount,
                         actions: timelineActions
                     )
                     .frame(maxWidth: .infinity)
@@ -222,13 +228,13 @@ struct MainWindowView: View {
     /// 타임라인의 편집 요청을 편집기 커맨드로 옮긴다. 화면 상태(선택, 미리보기에 연 원본)는 여기서 바꾼다.
     private var timelineActions: TimelineActions {
         TimelineActions(
-            dropAsset: { assetID, trackID, time, mode in
-                if let clipID = editor.placeAsset(assetID, onTrack: trackID, at: time, mode: mode) {
+            dropAsset: { assetID, trackID, time in
+                if let clipID = editor.placeAsset(assetID, onTrack: trackID, at: time) {
                     selectedClipIDs = [clipID]
                 }
             },
-            moveClip: { clipID, trackID, time, mode in
-                editor.moveClip(clipID, toTrack: trackID, at: time, mode: mode)
+            moveClip: { clipID, trackID, time in
+                editor.moveClip(clipID, toTrack: trackID, at: time)
             },
             deleteClips: { clipIDs, ripple in
                 editor.deleteClips(clipIDs, ripple: ripple)
@@ -268,12 +274,34 @@ struct MainWindowView: View {
         case .deleteSelection, .rippleDeleteSelection:
             guard !selectedClipIDs.isEmpty else { return false }
             timelineActions.deleteClips(selectedClipIDs, key == .rippleDeleteSelection)
-        case .splitAtPlayhead:
-            timelineActions.splitClips(selectedClipIDs)
         case .selectAll:
             selectedClipIDs = Set(editor.currentSequence.tracks.flatMap(\.clips).map(\.id))
+        case .escape:
+            return releaseOneLevel()
         }
         return true
+    }
+
+    /// Esc를 누를 때마다 가장 안쪽 상태부터 한 단계씩 푼다: 끄는 중인 편집 → 클립 선택 → 원본 선택.
+    /// 풀 것이 없으면 키를 그대로 넘긴다.
+    private func releaseOneLevel() -> Bool {
+        if isTimelineDragging {
+            timelineDragCancelCount += 1
+        } else if !selectedClipIDs.isEmpty {
+            selectedClipIDs = []
+        } else if selectedAssetID != nil {
+            selectedAssetID = nil
+        } else {
+            return false
+        }
+        return true
+    }
+
+    /// 편집 > 클립 분할(⌘B). 재생 헤드에서 나눌 클립이 없으면 `nil`이라 메뉴가 비활성화된다.
+    private var splitAction: (() -> Void)? {
+        let clipIDs = selectedClipIDs.isEmpty ? nil : selectedClipIDs
+        guard editor.currentSequence.canSplit(at: playheadTime, clipIDs: clipIDs) else { return nil }
+        return { timelineActions.splitClips(selectedClipIDs) }
     }
 
     /// 저장에 성공하면 `true`. 닫기·종료 확인 창은 실패하면 창을 닫지 않는다.

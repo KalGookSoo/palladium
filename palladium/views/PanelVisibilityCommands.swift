@@ -6,6 +6,8 @@ extension FocusedValues {
 }
 
 struct PanelVisibilityCommands: Commands {
+    @AppStorage(AppPreferences.timelineShowsFilmstripKey) private var showsFilmstrip = true
+    @AppStorage(AppPreferences.timelineShowsWaveformKey) private var showsWaveform = true
     @FocusedBinding(\.isTimelineVisible) private var isTimelineVisible
     @FocusedBinding(\.isInspectorPresented) private var isInspectorPresented
 
@@ -22,6 +24,11 @@ struct PanelVisibilityCommands: Commands {
             }
             .keyboardShortcut("i", modifiers: [.command, .option])
             .disabled(isInspectorPresented == nil)
+
+            Divider()
+            // 타임라인 클립 안에 그릴 내용. 타임라인 머리의 "클립 보기" 메뉴와 같은 설정이다.
+            Toggle(ShortcutGuide.toggleFilmstrip.title, isOn: $showsFilmstrip)
+            Toggle(ShortcutGuide.toggleWaveform.title, isOn: $showsWaveform)
         }
     }
 }

@@ -42,11 +42,13 @@ enum ShortcutGuide {
     static let redo = ShortcutGuideEntry(title: "다시 실행", summary: "되돌린 편집을 다시 합니다", keys: "⇧⌘Z")
     static let deleteClips = ShortcutGuideEntry(title: "삭제", summary: "고른 클립을 지우고 그 자리는 비워 둡니다", keys: "⌫")
     static let rippleDeleteClips = ShortcutGuideEntry(title: "리플 삭제", summary: "고른 클립을 지우고 뒤 클립을 당겨 틈을 메웁니다", keys: "⇧⌫")
-    static let splitAtPlayhead = ShortcutGuideEntry(title: "재생 헤드에서 자르기", summary: "고른 클립(없으면 재생 헤드에 걸친 모든 클립)을 둘로 나눕니다", keys: "⌘B")
+    static let splitAtPlayhead = ShortcutGuideEntry(title: "클립 분할", summary: "재생 헤드(파란 세로선) 위치에서 고른 클립(없으면 재생 헤드에 걸친 모든 클립)을 둘로 나눕니다", keys: "⌘B")
+    static let deselect = ShortcutGuideEntry(title: "선택 해제", summary: "끄는 중인 편집을 취소하거나, 고른 클립·원본 선택을 한 단계씩 풉니다", keys: "Esc")
+    static let toggleFilmstrip = ShortcutGuideEntry(title: "필름스트립 보기", summary: "영상·이미지 클립 안에 프레임을 그립니다", keys: nil)
+    static let toggleWaveform = ShortcutGuideEntry(title: "오디오 파형 보기", summary: "소리가 있는 클립 안에 파형을 그립니다", keys: nil)
     static let selectAllClips = ShortcutGuideEntry(title: "모든 클립 선택", summary: "타임라인의 클립을 모두 고릅니다", keys: "⌘A")
     static let toggleClipSelection = ShortcutGuideEntry(title: "선택에 더하기/빼기", summary: "클립을 하나씩 더 고르거나 뺍니다", keys: "⌘ 클릭")
     static let extendClipSelection = ShortcutGuideEntry(title: "범위 선택", summary: "같은 트랙에서 고른 클립까지 사이를 모두 고릅니다", keys: "⇧ 클릭")
-    static let overwritePlacement = ShortcutGuideEntry(title: "덮어쓰기로 놓기·옮기기", summary: "기본(삽입) 대신 놓는 구간을 덮어씁니다", keys: "⌘ 누른 채 놓기")
     static let renameAsset = ShortcutGuideEntry(title: "원본 이름 변경", summary: "미디어 패널에서 고른 원본의 이름을 바꿉니다", keys: "F2")
     static let filterMedia = ShortcutGuideEntry(title: "필터", summary: "색상 레이블로 원본을 거릅니다", keys: nil)
 
@@ -59,7 +61,7 @@ enum ShortcutGuide {
         ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline]),
         ("재생", [playPause, previousFrame, nextFrame]),
         ("편집", [undo, redo, renameAsset]),
-        ("타임라인", [deleteClips, rippleDeleteClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, overwritePlacement]),
+        ("타임라인", [deleteClips, rippleDeleteClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect]),
         ("도움말", [showHelp, showShortcuts]),
     ]
 }

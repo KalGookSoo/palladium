@@ -31,7 +31,6 @@ struct InspectorView: View {
                 case .trim: TrimInspectorView(clip: clip)
                 case .effect: EffectInspectorView()
                 case .transform: TransformInspectorView()
-                case .subtitle: SubtitleInspectorView()
                 }
             }
         } else {
@@ -56,7 +55,6 @@ private enum InspectorTab: CaseIterable, Identifiable {
     case trim
     case effect
     case transform
-    case subtitle
 
     var id: Self {
         self
@@ -67,7 +65,6 @@ private enum InspectorTab: CaseIterable, Identifiable {
         case .trim: "트림"
         case .effect: "이펙트"
         case .transform: "트랜스폼"
-        case .subtitle: "자막"
         }
     }
 }

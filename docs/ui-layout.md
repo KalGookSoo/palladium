@@ -86,7 +86,7 @@ JetBrains IDE의 툴 윈도우처럼 패널을 열고 닫을 수 있다.
 | 툴바 | 가져오기 진입점, 화면비 프리셋, 내보내기 진입점 | [미디어 가져오기](use-cases/media-import.md), [내보내기](use-cases/export.md) |
 | 미디어 패널 | 가져온 클립 목록, 검색·필터, 폴더 정리 | [미디어 가져오기](use-cases/media-import.md) |
 | 미리보기 플레이어 | 재생·일시정지·스크러빙, 프레임 단위 이동, 마이크 내레이션 녹음 | [미리보기/재생](use-cases/preview.md), [내레이션 녹음](use-cases/narration-recording.md) |
-| 인스펙터 | 선택한 클립의 트림/이펙트/트랜스폼/자막 속성 편집(탭 전환) | [클립 자르기(트림)](use-cases/trimming.md), [자막 삽입](use-cases/subtitles.md) |
+| 인스펙터 | 선택한 클립의 트림/이펙트/트랜스폼 속성 편집(탭 전환). 자막은 자막 트랙에서(#4) | [클립 자르기(트림)](use-cases/trimming.md), [자막 삽입](use-cases/subtitles.md) |
 | 타임라인 | 멀티트랙 클립 배치, 트림, 트랜지션, 오버레이, 마커, 재생 헤드 | [클립 이어붙이기](use-cases/joining-clips.md), [클립 자르기(트림)](use-cases/trimming.md), [트랜지션](use-cases/transitions.md), [오버레이 및 마스킹](use-cases/overlays.md) |
 
 ## 예상 SwiftUI 컴포넌트 분해
@@ -98,7 +98,7 @@ macOS 표준 레이아웃 컨테이너(`NavigationSplitView`, `.toolbar`, `.insp
 | 툴바 | `MainWindowToolbar` | `.toolbar { }` 안에 들어가는 내용은 View가 아니라 `ToolbarContent`여야 하므로 `ToolbarContent`로 구현. 앞쪽(`.navigation`)에 가져오기(⌘I)·화면비 프리셋(16:9 / 9:16 / 1:1), 뒤쪽(`.primaryAction`)에 내보내기(⌘E)와 인스펙터 토글(타임라인 토글은 미리보기 오른쪽 위). 가져오기·내보내기는 파일 메뉴에도 같은 단축키로 둔다. 저장은 툴바에 두지 않고 메뉴 바의 파일 > 저장(⌘S)으로만 한다 |
 | 미디어 패널 | `MediaPanelView` | `NavigationSplitView`의 사이드바 컬럼, 검색바(이름·태그) + 필터 메뉴(색상 레이블) + 클립 리스트(썸네일 · 색 점 · 이름 · 길이 · 태그) + 폴더 트리. 원본을 고르고 F2 또는 우클릭 > 이름 변경으로 목록 안에서 이름을 바꾸고, 우클릭으로 색상 레이블·태그를 바꾼다 |
 | 미리보기 플레이어 | `PreviewPlayerView` | 미디어 패널에서 더블클릭한 원본을 재생한다. 이미지는 플레이어로 열지 않고 재생 컨트롤 없이 정지 이미지로 보여준다. 영상 표시는 AppKit `AVPlayerView`를 `NSViewRepresentable`(`PlayerSurfaceView`)로 컨트롤 없이(`controlsStyle = .none`) 감싼다 — SwiftUI `VideoPlayer`는 자체 재생 컨트롤을 함께 그려 프레임 이동·스크럽 바·내레이션 버튼 같은 우리 컨트롤과 겹치기 때문이다. 아래에 스크럽 바와 [현재/전체 시간 · 이전 프레임 · 재생/일시정지 · 다음 프레임 · 내레이션 녹음 · 음소거·음량 슬라이더] 컨트롤. 음량은 지금 듣는 소리만 바꾸고 저장하지 않는다(#44 1단계). 재생/일시정지를 가로 가운데에 두고 나머지를 그 양옆에 붙인다 — 왼쪽 끝은 떠 있는 미디어 패널에 가려질 수 있기 때문이다(#42). 위치 계산은 도메인 `PlaybackTimeline`, AVPlayer 명령·관찰은 `palladium/playback/`의 `PreviewPlayer`가 맡는다 |
-| 인스펙터 | `InspectorView` | `.inspector(isPresented:)`로 구현, 타임라인에서 선택한 클립의 속성을 보여준다. 하위 탭별로 `TrimInspectorView`/`EffectInspectorView`/`TransformInspectorView`/`SubtitleInspectorView` 분리 |
+| 인스펙터 | `InspectorView` | `.inspector(isPresented:)`로 구현, 타임라인에서 선택한 클립의 속성을 보여준다. 하위 탭별로 `TrimInspectorView`/`EffectInspectorView`/`TransformInspectorView` 분리. 자막은 원본 클립이 아니라 최종 영상(시퀀스)의 시간에 붙으므로 클립 인스펙터에 두지 않고, 자막 트랙의 자막 블록을 고르면 인스펙터에 보여준다(#4) |
 | 타임라인 | `TimelineEditorView` | 미리보기 플레이어 아래에 두고 경계를 끌어 높이를 바꾼다. 높이는 경계를 끌 때만 바뀌고 미리보기에 무엇을 열든 유지된다(`VSplitView`는 연 원본에 따라 경계를 다시 나눠서 쓰지 않는다, #51). 왼쪽에 고정된 트랙 머리(종류 아이콘 + "영상 1" 같은 레이블), 오른쪽에 가로 스크롤되는 눈금자(`TimelineRulerView`, `Canvas`)와 `TrackRowView`(트랙 한 줄)·`ClipView`(중립색 클립 블록, 선택 시 강조색 테두리, 안에 영상·이미지는 필름스트립, 오디오는 파형 — `ClipContentView`, #31), 그 위에 `PlayheadView`와 눈금자의 `MarkerView`. 시간 ↔ 좌표 변환과 줌은 도메인 `TimelineScale`이 맡는다. SwiftUI의 `TimelineView`와 이름이 겹치지 않도록 `TimelineEditorView`로 짓는다 |
 
 ## 미정 사항

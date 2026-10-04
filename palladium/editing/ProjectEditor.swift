@@ -73,22 +73,16 @@ final class ProjectEditor {
         updateAssets([assetID], actionName: "태그 편집") { $0.setTags(from: text) }
     }
 
-    /// 원본을 현재 시퀀스(첫 시퀀스)의 트랙에 클립으로 놓는다. `trackID`가 없거나 원본 종류와 맞지 않는 트랙이면
-    /// 맞는 종류의 새 트랙을 만들어 놓는다. 영상 소리는 영상 클립에 포함된다.
+    /// 원본을 현재 시퀀스의 트랙에 클립으로 넣는다. 클립 안에 놓으면 가까운 경계로 옮기고 뒤 클립을 민다(삽입만 한다).
+    /// `trackID`가 없거나 원본 종류와 맞지 않는 트랙이면 맞는 종류의 새 트랙을 만들어 넣는다. 영상 소리는 영상 클립에 포함된다.
     /// 반환값은 새로 만든 클립의 ID이고, 원본이 없거나 놓을 수 없으면 `nil`이다.
     @discardableResult
-    func placeAsset(_ assetID: MediaAsset.ID, onTrack trackID: Track.ID?, at time: CMTime, mode: PlacementMode) -> Clip.ID? {
-        guard let asset = asset(id: assetID),
-              let clip = Clip(
-                  assetID: assetID,
-                  sourceRange: CMTimeRange(start: .zero, duration: asset.placementDuration),
-                  timelineStart: CMTimeMaximum(time, .zero)
-              )
-        else { return nil }
+    func placeAsset(_ assetID: MediaAsset.ID, onTrack trackID: Track.ID?, at time: CMTime) -> Clip.ID? {
+        guard let asset = asset(id: assetID), let clip = asset.makeClip(at: time) else { return nil }
         editCurrentSequence("클립 배치") { sequence in
             let matchingTrackID = sequence.tracks.first { $0.id == trackID && $0.kind == asset.trackKind }?.id
             let targetTrackID = matchingTrackID ?? sequence.addTrack(kind: asset.trackKind)
-            sequence.place(clip, onTrack: targetTrackID, mode: mode)
+            sequence.place(clip, onTrack: targetTrackID)
         }
         return clip.id
     }
@@ -124,9 +118,9 @@ final class ProjectEditor {
         }
     #endif
 
-    /// 클립을 다른 시각·트랙으로 옮긴다. 삽입이면 원래 자리를 메우고 새 자리 뒤를 민다(순서 바꾸기).
-    func moveClip(_ clipID: Clip.ID, toTrack trackID: Track.ID, at time: CMTime, mode: PlacementMode) {
-        editCurrentSequence("클립 이동") { $0.moveClip(clipID, toTrack: trackID, at: time, mode: mode) }
+    /// 클립을 다른 시각·트랙으로 옮긴다. 원래 자리를 메우고 새 자리 경계에 넣어 뒤 클립을 민다(순서 바꾸기).
+    func moveClip(_ clipID: Clip.ID, toTrack trackID: Track.ID, at time: CMTime) {
+        editCurrentSequence("클립 이동") { $0.moveClip(clipID, toTrack: trackID, at: time) }
     }
 
     /// `ripple`이면 지운 자리 뒤의 클립을 당겨 틈을 메운다(리플 삭제).

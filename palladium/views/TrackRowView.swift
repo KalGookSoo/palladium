@@ -6,12 +6,18 @@ struct TrackRowView: View {
     let track: Track
     let assets: [MediaAsset]
     let scale: TimelineScale
+    let playheadTime: CMTime
+    let showsFilmstrip: Bool
+    let showsWaveform: Bool
     @Binding var selectedClipIDs: Set<Clip.ID>
     let actions: TimelineActions
-    /// 클립을 끌어 놓았을 때 끈 거리와 함께 부른다. 시각·트랙 계산은 상위가 한다.
-    let moveClip: (Clip, CGSize) -> Void
-    /// 끄는 중인 클립과 끈 거리. 놓기 전까지 클립을 그만큼 옮겨 보여준다.
-    @State private var dragging: (clipID: Clip.ID, translation: CGSize)?
+    /// 이 행에서 끄는 중인 클립과 끈 거리. 포인터를 따라 반투명하게 그린다.
+    let ghost: (clip: Clip, translation: CGSize)?
+    /// 끄는 중인 클립·원본이 들어갈 자리. 강조 테두리와 삽입선으로 보여준다.
+    let placeholder: Clip?
+    /// 끄는 동안과 놓았을 때 끈 거리와 함께 부른다. 시각·트랙 계산은 상위가 한다.
+    let dragChanged: (Clip, CGSize) -> Void
+    let dragEnded: (Clip, CGSize) -> Void
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -21,32 +27,46 @@ struct TrackRowView: View {
                 .onTapGesture { selectedClipIDs = [] }
 
             ForEach(track.clips) { clip in
-                let asset = assets.first { $0.id == clip.assetID }
-                let translation = dragging?.clipID == clip.id ? dragging?.translation ?? .zero : .zero
-                let width = scale.width(for: clip.sourceRange.duration)
+                clipView(clip, offset: .zero)
+            }
 
-                ClipView(title: asset?.name ?? "알 수 없는 원본", symbolName: track.kind.symbolName, isSelected: selectedClipIDs.contains(clip.id)) {
-                    ClipContentView(asset: asset, clip: clip, width: width)
-                }
-                .frame(
-                    width: width,
-                    height: TimelineMetrics.trackHeight - TimelineMetrics.clipVerticalInset * 2
-                )
-                .offset(x: scale.x(for: clip.timelineStart) + translation.width, y: TimelineMetrics.clipVerticalInset + translation.height)
-                .zIndex(dragging?.clipID == clip.id ? 1 : 0)
-                .onTapGesture { select(clip) }
-                .gesture(
-                    DragGesture(minimumDistance: 3)
-                        .onChanged { value in dragging = (clip.id, value.translation) }
-                        .onEnded { value in
-                            dragging = nil
-                            moveClip(clip, value.translation)
-                        }
-                )
-                .contextMenu { clipMenu(for: clip) }
+            if let placeholder {
+                PlaceholderView()
+                    .frame(width: scale.width(for: placeholder.sourceRange.duration), height: clipHeight)
+                    .offset(x: scale.x(for: placeholder.timelineStart), y: TimelineMetrics.clipVerticalInset)
+                    .allowsHitTesting(false)
+            }
+
+            if let ghost {
+                clipView(ghost.clip, offset: ghost.translation)
+                    .opacity(0.6)
+                    .zIndex(1)
             }
         }
         .frame(height: TimelineMetrics.trackHeight)
+    }
+
+    private var clipHeight: Double {
+        TimelineMetrics.trackHeight - TimelineMetrics.clipVerticalInset * 2
+    }
+
+    /// 맞닿은 클립 사이에 틈이 보이도록 양옆을 1pt씩 줄여 그린다.
+    private func clipView(_ clip: Clip, offset: CGSize) -> some View {
+        let asset = assets.first { $0.id == clip.assetID }
+        let width = scale.width(for: clip.sourceRange.duration)
+
+        return ClipView(title: asset?.name ?? "알 수 없는 원본", symbolName: track.kind.symbolName, isSelected: selectedClipIDs.contains(clip.id)) {
+            ClipContentView(asset: asset, clip: clip, width: width, showsFilmstrip: showsFilmstrip, showsWaveform: showsWaveform)
+        }
+        .frame(width: max(width - 2, 1), height: clipHeight)
+        .offset(x: scale.x(for: clip.timelineStart) + 1 + offset.width, y: TimelineMetrics.clipVerticalInset + offset.height)
+        .onTapGesture { select(clip) }
+        .gesture(
+            DragGesture(minimumDistance: 3)
+                .onChanged { value in dragChanged(clip, value.translation) }
+                .onEnded { value in dragEnded(clip, value.translation) }
+        )
+        .contextMenu { clipMenu(for: clip) }
     }
 
     /// ⌘ 클릭은 선택에 더하거나 빼고, ⇧ 클릭은 같은 트랙에서 이미 고른 클립과 이 클립 사이를 모두 고른다.
@@ -71,16 +91,37 @@ struct TrackRowView: View {
     @ViewBuilder
     private func clipMenu(for clip: Clip) -> some View {
         let targetIDs = selectedClipIDs.contains(clip.id) ? selectedClipIDs : [clip.id]
+        let canSplit = targetIDs.contains { id in track.clips.first { $0.id == id }?.canSplit(at: playheadTime, clipIDs: nil) == true }
 
-        // 메뉴 오른쪽에 단축키를 보여준다. 실제 단축키는 편집 창의 키 입력 처리(EditorKeyMonitor)가 맡는다.
+        // 메뉴 오른쪽에 단축키를 보여준다. 실제 단축키는 편집 창의 키 입력 처리와 편집 메뉴가 맡는다.
         Button(ShortcutGuide.deleteClips.title) { actions.deleteClips(targetIDs, false) }
             .keyboardShortcut(.delete, modifiers: [])
         Button(ShortcutGuide.rippleDeleteClips.title) { actions.deleteClips(targetIDs, true) }
             .keyboardShortcut(.delete, modifiers: .shift)
+        // 재생 헤드가 클립 위에 없으면 나눌 곳이 없다.
         Button(ShortcutGuide.splitAtPlayhead.title) { actions.splitClips(targetIDs) }
             .keyboardShortcut("b", modifiers: .command)
+            .disabled(!canSplit)
         Divider()
         Button("미리보기에서 원본 열기") { actions.openAsset(clip.assetID) }
         Button("미디어 패널에서 원본 보기") { actions.revealAsset(clip.assetID) }
+    }
+}
+
+/// 끄는 클립·원본이 들어갈 자리. 앞쪽 끝에 삽입선을 함께 그린다.
+private struct PlaceholderView: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: ClipViewMetrics.cornerRadius)
+            .fill(Color.accentColor.opacity(0.15))
+            .overlay {
+                RoundedRectangle(cornerRadius: ClipViewMetrics.cornerRadius)
+                    .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [4, 3]))
+            }
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(Color.accentColor)
+                    .frame(width: 2)
+                    .padding(.vertical, -TimelineMetrics.clipVerticalInset)
+            }
     }
 }

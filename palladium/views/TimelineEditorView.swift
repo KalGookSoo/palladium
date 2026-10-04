@@ -1,6 +1,6 @@
-import AppKit
 import CoreMedia
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum TimelineMetrics {
     static let rulerHeight = 24.0
@@ -14,11 +14,11 @@ enum TimelineMetrics {
 /// 타임라인에서 일어난 편집 요청. 실제 편집은 상위가 편집기(`ProjectEditor`) 커맨드로 한다.
 struct TimelineActions {
     /// 미디어 패널에서 원본을 끌어다 놓았을 때. 트랙이 `nil`이면 트랙 밖(빈 곳)에 놓은 것이다.
-    var dropAsset: (MediaAsset.ID, Track.ID?, CMTime, PlacementMode) -> Void = { _, _, _, _ in }
-    var moveClip: (Clip.ID, Track.ID, CMTime, PlacementMode) -> Void = { _, _, _, _ in }
+    var dropAsset: (MediaAsset.ID, Track.ID?, CMTime) -> Void = { _, _, _ in }
+    var moveClip: (Clip.ID, Track.ID, CMTime) -> Void = { _, _, _ in }
     /// 두 번째 값이 `true`면 리플 삭제.
     var deleteClips: (Set<Clip.ID>, Bool) -> Void = { _, _ in }
-    /// 재생 헤드에서 자른다. 비어 있으면 재생 헤드에 걸친 모든 클립을 자른다.
+    /// 재생 헤드에서 나눈다. 비어 있으면 재생 헤드에 걸친 모든 클립을 나눈다.
     var splitClips: (Set<Clip.ID>) -> Void = { _ in }
     var openAsset: (MediaAsset.ID) -> Void = { _ in }
     var revealAsset: (MediaAsset.ID) -> Void = { _ in }
@@ -28,9 +28,13 @@ struct TimelineActions {
     var deleteSequence: (EditSequence.ID) -> Void = { _ in }
 }
 
-/// ⌘를 누른 채 놓거나 옮기면 덮어쓰기, 아니면 삽입이다.
-func currentPlacementMode() -> PlacementMode {
-    NSEvent.modifierFlags.contains(.command) ? .overwrite : .insert
+/// 끄는 중인 편집의 미리보기. 손을 떼기 전에 결과(들어갈 자리와 뒤로 밀린 클립)를 보여준다.
+private struct DragPreview {
+    /// 놓았을 때의 시퀀스. 옮기는 클립·새 클립은 `placeholderID`로 찾는다.
+    let sequence: EditSequence
+    let placeholderID: Clip.ID
+    let trackID: Track.ID
+    let time: CMTime
 }
 
 /// SwiftUI의 `TimelineView`(일정 주기로 다시 그리는 View)와 이름이 겹치지 않도록 `TimelineEditorView`로 짓는다.
@@ -43,11 +47,23 @@ struct TimelineEditorView: View {
     @Binding var selectedClipIDs: Set<Clip.ID>
     @Binding var playheadTime: CMTime
     @Binding var scale: TimelineScale
+    /// 끄는 중이면 `true`. 상위가 Esc로 끌기를 취소할지 정하는 데 쓴다.
+    @Binding var isDragging: Bool
+    /// 값이 바뀌면 끄는 중인 편집을 취소한다(Esc).
+    var dragCancelCount = 0
     var actions = TimelineActions()
+    @AppStorage(AppPreferences.timelineShowsFilmstripKey) private var showsFilmstrip = true
+    @AppStorage(AppPreferences.timelineShowsWaveformKey) private var showsWaveform = true
     @State private var pinchStartScale: TimelineScale?
     @State private var isRenamingSequence = false
     @State private var sequenceNameText = ""
     @State private var isConfirmingSequenceDeletion = false
+    @State private var dragPreview: DragPreview?
+    /// 타임라인 안에서 끄는 클립과 끈 거리. 원래 행에서 포인터를 따라 반투명하게 그린다.
+    @State private var draggedClip: (clip: Clip, translation: CGSize)?
+    /// 미디어 패널에서 끌어와 타임라인 위에 있는 원본.
+    @State private var hoveringAssetID: MediaAsset.ID?
+    @State private var isDragCancelled = false
 
     var body: some View {
         let paddedDuration = sequence.duration + CMTime(seconds: TimelineMetrics.trailingPaddingSeconds, preferredTimescale: standardTimescale)
@@ -64,6 +80,7 @@ struct TimelineEditorView: View {
             HStack {
                 sequenceMenu
                 Spacer()
+                displayMenu
                 Button {
                     scale = scale.zoomedOut
                 } label: {
@@ -87,7 +104,7 @@ struct TimelineEditorView: View {
 
             Divider()
 
-            if sequence.tracks.allSatisfy(\.clips.isEmpty) {
+            if sequence.tracks.allSatisfy(\.clips.isEmpty), dragPreview == nil {
                 // 빈 타임라인은 "무엇을 하면 되는지"를 안내한다. 원본이 없으면 가져오기부터 안내한다.
                 Group {
                     if assets.isEmpty {
@@ -108,13 +125,19 @@ struct TimelineEditorView: View {
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
                 .dropDestination(for: String.self) { items, _ in
-                    handleDrop(items, trackID: nil, time: .zero)
+                    guard let assetID = items.compactMap(UUID.init(uuidString:)).first else { return false }
+                    actions.dropAsset(assetID, nil, .zero)
+                    return true
                 }
             } else {
                 timelineContent(contentWidth: contentWidth)
             }
         }
         .simultaneousGesture(pinch)
+        .onChange(of: dragCancelCount) {
+            isDragCancelled = draggedClip != nil
+            clearDrag()
+        }
         .alert("시퀀스 이름 변경", isPresented: $isRenamingSequence) {
             TextField("시퀀스 이름", text: $sequenceNameText)
             Button("변경") { actions.renameSequence(sequence.id, sequenceNameText) }
@@ -160,9 +183,25 @@ struct TimelineEditorView: View {
         .help("시퀀스 — 바꾸기·새로 만들기·이름 변경·삭제")
     }
 
+    /// 클립 안에 무엇을 그릴지 고른다. 그림이 있는 클립에는 필름스트립을, 소리가 있는 클립에는 파형을 그린다.
+    private var displayMenu: some View {
+        Menu {
+            Toggle(ShortcutGuide.toggleFilmstrip.title, isOn: $showsFilmstrip)
+            Toggle(ShortcutGuide.toggleWaveform.title, isOn: $showsWaveform)
+        } label: {
+            Label("클립 보기", systemImage: "rectangle.split.3x1")
+        }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("클립 보기 — 필름스트립·오디오 파형을 켜고 끕니다")
+    }
+
     private func timelineContent(contentWidth: Double) -> some View {
-        HStack(alignment: .top, spacing: 0) {
-            TrackHeaderColumn(tracks: sequence.tracks)
+        let shownSequence = dragPreview?.sequence ?? sequence
+
+        return HStack(alignment: .top, spacing: 0) {
+            TrackHeaderColumn(tracks: shownSequence.tracks)
             Divider()
             ScrollView(.horizontal) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -172,30 +211,22 @@ struct TimelineEditorView: View {
                         markers: sequence.markers,
                         playheadTime: $playheadTime
                     )
-                    ForEach(Array(sequence.tracks.enumerated()), id: \.element.id) { index, track in
-                        TrackRowView(
-                            track: track,
-                            assets: assets,
-                            scale: scale,
-                            selectedClipIDs: $selectedClipIDs,
-                            actions: actions
-                        ) { clip, translation in
-                            moveClip(clip, fromTrackAt: index, by: translation)
-                        }
+                    ForEach(Array(shownSequence.tracks.enumerated()), id: \.element.id) { index, track in
+                        trackRow(track, at: index)
                     }
                 }
                 // 내용이 패널 높이를 채워야 가로 스크롤바가 마지막 트랙 위가 아니라 패널 바닥에 놓인다.
                 .frame(width: contentWidth, alignment: .leading)
                 .frame(maxHeight: .infinity, alignment: .top)
+                .animation(.easeOut(duration: 0.15), value: dragPreview?.time)
                 // 놓은 높이로 트랙을, 가로 위치로 시각을 정한다. 트랙 아래 빈 곳에 놓으면 새 트랙을 만든다.
                 .contentShape(Rectangle())
-                .dropDestination(for: String.self) { items, location in
-                    let trackIndex = Int(((location.y - TimelineMetrics.rulerHeight) / TimelineMetrics.trackHeight).rounded(.down))
-                    let trackID = sequence.tracks.indices.contains(trackIndex) ? sequence.tracks[trackIndex].id : nil
-                    // 10pt 안의 클립 경계나 0초에 붙여 클립 사이에 틈이 생기지 않게 한다.
-                    let time = sequence.snappedTime(scale.time(forX: location.x), tolerance: scale.time(forX: 10))
-                    return handleDrop(items, trackID: trackID, time: time)
-                }
+                .onDrop(of: [.utf8PlainText, .plainText], delegate: AssetDropDelegate(
+                    loadAssetID: { hoveringAssetID = $0 },
+                    update: { location in previewAssetDrop(at: location) },
+                    exit: clearDrag,
+                    perform: { location in performAssetDrop(at: location) }
+                ))
                 .overlay(alignment: .topLeading) {
                     PlayheadView()
                         .offset(x: scale.x(for: playheadTime) - 1)
@@ -206,20 +237,131 @@ struct TimelineEditorView: View {
         .frame(maxHeight: .infinity)
     }
 
-    /// 미디어 패널은 원본 ID를 문자열로 끌어 보낸다.
-    private func handleDrop(_ items: [String], trackID: Track.ID?, time: CMTime) -> Bool {
-        let assetIDs = items.compactMap(UUID.init(uuidString:))
-        guard let assetID = assetIDs.first else { return false }
-        actions.dropAsset(assetID, trackID, time, currentPlacementMode())
-        return true
+    /// 원래 시퀀스에서 끄는 클립은 원래 행에 반투명하게 남겨 끌기 제스처를 이어 가고,
+    /// 나머지 클립은 미리보기 위치(뒤로 밀린 자리)에 그린다. 들어갈 자리는 강조 테두리로 보여준다.
+    private func trackRow(_ track: Track, at index: Int) -> some View {
+        let placeholder = dragPreview.flatMap { preview in
+            preview.trackID == track.id ? preview.sequence.clip(id: preview.placeholderID) : nil
+        }
+        var shownTrack = track
+        shownTrack.clips.removeAll { $0.id == dragPreview?.placeholderID }
+        let ghost = draggedClip.flatMap { dragged in sequence.trackID(containing: dragged.clip.id) == track.id ? dragged : nil }
+        let sourceIndex = sequence.tracks.firstIndex { $0.id == track.id } ?? index
+
+        return TrackRowView(
+            track: shownTrack,
+            assets: assets,
+            scale: scale,
+            playheadTime: playheadTime,
+            showsFilmstrip: showsFilmstrip,
+            showsWaveform: showsWaveform,
+            selectedClipIDs: $selectedClipIDs,
+            actions: actions,
+            ghost: ghost,
+            placeholder: placeholder,
+            dragChanged: { clip, translation in previewClipMove(clip, fromTrackAt: sourceIndex, by: translation) },
+            dragEnded: { clip, translation in endClipMove(clip, fromTrackAt: sourceIndex, by: translation) }
+        )
+    }
+
+    // MARK: - Drag
+
+    /// 끄는 동안 자석처럼 붙인 시작 시각. 클립의 앞뒤 끝이 10pt 안의 클립 경계·재생 헤드·0초에 붙는다.
+    private func snappedStart(_ start: CMTime, duration: CMTime, excluding clipID: Clip.ID?) -> CMTime {
+        sequence.snappedStart(start, duration: duration, tolerance: scale.time(forX: 10), excluding: clipID, extraEdges: [playheadTime])
     }
 
     /// 끈 거리만큼 시각을, 트랙 높이 단위로 트랙을 바꾼다. 트랙 밖으로 끌면 맨 위·아래 트랙에 놓는다.
-    private func moveClip(_ clip: Clip, fromTrackAt trackIndex: Int, by translation: CGSize) {
+    private func clipMoveTarget(_ clip: Clip, fromTrackAt trackIndex: Int, by translation: CGSize) -> (trackID: Track.ID, time: CMTime) {
         let targetIndex = min(max(trackIndex + Int((translation.height / TimelineMetrics.trackHeight).rounded()), 0), sequence.tracks.count - 1)
         let movedStart = scale.time(forX: scale.x(for: clip.timelineStart) + translation.width)
-        let time = sequence.snappedTime(movedStart, tolerance: scale.time(forX: 10), excluding: clip.id)
-        actions.moveClip(clip.id, sequence.tracks[targetIndex].id, time, currentPlacementMode())
+        return (sequence.tracks[targetIndex].id, snappedStart(movedStart, duration: clip.sourceRange.duration, excluding: clip.id))
+    }
+
+    private func previewClipMove(_ clip: Clip, fromTrackAt trackIndex: Int, by translation: CGSize) {
+        guard !isDragCancelled else { return }
+        isDragging = true
+        draggedClip = (clip, translation)
+        let target = clipMoveTarget(clip, fromTrackAt: trackIndex, by: translation)
+        var preview = sequence
+        preview.moveClip(clip.id, toTrack: target.trackID, at: target.time)
+        dragPreview = DragPreview(sequence: preview, placeholderID: clip.id, trackID: target.trackID, time: target.time)
+    }
+
+    private func endClipMove(_ clip: Clip, fromTrackAt trackIndex: Int, by translation: CGSize) {
+        defer {
+            isDragCancelled = false
+            clearDrag()
+        }
+        guard !isDragCancelled else { return }
+        let target = clipMoveTarget(clip, fromTrackAt: trackIndex, by: translation)
+        actions.moveClip(clip.id, target.trackID, target.time)
+    }
+
+    /// 놓을 트랙(없으면 `nil` — 새 트랙)과 시각. 원본 종류와 다른 트랙이면 새 트랙이 된다.
+    private func assetDropTarget(at location: CGPoint, asset: MediaAsset) -> (trackID: Track.ID?, time: CMTime) {
+        let trackIndex = Int(((location.y - TimelineMetrics.rulerHeight) / TimelineMetrics.trackHeight).rounded(.down))
+        let track = sequence.tracks.indices.contains(trackIndex) ? sequence.tracks[trackIndex] : nil
+        let trackID = track?.kind == asset.trackKind ? track?.id : nil
+        return (trackID, snappedStart(scale.time(forX: location.x), duration: asset.placementDuration, excluding: nil))
+    }
+
+    private func previewAssetDrop(at location: CGPoint) {
+        guard let asset = assets.first(where: { $0.id == hoveringAssetID }) else { return }
+        let target = assetDropTarget(at: location, asset: asset)
+        guard let clip = asset.makeClip(at: target.time) else { return }
+        var preview = sequence
+        let trackID = target.trackID ?? preview.addTrack(kind: asset.trackKind)
+        preview.place(clip, onTrack: trackID)
+        isDragging = true
+        dragPreview = DragPreview(sequence: preview, placeholderID: clip.id, trackID: trackID, time: target.time)
+    }
+
+    private func performAssetDrop(at location: CGPoint) -> Bool {
+        defer { clearDrag() }
+        guard let asset = assets.first(where: { $0.id == hoveringAssetID }) else { return false }
+        let target = assetDropTarget(at: location, asset: asset)
+        actions.dropAsset(asset.id, target.trackID, target.time)
+        return true
+    }
+
+    private func clearDrag() {
+        dragPreview = nil
+        draggedClip = nil
+        hoveringAssetID = nil
+        isDragging = false
+    }
+}
+
+/// 미디어 패널에서 끌어온 원본(문자열로 된 원본 ID)을 받는다. 끄는 동안 위치를 알려 들어갈 자리를 미리 보여준다.
+private struct AssetDropDelegate: DropDelegate {
+    let loadAssetID: (MediaAsset.ID) -> Void
+    let update: (CGPoint) -> Void
+    let exit: () -> Void
+    let perform: (CGPoint) -> Bool
+
+    func dropEntered(info: DropInfo) {
+        guard let provider = info.itemProviders(for: [.utf8PlainText, .plainText]).first else { return }
+        _ = provider.loadObject(ofClass: NSString.self) { object, _ in
+            guard let text = object as? String, let assetID = UUID(uuidString: text) else { return }
+            DispatchQueue.main.async {
+                loadAssetID(assetID)
+                update(info.location)
+            }
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        update(info.location)
+        return DropProposal(operation: .copy)
+    }
+
+    func dropExited(info _: DropInfo) {
+        exit()
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        perform(info.location)
     }
 }
 
@@ -258,7 +400,8 @@ private struct TrackHeaderColumn: View {
         assets: SampleData.project.assets,
         selectedClipIDs: $selectedClipIDs,
         playheadTime: $playheadTime,
-        scale: $scale
+        scale: $scale,
+        isDragging: .constant(false)
     )
     .frame(width: 700, height: 240)
 }
@@ -273,7 +416,8 @@ private struct TrackHeaderColumn: View {
         assets: [],
         selectedClipIDs: $selectedClipIDs,
         playheadTime: $playheadTime,
-        scale: $scale
+        scale: $scale,
+        isDragging: .constant(false)
     )
     .frame(width: 700, height: 240)
 }
@@ -288,7 +432,8 @@ private struct TrackHeaderColumn: View {
         assets: SampleData.project.assets,
         selectedClipIDs: $selectedClipIDs,
         playheadTime: $playheadTime,
-        scale: $scale
+        scale: $scale,
+        isDragging: .constant(false)
     )
     .frame(width: 700, height: 240)
 }
