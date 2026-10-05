@@ -319,8 +319,8 @@ struct TimelineEditorView: View {
                         setRange: actions.setMaskRange,
                         delete: actions.deleteMask
                     )
-                    ForEach(Array(shownSequence.tracks.enumerated()), id: \.element.id) { index, track in
-                        trackRow(track, at: index)
+                    ForEach(shownSequence.tracks) { track in
+                        trackRow(track)
                     }
                 }
                 // 내용이 패널 높이를 채워야 가로 스크롤바가 마지막 트랙 위가 아니라 패널 바닥에 놓인다.
@@ -347,7 +347,7 @@ struct TimelineEditorView: View {
 
     /// 원래 시퀀스에서 끄는 클립은 원래 행에 반투명하게 남겨 끌기 제스처를 이어 가고,
     /// 나머지 클립은 미리보기 위치(뒤로 밀린 자리)에 그린다. 들어갈 자리는 강조 테두리로 보여준다.
-    private func trackRow(_ track: Track, at index: Int) -> some View {
+    private func trackRow(_ track: Track) -> some View {
         let placeholder = dragPreview.flatMap { preview in
             preview.showsPlaceholder && preview.trackID == track.id ? preview.sequence.clip(id: preview.placeholderID) : nil
         }
@@ -356,7 +356,12 @@ struct TimelineEditorView: View {
             shownTrack.clips.removeAll { $0.id == dragPreview?.placeholderID }
         }
         let ghost = draggedClip.flatMap { dragged in sequence.trackID(containing: dragged.clip.id) == track.id ? dragged : nil }
-        let sourceIndex = sequence.tracks.firstIndex { $0.id == track.id } ?? index
+        // 끄던 클립은 원래 행·자리에 보이지 않게 남겨 둔다. 끌기 제스처가 붙은 뷰가 사라지면 제스처가 끊겨 끌기가 끝나지 않기 때문이다.
+        var hiddenClipID: Clip.ID?
+        if let ghost, dragPreview?.showsPlaceholder == true {
+            hiddenClipID = ghost.clip.id
+            shownTrack.clips.append(ghost.clip)
+        }
 
         return TrackRowView(
             track: shownTrack,
@@ -369,10 +374,12 @@ struct TimelineEditorView: View {
             actions: actions,
             ghost: ghost,
             placeholder: placeholder,
-            dragChanged: { clip, translation in previewClipMove(clip, fromTrackAt: sourceIndex, by: translation) },
-            dragEnded: { clip, translation in endClipMove(clip, fromTrackAt: sourceIndex, by: translation) },
+            hiddenClipID: hiddenClipID,
+            dragChanged: { clip, translation in previewClipMove(clip, by: translation) },
+            dragEnded: { clip, translation in endClipMove(clip, by: translation) },
             trimChanged: { clip, edge, distance in previewTrim(clip, edge: edge, by: distance) },
-            trimEnded: { clip, edge, distance in endTrim(clip, edge: edge, by: distance) }
+            trimEnded: { clip, edge, distance in endTrim(clip, edge: edge, by: distance) },
+            dragFinished: finishDrag
         )
     }
 
@@ -383,11 +390,12 @@ struct TimelineEditorView: View {
         sequence.snappedStart(start, duration: duration, tolerance: scale.time(forX: 10), excluding: clipID, extraEdges: [playheadTime])
     }
 
-    /// 끈 거리만큼 시각을, 트랙 높이 단위로 트랙을 바꾼다. 트랙 밖으로 끌면 맨 위·아래 트랙에 놓는다.
-    private func clipMoveTarget(_ clip: Clip, fromTrackAt trackIndex: Int, by translation: CGSize) -> (trackID: Track.ID, time: CMTime) {
-        let targetIndex = min(max(trackIndex + Int((translation.height / TimelineMetrics.trackHeight).rounded()), 0), sequence.tracks.count - 1)
+    /// 끈 거리만큼 시각을, 트랙 높이 단위로 트랙을 바꾼다. 트랙 밖이나 종류가 다른 트랙으로 끌면 놓을 곳이 없어 `nil`이다.
+    private func clipMoveTarget(_ clip: Clip, by translation: CGSize) -> (trackID: Track.ID, time: CMTime)? {
+        let rowOffset = Int((translation.height / TimelineMetrics.trackHeight).rounded())
+        guard let trackID = sequence.trackID(forMoving: clip.id, byRows: rowOffset) else { return nil }
         let movedStart = scale.time(forX: scale.x(for: clip.timelineStart) + translation.width)
-        return (sequence.tracks[targetIndex].id, snappedStart(movedStart, duration: clip.timelineDuration, excluding: clip.id))
+        return (trackID, snappedStart(movedStart, duration: clip.timelineDuration, excluding: clip.id))
     }
 
     /// 클립 몸통을 끌 때의 편집. ⌘는 슬립, ⇧는 슬라이드, 아니면 옮기기다(#58).
@@ -430,7 +438,7 @@ struct TimelineEditorView: View {
         dragPreview = DragPreview(sequence: preview, placeholderID: clip.id, trackID: trackID, time: delta, showsPlaceholder: false)
     }
 
-    private func previewClipMove(_ clip: Clip, fromTrackAt trackIndex: Int, by translation: CGSize) {
+    private func previewClipMove(_ clip: Clip, by translation: CGSize) {
         guard !isDragCancelled else { return }
         let mode = bodyDragMode
         guard mode == .move else {
@@ -439,7 +447,11 @@ struct TimelineEditorView: View {
         }
         isDragging = true
         draggedClip = (clip, translation)
-        let target = clipMoveTarget(clip, fromTrackAt: trackIndex, by: translation)
+        // 놓을 곳이 없으면 미리보기를 거둬 클립이 원래 자리에 보이게 한다(놓으면 아무것도 바뀌지 않는다).
+        guard let target = clipMoveTarget(clip, by: translation) else {
+            dragPreview = nil
+            return
+        }
         // 놓을 트랙·시각이 그대로면 미리보기를 다시 만들지 않는다(마우스가 움직일 때마다 클립 내용을 다시 그리지 않기 위함).
         guard dragPreview?.trackID != target.trackID || dragPreview?.time != target.time else { return }
         var preview = sequence
@@ -447,7 +459,7 @@ struct TimelineEditorView: View {
         dragPreview = DragPreview(sequence: preview, placeholderID: clip.id, trackID: target.trackID, time: target.time)
     }
 
-    private func endClipMove(_ clip: Clip, fromTrackAt trackIndex: Int, by translation: CGSize) {
+    private func endClipMove(_ clip: Clip, by translation: CGSize) {
         defer {
             isDragCancelled = false
             clearDrag()
@@ -459,8 +471,9 @@ struct TimelineEditorView: View {
         case .slide:
             actions.slideClip(clip.id, dragDelta(translation.width))
         case .move:
-            let target = clipMoveTarget(clip, fromTrackAt: trackIndex, by: translation)
-            actions.moveClip(clip.id, target.trackID, target.time)
+            if let target = clipMoveTarget(clip, by: translation) {
+                actions.moveClip(clip.id, target.trackID, target.time)
+            }
         }
     }
 
@@ -533,6 +546,16 @@ struct TimelineEditorView: View {
         let target = assetDropTarget(at: location, asset: asset)
         actions.dropAsset(asset.id, target.trackID, target.time)
         return true
+    }
+
+    /// 끌기 제스처가 끝났거나 중간에 끊겼을 때(놓기 처리가 불리지 않는 경우 포함) 미리보기를 거둬 원래대로 돌린다.
+    /// 놓기 처리가 먼저 끝나도록 한 박자 뒤에 정리한다.
+    private func finishDrag() {
+        DispatchQueue.main.async {
+            guard hoveringAssetID == nil else { return }
+            isDragCancelled = false
+            clearDrag()
+        }
     }
 
     private func clearDrag() {

@@ -15,12 +15,17 @@ struct TrackRowView: View {
     let ghost: (clip: Clip, translation: CGSize)?
     /// 끄는 중인 클립·원본이 들어갈 자리. 강조 테두리와 삽입선으로 보여준다.
     let placeholder: Clip?
+    /// 끄는 중이라 원래 자리에 보이지 않게 남겨 둔 클립(끌기 제스처를 이어 가기 위함).
+    var hiddenClipID: Clip.ID?
     /// 끄는 동안과 놓았을 때 끈 거리와 함께 부른다. 시각·트랙 계산은 상위가 한다.
     let dragChanged: (Clip, CGSize) -> Void
     let dragEnded: (Clip, CGSize) -> Void
     /// 클립 끝을 끄는 동안과 놓았을 때 가로로 끈 거리와 함께 부른다(트림).
     let trimChanged: (Clip, ClipEdge, Double) -> Void
     let trimEnded: (Clip, ClipEdge, Double) -> Void
+    /// 끌기 제스처가 끝나거나 끊길 때 부른다. 끊긴 끌기도 원래대로 돌리기 위함이다.
+    var dragFinished: () -> Void = {}
+    @GestureState private var isPointerDragging = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -32,10 +37,11 @@ struct TrackRowView: View {
             ForEach(track.clips) { clip in
                 clipView(clip, offset: .zero)
                     .overlay(alignment: .topLeading) { trimHandles(for: clip) }
+                    .opacity(clip.id == hiddenClipID ? 0 : 1)
             }
 
             // 컷 지점을 가운데 둔 전환 구간. 영상 전환은 띠로, 오디오 크로스페이드는 아래쪽 막대로 보여준다.
-            ForEach(track.clips) { clip in
+            ForEach(track.clips.filter { $0.id != hiddenClipID }) { clip in
                 transitionMarks(for: clip)
             }
             .allowsHitTesting(false)
@@ -54,6 +60,11 @@ struct TrackRowView: View {
             }
         }
         .frame(height: TimelineMetrics.trackHeight)
+        .onChange(of: isPointerDragging) {
+            if !isPointerDragging {
+                dragFinished()
+            }
+        }
     }
 
     private var clipHeight: Double {
@@ -76,6 +87,7 @@ struct TrackRowView: View {
         .onTapGesture { select(clip) }
         .gesture(
             DragGesture(minimumDistance: 3)
+                .updating($isPointerDragging) { _, isDragging, _ in isDragging = true }
                 .onChanged { value in dragChanged(clip, value.translation) }
                 .onEnded { value in dragEnded(clip, value.translation) }
         )
@@ -128,6 +140,7 @@ struct TrackRowView: View {
             .pointerStyle(.columnResize)
             .highPriorityGesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .updating($isPointerDragging) { _, isDragging, _ in isDragging = true }
                     .onChanged { value in trimChanged(clip, edge, value.translation.width) }
                     .onEnded { value in trimEnded(clip, edge, value.translation.width) }
             )

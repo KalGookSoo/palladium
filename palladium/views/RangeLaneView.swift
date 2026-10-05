@@ -28,6 +28,8 @@ struct RangeLaneView: View {
     private static let minimumDuration = CMTime(value: 1, timescale: 10)
     /// 끄는 중인 블록과 끄는 동안의 구간. 손을 떼면 편집기에 반영한다.
     @State private var dragging: (id: UUID, range: CMTimeRange)?
+    /// 끌기 제스처가 끊겨 놓기 처리가 불리지 않아도 미리보기를 거두기 위함이다.
+    @GestureState private var isPointerDragging = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -45,6 +47,11 @@ struct RangeLaneView: View {
         }
         .frame(height: TimelineMetrics.rangeLaneHeight)
         .background(.quaternary.opacity(0.4))
+        .onChange(of: isPointerDragging) {
+            if !isPointerDragging {
+                dragging = nil
+            }
+        }
         .help(helpText)
     }
 
@@ -73,6 +80,7 @@ struct RangeLaneView: View {
             .onTapGesture { selectedID = item.id }
             .gesture(
                 DragGesture(minimumDistance: 3)
+                    .updating($isPointerDragging) { _, isDragging, _ in isDragging = true }
                     .onChanged { value in preview(item, edge: nil, distance: value.translation.width) }
                     .onEnded { value in commit(item, edge: nil, distance: value.translation.width) }
             )
@@ -92,6 +100,7 @@ struct RangeLaneView: View {
             .pointerStyle(.columnResize)
             .highPriorityGesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .updating($isPointerDragging) { _, isDragging, _ in isDragging = true }
                     .onChanged { value in preview(item, edge: edge, distance: value.translation.width) }
                     .onEnded { value in commit(item, edge: edge, distance: value.translation.width) }
             )

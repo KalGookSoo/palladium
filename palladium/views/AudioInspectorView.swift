@@ -35,7 +35,7 @@ struct AudioInspectorView: View {
                     Text("음량")
                 }
             } footer: {
-                Text("결과물(미리보기·내보내기)에 들어가는 이 클립의 소리입니다. 영상 클립은 영상에 담긴 소리입니다. 지금 듣는 소리만 바꾸려면 미리보기 오른쪽 아래 음량을 쓰세요.")
+                Text("결과물(미리보기·내보내기)에 들어가는 이 클립의 소리입니다. 영상 클립은 영상에 담긴 소리입니다. 영상 소리를 줄이면 배경음악이 상대적으로 크게 들립니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

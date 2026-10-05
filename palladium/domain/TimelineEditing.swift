@@ -240,6 +240,15 @@ nonisolated extension EditSequence {
         tracks.removeAll { $0.id == trackID && $0.clips.isEmpty }
     }
 
+    /// 클립을 지금 행에서 `rowOffset`행 위(-)·아래(+)로 끌어 놓을 트랙. 트랙 밖(위쪽 레인, 마지막 트랙 아래)이거나
+    /// 종류가 다른 트랙이면 놓을 곳이 없어 `nil`이다 — 그때는 아무것도 바꾸지 않는다.
+    func trackID(forMoving clipID: Clip.ID, byRows rowOffset: Int) -> Track.ID? {
+        guard let sourceIndex = tracks.firstIndex(where: { $0.clips.contains { $0.id == clipID } }) else { return nil }
+        let targetIndex = sourceIndex + rowOffset
+        guard tracks.indices.contains(targetIndex), tracks[targetIndex].kind == tracks[sourceIndex].kind else { return nil }
+        return tracks[targetIndex].id
+    }
+
     /// `rowIndex`번째 행에 가장 가까운 `kind` 트랙. 그런 트랙이 없으면 `nil`.
     /// 놓는 위치가 트랙 사이나 아래 빈 곳이어도 새 트랙을 만들지 않고 가까운 트랙에 넣기 위함이다.
     func nearestTrackID(kind: TrackKind, toRow rowIndex: Int) -> Track.ID? {

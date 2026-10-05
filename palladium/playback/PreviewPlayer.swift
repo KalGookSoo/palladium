@@ -16,10 +16,8 @@ final class PreviewPlayer {
     private(set) var loadState: LoadState = .empty
     private(set) var currentTime: CMTime = .zero
     private(set) var isPlaying = false
-    /// 미리보기에서 듣는 소리 크기(0~1). 결과물에는 영향이 없고 저장하지 않는다(#44).
-    private(set) var volume: Float = 1
-    private(set) var isMuted = false
-    /// 내레이션을 녹음하는 동안 스피커 소리가 마이크로 들어가지 않게 사용자 음소거와 별도로 끈다(#10).
+    /// 내레이션을 녹음하는 동안 스피커 소리가 마이크로 들어가지 않게 끈다(#10).
+    /// 듣는 소리 크기는 Mac의 음량으로 바꾸고, 결과물 음량은 클립·트랙 음량으로 정한다.
     private(set) var isMutedForRecording = false
 
     @ObservationIgnored private var timeObserver: Any?
@@ -78,24 +76,9 @@ final class PreviewPlayer {
         isPlaying = player.rate != 0
     }
 
-    /// 0~1 밖의 값은 가장 가까운 값으로 맞춘다. 음량을 올리면 음소거를 푼다.
-    func setVolume(_ newVolume: Float) {
-        volume = min(max(newVolume, 0), 1)
-        player.volume = volume
-        if volume > 0, isMuted {
-            isMuted = false
-            player.isMuted = isMutedForRecording
-        }
-    }
-
-    func toggleMute() {
-        isMuted.toggle()
-        player.isMuted = isMuted || isMutedForRecording
-    }
-
     func setMutedForRecording(_ muted: Bool) {
         isMutedForRecording = muted
-        player.isMuted = isMuted || muted
+        player.isMuted = muted
     }
 
     func play() {

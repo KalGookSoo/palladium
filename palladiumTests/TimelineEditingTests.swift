@@ -451,6 +451,29 @@ struct SpeedTests {
     }
 }
 
+struct ClipMoveTargetTests {
+    @Test("클립을 위아래로 끌면 같은 종류 트랙에만 놓고, 트랙 밖이나 다른 종류 트랙이면 놓을 곳이 없다")
+    func moveTargetRows() throws {
+        let assetID = UUID()
+        let range = CMTimeRange(start: .zero, duration: CMTime(value: 1, timescale: 1))
+        let clip = try #require(Clip(assetID: assetID, sourceRange: range, timelineStart: .zero))
+        let upper = Track(id: UUID(), kind: .video, clips: [])
+        let main = Track(id: UUID(), kind: .video, clips: [clip])
+        let audio = Track(id: UUID(), kind: .audio, clips: [])
+        let sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [upper, main, audio])
+
+        #expect(sequence.trackID(forMoving: clip.id, byRows: 0) == main.id)
+        #expect(sequence.trackID(forMoving: clip.id, byRows: -1) == upper.id)
+        // 위쪽 레인(자막·마스크)·눈금자로 끌면 트랙 밖이다.
+        #expect(sequence.trackID(forMoving: clip.id, byRows: -2) == nil)
+        // 영상 클립을 오디오 트랙으로 끌면 놓을 곳이 없다.
+        #expect(sequence.trackID(forMoving: clip.id, byRows: 1) == nil)
+        // 마지막 트랙 아래 빈 곳.
+        #expect(sequence.trackID(forMoving: clip.id, byRows: 3) == nil)
+        #expect(sequence.trackID(forMoving: UUID(), byRows: 0) == nil)
+    }
+}
+
 struct TrimTests {
     private let assetID = UUID()
 
