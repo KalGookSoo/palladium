@@ -39,7 +39,7 @@ nav_order: 2
 
 ## 관련 커맨드/쿼리
 
-- 커맨드(`ProjectEditor`): `trimClip(_:edge:by:)`(리플), `setClipSource(_:start:end:)`, `rollClip(_:edge:by:)`, `slipClip(_:by:)`, `slideClip(_:by:)`, `splitClips(_:at:)`
+- 커맨드(`ProjectEditor`): `trimClip(_:edge:by:)`(리플), `setClipSource(_:start:end:)`, `rollClip(_:edge:by:)`, `slipClip(_:by:)`, `slideClip(_:by:)`, `setClipSpeed(_:for:)`, `splitClips(_:at:)`
 - 쿼리: `sourceFrame(for:at:) -> CMTime`(Match Frame용), `trimmableRange(clip:) -> ClosedRange<CMTime>`
 
 ## 범위 조정
@@ -66,7 +66,17 @@ nav_order: 2
 - 셋 다 원본 범위를 넘지 않고 최소 한 프레임은 남기며(넘치는 만큼은 멈춘다), ⌥를 함께 누르면 정밀하게 움직인다. 끄는 동안 결과가 미리 보이고 Esc로 취소한다.
 - 커맨드(`ProjectEditor`): `rollClip(_:edge:by:)`, `slipClip(_:by:)`, `slideClip(_:by:)`.
 
+## 결정 사항(#58 재생 속도)
+
+- 인스펙터 트림 탭의 "재생 속도"로 25%·50%·100%·200%·400% 중 고른다(이미지 클립 제외). 타임라인 길이는 원본 구간 ÷ 속도이고, 길이가 바뀐 만큼 같은 트랙의 뒤 클립이 따라온다. 클립 이름 뒤에 "2×"처럼 배율을 보여준다.
+- 값을 이 다섯 개로 둔 이유: 600 단위 시각을 이 배율로 나눠도 1/60000초 단위에서 반올림이 생기지 않아, 나눈 조각·이웃 클립이 빈틈없이 맞닿는다(전환·롤·슬라이드가 맞닿음을 기준으로 한다).
+- 소리는 높낮이를 지킨다(`audioTimePitchAlgorithm = .spectral`, 미리보기·내보내기 모두). 피치 보정을 끄는 선택지는 두지 않았다.
+- 트림·롤·슬라이드에서 끈 거리는 타임라인 시간이고, 속도를 바꾼 클립은 원본에서 그 배율만큼 쓴다. 클립을 나누면 두 조각 모두 같은 속도를 가진다.
+- 속도를 바꾼 클립에 전환이 걸리면 원본 여분 대신 멈춘 프레임(소리는 무음)으로 채운다.
+- 역재생과 구간별 속도 변화(타임 리맵)는 아직 하지 않았다. 역재생은 프레임을 거꾸로 읽은 영상을 따로 만들어야 해서(AVComposition은 거꾸로 넣을 수 없다) 별도 작업으로 남긴다.
+- 커맨드(`ProjectEditor`): `setClipSpeed(_:for:)`.
+
 ## 미정 사항
 
 - 프레임 단위 정밀도 필요 여부(타임코드 표시 방식 포함)
-- 피치 보정 기본값(속도 변경 시 자동으로 피치를 보정할지)
+- 역재생(거꾸로 된 영상 생성)과 타임 리맵(구간별 속도)

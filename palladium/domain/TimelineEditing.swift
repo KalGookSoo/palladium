@@ -10,13 +10,14 @@ nonisolated extension Clip {
         let clippedStart = CMTimeMaximum(start, timelineStart)
         let clippedEnd = CMTimeMinimum(end, timelineRange.end)
         guard clippedStart < clippedEnd else { return nil }
-        let sourceStart = sourceRange.start + (clippedStart - timelineStart)
+        let sourceStart = sourceRange.start + sourceTime(forTimeline: clippedStart - timelineStart)
         var portion = Clip(
             id: id,
             assetID: assetID,
-            sourceRange: CMTimeRange(start: sourceStart, duration: clippedEnd - clippedStart),
+            sourceRange: CMTimeRange(start: sourceStart, duration: sourceTime(forTimeline: clippedEnd - clippedStart)),
             timelineStart: clippedStart
         )
+        portion?.speed = speed
         // 나눈 조각도 같은 위치·크기·불투명도·음량을 가진다.
         portion?.transform = transform
         portion?.volume = volume
@@ -39,7 +40,7 @@ nonisolated extension Track {
         guard let clip = clips.first(where: { $0.timelineStart < time && time < $0.timelineRange.end }) else {
             return CMTimeMaximum(time, .zero)
         }
-        let middle = clip.timelineStart + CMTimeMultiplyByRatio(clip.sourceRange.duration, multiplier: 1, divisor: 2)
+        let middle = clip.timelineStart + CMTimeMultiplyByRatio(clip.timelineDuration, multiplier: 1, divisor: 2)
         return time < middle ? clip.timelineStart : clip.timelineRange.end
     }
 
@@ -61,8 +62,9 @@ nonisolated extension Track {
     mutating func setSourceRange(_ range: CMTimeRange, forClip clipID: Clip.ID) {
         guard let index = clips.firstIndex(where: { $0.id == clipID }), range.duration > .zero else { return }
         let oldEnd = clips[index].timelineRange.end
-        let change = range.duration - clips[index].sourceRange.duration
+        let oldDuration = clips[index].timelineDuration
         clips[index].sourceRange = range
+        let change = clips[index].timelineDuration - oldDuration
         for other in clips.indices where other != index && clips[other].timelineStart >= oldEnd {
             clips[other].timelineStart = clips[other].timelineStart + change
         }
@@ -74,7 +76,7 @@ nonisolated extension Track {
         let removed = clips.remove(at: index)
         guard ripple else { return }
         for index in clips.indices where clips[index].timelineStart >= removed.timelineRange.end {
-            clips[index].timelineStart = clips[index].timelineStart - removed.sourceRange.duration
+            clips[index].timelineStart = clips[index].timelineStart - removed.timelineDuration
         }
     }
 
@@ -111,8 +113,10 @@ nonisolated extension Clip {
         return CMTimeRange(start: clampedStart, end: clampedEnd)
     }
 
-    /// 한쪽 끝을 `delta`만큼 옮긴 원본 구간. 앞 끝을 오른쪽(+)으로 옮기면 앞부분이 잘리고, 뒤 끝을 오른쪽으로 옮기면 길어진다.
-    func trimmedSourceRange(edge: ClipEdge, by delta: CMTime, sourceDuration: CMTime?) -> CMTimeRange {
+    /// 한쪽 끝을 타임라인 시간 `timelineDelta`만큼 옮긴 원본 구간. 앞 끝을 오른쪽(+)으로 옮기면 앞부분이 잘리고,
+    /// 뒤 끝을 오른쪽으로 옮기면 길어진다. 속도를 바꾼 클립은 원본에서 그만큼 더(덜) 쓴다.
+    func trimmedSourceRange(edge: ClipEdge, by timelineDelta: CMTime, sourceDuration: CMTime?) -> CMTimeRange {
+        let delta = sourceTime(forTimeline: timelineDelta)
         switch edge {
         case .start:
             if sourceDuration == nil {
@@ -183,6 +187,24 @@ nonisolated extension EditSequence {
 
     mutating func removeSubtitle(_ subtitleID: Subtitle.ID) {
         subtitles.removeAll { $0.id == subtitleID }
+    }
+
+    /// 클립 재생 속도를 바꾼다(#58). 타임라인 시작은 그대로 두고 길이가 바뀐 만큼 같은 트랙의 뒤 클립을 당기거나 민다.
+    /// `speedOptions`에 없는 값은 무시한다.
+    mutating func setSpeed(_ speed: Double, forClip clipID: Clip.ID) {
+        guard Clip.speedOptions.contains(speed),
+              let trackIndex = tracks.firstIndex(where: { $0.clips.contains { $0.id == clipID } }),
+              let clipIndex = tracks[trackIndex].clips.firstIndex(where: { $0.id == clipID })
+        else { return }
+        var track = tracks[trackIndex]
+        let oldEnd = track.clips[clipIndex].timelineRange.end
+        let oldDuration = track.clips[clipIndex].timelineDuration
+        track.clips[clipIndex].speed = speed
+        let change = track.clips[clipIndex].timelineDuration - oldDuration
+        for other in track.clips.indices where other != clipIndex && track.clips[other].timelineStart >= oldEnd {
+            track.clips[other].timelineStart = track.clips[other].timelineStart + change
+        }
+        tracks[trackIndex] = track
     }
 
     /// `range` 동안 비어 있는 첫 오디오 트랙. 녹음한 내레이션을 다른 클립을 밀지 않고 놓을 곳이다(#10).
@@ -291,7 +313,7 @@ nonisolated extension EditSequence {
         var destination = CMTimeMaximum(time, .zero)
         // 같은 트랙에서 뒤로 옮기면 틈을 메우며 당겨진 만큼 놓을 시각도 앞으로 온다.
         if trackID == sourceTrackID, destination >= clip.timelineRange.end {
-            destination = destination - clip.sourceRange.duration
+            destination = destination - clip.timelineDuration
         } else if trackID == sourceTrackID, destination > clip.timelineStart {
             destination = clip.timelineStart
         }

@@ -12,6 +12,7 @@ struct InspectorView: View {
     var setClipSource: (Clip.ID, CMTime, CMTime) -> Void = { _, _, _ in }
     var setTransform: (Clip.ID, ClipTransform) -> Void = { _, _ in }
     var setClipAudio: (Clip.ID, Double, Bool) -> Void = { _, _, _ in }
+    var setClipSpeed: (Clip.ID, Double) -> Void = { _, _ in }
     /// 고른 클립과 바로 앞 클립 사이 전환의 최대 길이. 맞닿은 앞 클립이 없으면 0이다.
     var maximumTransitionDuration = CMTime.zero
     var setTransition: (Clip.ID, ClipTransition?) -> Void = { _, _ in }
@@ -62,9 +63,12 @@ struct InspectorView: View {
 
                 switch selectedTab {
                 case .trim:
-                    TrimInspectorView(clip: clip, sourceDuration: asset?.trimmableDuration) { start, end in
-                        setClipSource(clip.id, start, end)
-                    }
+                    TrimInspectorView(
+                        clip: clip,
+                        sourceDuration: asset?.trimmableDuration,
+                        setSource: { start, end in setClipSource(clip.id, start, end) },
+                        setSpeed: asset?.kind == .image ? nil : { setClipSpeed(clip.id, $0) }
+                    )
                 case .audio:
                     if asset?.kind == .image {
                         ContentUnavailableView("이미지 클립", systemImage: "photo", description: Text("이미지 클립에는 소리가 없습니다"))
@@ -135,7 +139,7 @@ private struct InspectorHeader: View {
     let asset: MediaAsset?
 
     var body: some View {
-        let durationText = Duration.seconds(clip.sourceRange.duration.seconds).formatted(.time(pattern: .minuteSecond))
+        let durationText = Duration.seconds(clip.timelineDuration.seconds).formatted(.time(pattern: .minuteSecond))
 
         VStack(alignment: .leading) {
             Text(asset?.name ?? "알 수 없는 원본")

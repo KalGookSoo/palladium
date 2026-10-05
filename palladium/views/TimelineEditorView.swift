@@ -387,7 +387,7 @@ struct TimelineEditorView: View {
     private func clipMoveTarget(_ clip: Clip, fromTrackAt trackIndex: Int, by translation: CGSize) -> (trackID: Track.ID, time: CMTime) {
         let targetIndex = min(max(trackIndex + Int((translation.height / TimelineMetrics.trackHeight).rounded()), 0), sequence.tracks.count - 1)
         let movedStart = scale.time(forX: scale.x(for: clip.timelineStart) + translation.width)
-        return (sequence.tracks[targetIndex].id, snappedStart(movedStart, duration: clip.sourceRange.duration, excluding: clip.id))
+        return (sequence.tracks[targetIndex].id, snappedStart(movedStart, duration: clip.timelineDuration, excluding: clip.id))
     }
 
     /// 클립 몸통을 끌 때의 편집. ⌘는 슬립, ⇧는 슬라이드, 아니면 옮기기다(#58).

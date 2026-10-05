@@ -337,4 +337,32 @@ struct SequenceComposerTests {
         let outside = TestMedia.color(of: frame, atX: 0.1, y: 0.5)
         #expect(outside.red > 200 && outside.blue < 30)
     }
+
+    @Test("재생 속도를 바꾼 클립은 합성에서 그 길이만큼만 차지하고 뒤 클립이 이어진다")
+    func speedScalesComposition() async throws {
+        let redURL = try await TestMedia.makeVideo(red: 255, green: 0, blue: 0, seconds: 2)
+        let blueURL = try await TestMedia.makeVideo(red: 0, green: 0, blue: 255, seconds: 1)
+        let red = MediaAsset(id: UUID(), name: "red.mov", sourceURL: redURL, kind: .video, duration: seconds(2))
+        let blue = MediaAsset(id: UUID(), name: "blue.mov", sourceURL: blueURL, kind: .video, duration: seconds(1))
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let trackID = sequence.addTrack(kind: .video)
+        let redClip = try #require(red.makeClip(at: .zero))
+        sequence.place(redClip, onTrack: trackID)
+        try sequence.place(#require(blue.makeClip(at: seconds(2))), onTrack: trackID)
+        sequence.setSpeed(2, forClip: redClip.id)
+
+        let composition = try #require(await SequenceComposer.makeComposition(
+            sequence: sequence, assets: [red, blue], aspectRatio: .landscape16x9, resolveURL: \.sourceURL
+        ))
+        #expect(abs(composition.duration.seconds - 2) < 0.01)
+        #expect(abs(composition.asset.duration.seconds - 2) < 0.05)
+        let generator = AVAssetImageGenerator(asset: composition.asset)
+        generator.videoComposition = composition.videoComposition
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        let early = try await TestMedia.centerColor(of: generator.image(at: seconds(0.8)).image)
+        let late = try await TestMedia.centerColor(of: generator.image(at: seconds(1.5)).image)
+        #expect(early.red > 200 && early.blue < 60)
+        #expect(late.blue > 200 && late.red < 60)
+    }
 }

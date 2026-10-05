@@ -189,6 +189,7 @@ private extension ClipRecord {
         transitionDurationTimescale = clip.transitionIn?.duration.timescale ?? standardTimescale
         audioCrossfadeValue = clip.audioCrossfadeIn?.value
         audioCrossfadeTimescale = clip.audioCrossfadeIn?.timescale ?? standardTimescale
+        speed = clip.speed
         return self
     }
 
@@ -210,6 +211,7 @@ private extension ClipRecord {
             clip?.transitionIn = ClipTransition(kind: kind, duration: CMTime(value: transitionDurationValue, timescale: transitionDurationTimescale))
         }
         clip?.audioCrossfadeIn = audioCrossfadeValue.map { CMTime(value: $0, timescale: audioCrossfadeTimescale) }
+        clip?.speed = Clip.speedOptions.contains(speed) ? speed : 1
         if clip == nil {
             let clipID = id
             Logger.project.error("Clip 불변식을 어기는 저장값이라 건너뜀: \(clipID, privacy: .public)")

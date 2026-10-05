@@ -241,6 +241,11 @@ final class ProjectEditor {
         editCurrentSequence("슬라이드 트림") { $0.slide(clipID, by: delta, sourceDuration: sourceDuration(of:)) }
     }
 
+    /// 재생 속도를 바꾼다(#58). 길이가 바뀐 만큼 뒤 클립이 따라온다.
+    func setClipSpeed(_ speed: Double, for clipID: Clip.ID) {
+        editCurrentSequence("재생 속도") { $0.setSpeed(speed, forClip: clipID) }
+    }
+
     /// 원본 길이. 이미지는 길이 제한이 없어 `nil`.
     func sourceDuration(of assetID: MediaAsset.ID) -> CMTime? {
         asset(id: assetID)?.trimmableDuration

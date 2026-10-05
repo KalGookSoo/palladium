@@ -405,6 +405,52 @@ struct AdvancedTrimTests {
     }
 }
 
+struct SpeedTests {
+    private let assetID = UUID()
+
+    private func seconds(_ value: Double) -> CMTime {
+        CMTime(seconds: value, preferredTimescale: standardTimescale)
+    }
+
+    @Test("재생 속도를 바꾸면 타임라인 길이가 속도에 반비례하고 뒤 클립이 따라오며, 목록에 없는 속도는 무시한다")
+    func speedChangesLength() throws {
+        let first = try #require(Clip(assetID: assetID, sourceRange: CMTimeRange(start: .zero, duration: seconds(4)), timelineStart: .zero))
+        let second = try #require(Clip(assetID: assetID, sourceRange: CMTimeRange(start: .zero, duration: seconds(1)), timelineStart: seconds(4)))
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [Track(id: UUID(), kind: .video, clips: [first, second])])
+
+        sequence.setSpeed(2, forClip: first.id)
+        #expect(sequence.clip(id: first.id)?.timelineDuration == seconds(2))
+        #expect(sequence.clip(id: second.id)?.timelineStart == seconds(2))
+
+        sequence.setSpeed(0.5, forClip: first.id)
+        #expect(sequence.clip(id: first.id)?.timelineDuration == seconds(8))
+        #expect(sequence.clip(id: second.id)?.timelineStart == seconds(8))
+        #expect(sequence.duration == seconds(9))
+
+        sequence.setSpeed(3, forClip: first.id)
+        #expect(sequence.clip(id: first.id)?.speed == 0.5)
+    }
+
+    @Test("속도를 바꾼 클립을 나누면 원본 구간이 속도만큼 나뉘고 두 조각이 빈틈없이 맞닿는다. 트림도 원본에서 속도만큼 더 쓴다")
+    func splitAndTrimRespectSpeed() throws {
+        var clip = try #require(Clip(assetID: assetID, sourceRange: CMTimeRange(start: .zero, duration: seconds(4)), timelineStart: .zero))
+        clip.speed = 2
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [Track(id: UUID(), kind: .video, clips: [clip])])
+
+        sequence.split(at: seconds(0.5), clipIDs: nil)
+        let parts = sequence.tracks[0].clips.sorted { $0.timelineStart < $1.timelineStart }
+        #expect(parts.map(\.sourceRange) == [
+            CMTimeRange(start: .zero, duration: seconds(1)),
+            CMTimeRange(start: seconds(1), duration: seconds(3)),
+        ])
+        #expect(parts[0].timelineRange.end == parts[1].timelineStart)
+        #expect(parts.allSatisfy { $0.speed == 2 })
+
+        let trimmed = parts[1].trimmedSourceRange(edge: .end, by: seconds(-0.5), sourceDuration: seconds(10))
+        #expect(trimmed == CMTimeRange(start: seconds(1), duration: seconds(2)))
+    }
+}
+
 struct TrimTests {
     private let assetID = UUID()
 

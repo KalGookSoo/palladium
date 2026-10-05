@@ -42,7 +42,7 @@ struct TrackRowView: View {
 
             if let placeholder {
                 PlaceholderView()
-                    .frame(width: scale.width(for: placeholder.sourceRange.duration), height: clipHeight)
+                    .frame(width: scale.width(for: placeholder.timelineDuration), height: clipHeight)
                     .offset(x: scale.x(for: placeholder.timelineStart), y: TimelineMetrics.clipVerticalInset)
                     .allowsHitTesting(false)
             }
@@ -63,9 +63,12 @@ struct TrackRowView: View {
     /// 맞닿은 클립 사이에 틈이 보이도록 양옆을 1pt씩 줄여 그린다.
     private func clipView(_ clip: Clip, offset: CGSize) -> some View {
         let asset = assets.first { $0.id == clip.assetID }
-        let width = scale.width(for: clip.sourceRange.duration)
+        let width = scale.width(for: clip.timelineDuration)
 
-        return ClipView(title: asset?.name ?? "알 수 없는 원본", symbolName: track.kind.symbolName, isSelected: selectedClipIDs.contains(clip.id)) {
+        // 속도를 바꾼 클립은 이름 뒤에 배율을 붙인다.
+        let title = (asset?.name ?? "알 수 없는 원본") + (clip.speed == 1 ? "" : " · \(clip.speed.formatted())×")
+
+        return ClipView(title: title, symbolName: track.kind.symbolName, isSelected: selectedClipIDs.contains(clip.id)) {
             ClipContentView(asset: asset, clip: clip, width: width, showsFilmstrip: showsFilmstrip, showsWaveform: showsWaveform)
         }
         .frame(width: max(width - 2, 1), height: clipHeight)
@@ -106,7 +109,7 @@ struct TrackRowView: View {
 
     /// 클립 양 끝의 잡는 영역. 끌면 그쪽 끝을 트림한다(클립 이동보다 먼저 받는다).
     private func trimHandles(for clip: Clip) -> some View {
-        let width = scale.width(for: clip.sourceRange.duration)
+        let width = scale.width(for: clip.timelineDuration)
         let handleWidth = min(6, width / 3)
 
         return ZStack(alignment: .topLeading) {

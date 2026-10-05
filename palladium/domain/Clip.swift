@@ -18,6 +18,8 @@ nonisolated struct Clip {
     var transitionIn: ClipTransition?
     /// 바로 앞 클립과의 오디오 크로스페이드 길이(#8). 영상 전환과 따로 정한다.
     var audioCrossfadeIn: CMTime?
+    /// 재생 속도(#58). 2면 두 배 빠르게 재생해 타임라인 길이가 절반이다. `speedOptions` 중 하나다.
+    var speed = 1.0
 
     init?(id: UUID = UUID(), assetID: MediaAsset.ID, sourceRange: CMTimeRange, timelineStart: CMTime) {
         guard sourceRange.start.isNumeric, sourceRange.duration.isNumeric, sourceRange.duration > .zero, timelineStart.isNumeric, timelineStart >= .zero else { return nil }
@@ -31,8 +33,33 @@ nonisolated struct Clip {
 // MARK: - Queries
 
 nonisolated extension Clip {
+    /// 고를 수 있는 재생 속도. 타임라인 길이를 정확히 나누어떨어지게 계산할 수 있는 값만 둔다.
+    static let speedOptions = [0.25, 0.5, 1.0, 2.0, 4.0]
+    /// 속도를 바꾼 클립의 시간 계산 단위(1/60000초). 600 단위 시각을 속도 배율로 나눠도 반올림이 생기지 않는다.
+    private static let speedTimescale: CMTimeScale = 60000
+
     var timelineRange: CMTimeRange {
-        CMTimeRange(start: timelineStart, duration: sourceRange.duration)
+        CMTimeRange(start: timelineStart, duration: timelineDuration)
+    }
+
+    /// 타임라인에서 차지하는 길이(원본 구간 길이 ÷ 속도).
+    var timelineDuration: CMTime {
+        timelineTime(forSource: sourceRange.duration)
+    }
+
+    /// 원본 시간 `duration`이 타임라인에서 차지하는 시간.
+    func timelineTime(forSource duration: CMTime) -> CMTime {
+        speed == 1 ? duration : Self.scaled(duration, by: 1 / speed)
+    }
+
+    /// 타임라인 시간 `duration`에 해당하는 원본 시간.
+    func sourceTime(forTimeline duration: CMTime) -> CMTime {
+        speed == 1 ? duration : Self.scaled(duration, by: speed)
+    }
+
+    private static func scaled(_ time: CMTime, by factor: Double) -> CMTime {
+        let fine = CMTimeConvertScale(time, timescale: speedTimescale, method: .roundHalfAwayFromZero)
+        return CMTime(value: CMTimeValue((Double(fine.value) * factor).rounded()), timescale: speedTimescale)
     }
 }
 

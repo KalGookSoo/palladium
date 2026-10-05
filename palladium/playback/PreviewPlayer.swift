@@ -51,6 +51,8 @@ final class PreviewPlayer {
         let item = AVPlayerItem(asset: composition.asset)
         item.videoComposition = composition.videoComposition
         item.audioMix = composition.audioMix
+        // 재생 속도를 바꾼 클립의 소리가 높낮이를 지키게 한다(#58).
+        item.audioTimePitchAlgorithm = .spectral
         // 재생 길이를 시퀀스 길이로 맞춘다(뒤쪽 빈 시간·이미지 자리도 재생되게).
         item.forwardPlaybackEndTime = composition.duration
         player.replaceCurrentItem(with: item)

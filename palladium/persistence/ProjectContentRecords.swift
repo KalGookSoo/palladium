@@ -127,6 +127,7 @@ final class ClipRecord {
     /// 오디오 크로스페이드 길이. `nil`이면 없다.
     var audioCrossfadeValue: Int64?
     var audioCrossfadeTimescale: Int32 = 600
+    var speed: Double = 1
     var track: TrackRecord?
 
     init(

@@ -31,7 +31,7 @@ nonisolated extension Track {
     /// 앞에 맞닿은 클립이 없으면 0이다.
     func maximumTransitionDuration(into clip: Clip) -> CMTime {
         guard let previous = self.clip(before: clip) else { return .zero }
-        return CMTimeMinimum(previous.sourceRange.duration, clip.sourceRange.duration)
+        return CMTimeMinimum(previous.timelineDuration, clip.timelineDuration)
     }
 
     /// 실제로 그릴 전환. 앞 클립이 맞닿아 있지 않으면 `nil`이고, 트림·이동으로 클립이 짧아졌으면 그만큼 줄인다.

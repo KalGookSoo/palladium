@@ -191,8 +191,10 @@ nonisolated enum SequenceComposer {
         freezesMissingFrames: Bool
     ) async throws {
         let sourceEnd = try await source.load(.timeRange).end
-        let handleBefore = CMTimeMinimum(lead, clip.sourceRange.start)
-        let handleAfter = CMTimeMinimum(tail, CMTimeMaximum(sourceEnd - clip.sourceRange.end, .zero))
+        // 속도를 바꾼 클립은 원본 여분을 쓰지 않고 멈춘 프레임(소리는 무음)으로 채운다.
+        let usesHandles = clip.speed == 1
+        let handleBefore = usesHandles ? CMTimeMinimum(lead, clip.sourceRange.start) : .zero
+        let handleAfter = usesHandles ? CMTimeMinimum(tail, CMTimeMaximum(sourceEnd - clip.sourceRange.end, .zero)) : .zero
         let sourceRange = CMTimeRange(start: clip.sourceRange.start - handleBefore, end: clip.sourceRange.end + handleAfter)
         let missingBefore = lead - handleBefore
         let missingAfter = tail - handleAfter
@@ -203,6 +205,9 @@ nonisolated enum SequenceComposer {
             track.scaleTimeRange(CMTimeRange(start: clip.timelineStart - lead, duration: frameDuration), toDuration: missingBefore)
         }
         try track.insertTimeRange(sourceRange, of: source, at: clip.timelineStart - handleBefore)
+        if clip.speed != 1 {
+            track.scaleTimeRange(CMTimeRange(start: clip.timelineStart, duration: clip.sourceRange.duration), toDuration: clip.timelineDuration)
+        }
         if freezesMissingFrames, missingAfter > .zero {
             let frameStart = clip.timelineRange.end + handleAfter
             try track.insertTimeRange(CMTimeRange(start: sourceRange.end - frameDuration, duration: frameDuration), of: source, at: frameStart)

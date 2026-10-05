@@ -48,6 +48,7 @@ nonisolated enum SequenceExporter {
         }
         session.videoComposition = composition.videoComposition
         session.audioMix = composition.audioMix
+        session.audioTimePitchAlgorithm = .spectral
         session.timeRange = CMTimeRange(start: .zero, duration: composition.duration)
         try? FileManager.default.removeItem(at: url)
 

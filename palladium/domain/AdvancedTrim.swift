@@ -7,28 +7,29 @@ import Foundation
 nonisolated extension Clip {
     /// 뒤 끝을 옮길 수 있는 범위(타임라인 기준). 최소 길이는 남기고 원본 끝을 넘지 않는다.
     func endAdjustmentRange(sourceDuration: CMTime?) -> ClosedRange<CMTime> {
-        let lower = Self.minimumDuration - sourceRange.duration
-        let upper = sourceDuration.map { CMTimeMaximum($0 - sourceRange.end, .zero) } ?? .positiveInfinity
+        let lower = Self.minimumDuration - timelineDuration
+        let upper = sourceDuration.map { timelineTime(forSource: CMTimeMaximum($0 - sourceRange.end, .zero)) } ?? .positiveInfinity
         return CMTimeMinimum(lower, .zero) ... CMTimeMaximum(upper, .zero)
     }
 
     /// 앞 끝을 옮길 수 있는 범위(오른쪽이 +). 원본 시작 앞으로 가지 않고 최소 길이는 남긴다.
     func startAdjustmentRange(sourceDuration: CMTime?) -> ClosedRange<CMTime> {
-        let lower = sourceDuration == nil ? CMTime.negativeInfinity : CMTime.zero - sourceRange.start
-        let upper = sourceRange.duration - Self.minimumDuration
+        let lower = sourceDuration == nil ? CMTime.negativeInfinity : CMTime.zero - timelineTime(forSource: sourceRange.start)
+        let upper = timelineDuration - Self.minimumDuration
         return CMTimeMinimum(lower, .zero) ... CMTimeMaximum(upper, .zero)
     }
 
-    /// 뒤 끝을 옮긴다. 타임라인 시작은 그대로다.
+    /// 뒤 끝을 타임라인 시간 `delta`만큼 옮긴다. 타임라인 시작은 그대로다.
     mutating func moveEnd(by delta: CMTime) {
-        sourceRange = CMTimeRange(start: sourceRange.start, duration: sourceRange.duration + delta)
+        sourceRange = CMTimeRange(start: sourceRange.start, duration: sourceRange.duration + sourceTime(forTimeline: delta))
     }
 
     /// 앞 끝을 옮긴다. 이미지(`isStill`)는 원본 시작을 0으로 두고 길이만 바꾼다.
     mutating func moveStart(by delta: CMTime, isStill: Bool) {
         timelineStart = timelineStart + delta
-        let start = isStill ? CMTime.zero : sourceRange.start + delta
-        sourceRange = CMTimeRange(start: start, duration: sourceRange.duration - delta)
+        let sourceDelta = sourceTime(forTimeline: delta)
+        let start = isStill ? CMTime.zero : sourceRange.start + sourceDelta
+        sourceRange = CMTimeRange(start: start, duration: sourceRange.duration - sourceDelta)
     }
 }
 
@@ -69,7 +70,9 @@ nonisolated extension Track {
     mutating func slip(_ clipID: Clip.ID, by delta: CMTime, sourceDuration: CMTime?) -> CMTime {
         guard let index = clips.firstIndex(where: { $0.id == clipID }), let sourceDuration else { return .zero }
         let range = clips[index].sourceRange
-        let applied = Self.clamp(delta, lower: CMTime.zero - range.start, upper: CMTimeMaximum(sourceDuration - range.end, .zero))
+        // 끈 거리는 타임라인 시간이라 속도를 바꾼 클립은 원본 시간으로 바꿔 옮긴다.
+        let sourceDelta = clips[index].sourceTime(forTimeline: delta)
+        let applied = Self.clamp(sourceDelta, lower: CMTime.zero - range.start, upper: CMTimeMaximum(sourceDuration - range.end, .zero))
         clips[index].sourceRange = CMTimeRange(start: range.start + applied, duration: range.duration)
         return applied
     }

@@ -397,6 +397,7 @@ struct MainWindowView: View {
                 setClipSource: { clipID, start, end in editor.setClipSource(clipID, start: start, end: end) },
                 setTransform: { clipID, transform in editor.setTransform(transform, for: clipID) },
                 setClipAudio: { clipID, volume, isMuted in editor.setClipAudio(volume: volume, isMuted: isMuted, for: clipID) },
+                setClipSpeed: { clipID, speed in editor.setClipSpeed(speed, for: clipID) },
                 maximumTransitionDuration: selectedClip.flatMap { clip in
                     currentSequence.tracks.first { $0.clips.contains { $0.id == clip.id } }?.maximumTransitionDuration(into: clip)
                 } ?? .zero,
