@@ -8,6 +8,10 @@ extension FocusedValues {
     @Entry var importMedia: (() -> Void)?
     /// 내보낼 클립이 있는 편집 창이 앞에 있을 때만 값이 있다.
     @Entry var exportSequence: (() -> Void)?
+    /// 클립이 있는 시퀀스가 있는 편집 창이 앞에 있을 때만 값이 있다.
+    @Entry var batchExport: (() -> Void)?
+    /// 재생 헤드에 그릴 화면이 있는 편집 창이 앞에 있을 때만 값이 있다.
+    @Entry var exportStillFrame: (() -> Void)?
     /// 편집 창이 앞에 있을 때만 값이 있다.
     @Entry var importSubtitles: (() -> Void)?
     /// 자막이 있는 편집 창이 앞에 있을 때만 값이 있다.
@@ -19,6 +23,8 @@ struct FileCommands: Commands {
     @FocusedValue(\.saveProject) private var saveProject
     @FocusedValue(\.importMedia) private var importMedia
     @FocusedValue(\.exportSequence) private var exportSequence
+    @FocusedValue(\.batchExport) private var batchExport
+    @FocusedValue(\.exportStillFrame) private var exportStillFrame
     @FocusedValue(\.importSubtitles) private var importSubtitles
     @FocusedValue(\.exportSubtitles) private var exportSubtitles
 
@@ -51,6 +57,15 @@ struct FileCommands: Commands {
             }
             .keyboardShortcut("e")
             .disabled(exportSequence == nil)
+            Button("여러 시퀀스 내보내기…") {
+                batchExport?()
+            }
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+            .disabled(batchExport == nil)
+            Button("정지 프레임 저장…") {
+                exportStillFrame?()
+            }
+            .disabled(exportStillFrame == nil)
             Divider()
             Button("자막 가져오기(SRT)…") {
                 importSubtitles?()

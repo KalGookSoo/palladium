@@ -24,6 +24,7 @@ enum ShortcutGuide {
     static let close = ShortcutGuideEntry(title: "닫기", summary: "편집 창을 닫습니다", keys: "⌘W")
     static let importMedia = ShortcutGuideEntry(title: "가져오기", summary: "영상·오디오·이미지 파일을 프로젝트로 가져옵니다", keys: "⌘I")
     static let export = ShortcutGuideEntry(title: "내보내기", summary: "편집한 영상을 파일로 내보냅니다", keys: "⌘E")
+    static let batchExport = ShortcutGuideEntry(title: "여러 시퀀스 내보내기", summary: "고른 시퀀스들을 한 폴더에 차례로 내보냅니다", keys: "⇧⌘E")
     static let aspectRatio = ShortcutGuideEntry(title: "화면비", summary: "결과물의 화면비를 고릅니다", keys: nil)
 
     static let toggleMediaPanel = ShortcutGuideEntry(title: "미디어 패널 보기/가리기", summary: "왼쪽 미디어 패널을 열고 닫습니다", keys: "⌃⌘S")
@@ -60,7 +61,7 @@ enum ShortcutGuide {
 
     /// 단축키 목록 창에 보여줄 묶음. 단축키가 없는 항목은 넣지 않는다.
     static let sections: [(title: String, entries: [ShortcutGuideEntry])] = [
-        ("파일", [openProjectList, newProject, save, close, importMedia, export]),
+        ("파일", [openProjectList, newProject, save, close, importMedia, export, batchExport]),
         ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline]),
         ("재생", [playPause, previousFrame, nextFrame, narration]),
         ("편집", [undo, redo, renameAsset]),

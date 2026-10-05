@@ -35,8 +35,8 @@ nav_order: 8
 
 ## 관련 커맨드/쿼리
 
-- 커맨드: `export(sequence:preset:destination:)`, `enqueueExport(sequence:preset:)`, `cancelExport(id:)`, `extractStillFrame(at:destination:)`
-- 쿼리: `exportProgress(id:) -> Double`, `availablePresets() -> [ExportPreset]`
+- 커맨드: `SequenceExporter.export(_:to:progress:)`, `SequenceExporter.exportStillFrame(_:at:to:)`, `BatchExportJob.run(export:)`
+- 쿼리: `BatchExportJob.Item.state`(대기·진행률·완료·실패·취소), `AspectRatioPreset.allCases`
 
 ## 진행 단계
 
@@ -49,6 +49,13 @@ nav_order: 8
 - 미리보기와 같은 합성(`SequenceComposer` — 겹쳐 그리기·트랜스폼·음량)을 그대로 써서 결과물이 미리보기와 같다(`SequenceExporter`).
 - 내보내는 동안 시트에 진행률을 보여주고 취소할 수 있다. 끝나면 Finder에서 파일을 보여주고, 실패하거나 취소하면 만들던 파일을 지운다.
 - 환경설정의 "새 편집 창의 화면비"가 툴바 화면비의 시작값이다(#19에서 옮긴 기본 내보내기 프리셋).
+
+## 결정 사항(2단계)
+
+- 파일 > 여러 시퀀스 내보내기…(⇧⌘E): 시트에서 내보낼 시퀀스(클립이 있는 것만, 기본은 모두)와 화면비를 고르고 폴더를 정하면 목록 순서대로 하나씩 내보낸다. 파일 이름은 "프로젝트 - 시퀀스.mp4"이고, 이미 있는 파일은 덮어쓰지 않고 " 2", " 3"을 붙인다.
+- 항목마다 대기·진행률·완료·실패(이유)·취소를 보여준다. 하나가 실패해도 다음 항목을 계속하고, "모두 취소"는 진행 중인 항목과 남은 항목을 취소한다. 끝나면 완료된 파일을 Finder에서 볼 수 있다.
+- 파일 > 정지 프레임 저장…: 재생 헤드의 프레임을 툴바 화면비 크기(짧은 변 1080)의 PNG로 저장한다. 미리보기와 같은 합성에서 시간 오차 없이 뽑아 보이던 프레임과 같다. 재생 헤드가 시퀀스 끝에 있으면 비활성화된다.
+- 커맨드: `SequenceExporter.export(_:to:progress:)`, `SequenceExporter.exportStillFrame(_:at:to:)`, `BatchExportJob.run(export:)`, `BatchExportJob.destinations(for:in:fileExists:)`.
 
 ## 미정 사항
 

@@ -35,6 +35,7 @@ struct MainWindowView: View {
     @State private var isImporterPresented = false
     /// 진행 중인 내보내기. 끝나거나 취소되면 `nil`.
     @State private var export: ExportJob?
+    @State private var isBatchExportPresented = false
     @State private var importReport: MediaImportReport?
     /// 프리미어 프로처럼 미디어 패널 선택, 미리보기에 연 원본, 타임라인 클립 선택은 서로 독립이다.
     @State private var selectedAssetID: MediaAsset.ID?
@@ -52,6 +53,8 @@ struct MainWindowView: View {
     @State private var timelineScale = TimelineScale(pointsPerSecond: 40)
     @State private var previewPlayer = PreviewPlayer()
     @State private var narration = NarrationRecorder()
+    /// 정지 프레임을 저장하지 못했을 때의 안내.
+    @State private var stillFrameMessage: String?
     /// 내레이션을 녹음하지 못했을 때의 안내.
     @State private var narrationMessage: String?
     @Environment(\.undoManager) private var undoManager
@@ -74,6 +77,14 @@ struct MainWindowView: View {
             set: {
                 if !$0 {
                     importReport = nil
+                }
+            }
+        )
+        let isShowingStillFrameMessage = Binding<Bool>(
+            get: { stillFrameMessage != nil },
+            set: {
+                if !$0 {
+                    stillFrameMessage = nil
                 }
             }
         )
@@ -116,6 +127,8 @@ struct MainWindowView: View {
             .focusedSceneValue(\.saveProject, saveAction)
             .focusedSceneValue(\.importMedia) { isImporterPresented = true }
             .focusedSceneValue(\.exportSequence, exportAction)
+            .focusedSceneValue(\.batchExport, batchExportAction)
+            .focusedSceneValue(\.exportStillFrame, stillFrameAction)
             .focusedSceneValue(\.importSubtitles) { chooseSubtitleFile() }
             .focusedSceneValue(\.exportSubtitles, exportSubtitlesAction)
             .focusedSceneValue(\.splitClips, splitAction)
@@ -161,6 +174,9 @@ struct MainWindowView: View {
             .sheet(item: $export) { job in
                 ExportProgressView(job: job)
             }
+            .sheet(isPresented: $isBatchExportPresented) {
+                BatchExportView(sequences: editor.project.sequences, initialAspectRatio: aspectRatio, start: startBatchExport)
+            }
             .onAppear {
                 // 새 편집 창은 환경설정의 기본 화면비로 시작한다.
                 if let stored = UserDefaults.standard.string(forKey: AppPreferences.defaultAspectRatioKey),
@@ -188,6 +204,11 @@ struct MainWindowView: View {
                 Button("확인", role: .cancel) {}
             } message: {
                 Text(saveErrorMessage ?? "")
+            }
+            .alert("정지 프레임을 저장하지 못했습니다", isPresented: isShowingStillFrameMessage) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text(stillFrameMessage ?? "")
             }
             .alert("내레이션 녹음", isPresented: isShowingNarrationMessage) {
                 Button("확인", role: .cancel) {}
@@ -455,6 +476,62 @@ struct MainWindowView: View {
             }
         }
         export = job
+    }
+
+    /// 파일 > 여러 시퀀스 내보내기(⇧⌘E). 내보낼 시퀀스가 없으면 `nil`이라 비활성화된다.
+    private var batchExportAction: (() -> Void)? {
+        editor.project.sequences.contains { $0.duration > .zero } ? { isBatchExportPresented = true } : nil
+    }
+
+    /// 고른 시퀀스를 차례로 내보낸다. 하나가 실패해도 다음 시퀀스로 넘어간다.
+    private func startBatchExport(sequenceIDs: [EditSequence.ID], preset: AspectRatioPreset, folder: URL) -> BatchExportJob {
+        let sequences = sequenceIDs.compactMap { id in editor.project.sequences.first { $0.id == id } }
+        let names = sequences.map { "\(editor.project.name) - \($0.name)" }
+        let destinations = BatchExportJob.destinations(for: names, in: folder) { FileManager.default.fileExists(atPath: $0.path) }
+        let job = BatchExportJob(items: zip(sequences, destinations).map { BatchExportJob.Item(sequenceID: $0.id, destination: $1) })
+        let assets = editor.project.assets
+        job.task = Task {
+            await job.run { item, progress in
+                guard let sequence = sequences.first(where: { $0.id == item.sequenceID }),
+                      let composition = await SequenceComposer.makeComposition(
+                          sequence: sequence, assets: assets, aspectRatio: preset, resolveURL: MediaFileAccess.resolvedURL
+                      )
+                else { throw SequenceExporter.ExportError.noPicture }
+                try await SequenceExporter.export(composition, to: item.destination, progress: progress)
+            }
+        }
+        return job
+    }
+
+    /// 파일 > 정지 프레임 저장. 재생 헤드에 그릴 화면이 없으면 `nil`이라 비활성화된다.
+    private var stillFrameAction: (() -> Void)? {
+        playheadTime < editor.currentSequence.duration ? { chooseStillFrameDestination() } : nil
+    }
+
+    /// 재생 헤드의 프레임을 툴바 화면비 크기의 PNG로 저장한다. 미리보기에 보이던 프레임과 같다.
+    private func chooseStillFrameDestination() {
+        let time = playheadTime
+        let sequence = editor.currentSequence
+        let assets = editor.project.assets
+        let preset = aspectRatio
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.png]
+        let timeText = Duration.seconds(time.seconds).formatted(.time(pattern: .minuteSecond)).replacingOccurrences(of: ":", with: ".")
+        panel.nameFieldStringValue = "\(editor.project.name) - \(sequence.name) \(timeText).png"
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            Task {
+                do {
+                    guard let composition = await SequenceComposer.makeComposition(
+                        sequence: sequence, assets: assets, aspectRatio: preset, resolveURL: MediaFileAccess.resolvedURL
+                    ) else { throw SequenceExporter.ExportError.noPicture }
+                    try await SequenceExporter.exportStillFrame(composition, at: time, to: url)
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                } catch {
+                    stillFrameMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     /// 파일 > 자막 내보내기. 자막이 없으면 `nil`이라 비활성화된다.

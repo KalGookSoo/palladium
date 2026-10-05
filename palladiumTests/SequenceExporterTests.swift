@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreMedia
 import Foundation
+import ImageIO
 @testable import palladium
 import Testing
 
@@ -70,6 +71,36 @@ struct SequenceExporterTests {
         #expect(middle.red > 60 && middle.blue > 60)
     }
 
+    @Test("정지 프레임은 합성 화면 크기의 PNG이고, 미리보기에서 그 시각에 보이던 프레임과 같다")
+    func exportsStillFrame() async throws {
+        let redURL = try await TestMedia.makeVideo(red: 255, green: 0, blue: 0, seconds: 1)
+        let blueURL = try await TestMedia.makeVideo(red: 0, green: 0, blue: 255, seconds: 1)
+        let red = MediaAsset(id: UUID(), name: "red.mov", sourceURL: redURL, kind: .video, duration: seconds(1))
+        let blue = MediaAsset(id: UUID(), name: "blue.mov", sourceURL: blueURL, kind: .video, duration: seconds(1))
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let trackID = sequence.addTrack(kind: .video)
+        try sequence.place(#require(red.makeClip(at: .zero)), onTrack: trackID)
+        try sequence.place(#require(blue.makeClip(at: seconds(1))), onTrack: trackID)
+        let composition = try #require(await SequenceComposer.makeComposition(
+            sequence: sequence, assets: [red, blue], aspectRatio: .square1x1, resolveURL: \.sourceURL
+        ))
+        let output = TestMedia.temporaryURL(extension: "png")
+
+        try await SequenceExporter.exportStillFrame(composition, at: seconds(1.5), to: output)
+
+        let source = try #require(CGImageSourceCreateWithURL(output as CFURL, nil))
+        let still = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        #expect(still.width == 1080 && still.height == 1080)
+        let generator = AVAssetImageGenerator(asset: composition.asset)
+        generator.videoComposition = composition.videoComposition
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        let preview = try await TestMedia.centerColor(of: generator.image(at: seconds(1.5)).image)
+        let saved = TestMedia.centerColor(of: still)
+        #expect(saved.blue > 200 && saved.red < 60)
+        #expect(abs(saved.red - preview.red) <= 2 && abs(saved.blue - preview.blue) <= 2)
+    }
+
     @Test("자막만 있는 시퀀스도 자막 길이만큼 내보내고 자막이 화면에 박힌다")
     func exportsSubtitleOnlySequence() async throws {
         var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
@@ -86,6 +117,57 @@ struct SequenceExporterTests {
         #expect(try await abs(exported.load(.duration).seconds - 3) < 0.1)
         let center = try await TestMedia.centerColor(of: AVAssetImageGenerator(asset: exported).image(at: seconds(1.5)).image)
         #expect(center.red > 180 && center.green > 150 && center.blue < 90)
+    }
+}
+
+/// 배치 내보내기 큐(#6 2단계).
+@MainActor
+struct BatchExportJobTests {
+    private struct FakeFailure: Error, LocalizedError {
+        var errorDescription: String? { "디스크가 가득 찼습니다" }
+    }
+
+    @Test("배치 내보내기는 순서대로 처리하고, 하나가 실패해도 나머지를 계속한다")
+    func continuesAfterFailure() async {
+        let folder = URL(filePath: "/tmp/out")
+        let job = BatchExportJob(items: (0 ..< 3).map { index in
+            BatchExportJob.Item(sequenceID: UUID(), destination: folder.appending(path: "\(index).mp4"))
+        })
+        var order: [String] = []
+
+        await job.run { item, progress in
+            order.append(item.destination.lastPathComponent)
+            progress(0.5)
+            if item.destination.lastPathComponent == "1.mp4" {
+                throw FakeFailure()
+            }
+        }
+
+        #expect(order == ["0.mp4", "1.mp4", "2.mp4"])
+        #expect(job.items.map(\.state) == [.finished, .failed("디스크가 가득 찼습니다"), .finished])
+        #expect(job.isFinished)
+    }
+
+    @Test("취소하면 진행 중인 항목과 남은 항목이 취소된다")
+    func cancellationStopsRemainingItems() async {
+        let job = BatchExportJob(items: (0 ..< 3).map { _ in BatchExportJob.Item(sequenceID: UUID(), destination: URL(filePath: "/tmp/x.mp4")) })
+        await job.run { _, _ in throw CancellationError() }
+        #expect(job.items.first?.state == .cancelled)
+
+        let cancelledJob = BatchExportJob(items: (0 ..< 2).map { _ in BatchExportJob.Item(sequenceID: UUID(), destination: URL(filePath: "/tmp/y.mp4")) })
+        let task = Task { await cancelledJob.run { _, _ in } }
+        task.cancel()
+        await task.value
+        #expect(cancelledJob.items.map(\.state) == [.cancelled, .cancelled])
+    }
+
+    @Test("파일 이름은 쓸 수 없는 글자를 바꾸고, 겹치거나 이미 있으면 번호를 붙인다")
+    func destinationNames() {
+        let folder = URL(filePath: "/tmp/out")
+        let urls = BatchExportJob.destinations(for: ["여행/하이라이트", "통합본", "통합본", " "], in: folder) { url in
+            url.lastPathComponent == "통합본.mp4"
+        }
+        #expect(urls.map(\.lastPathComponent) == ["여행-하이라이트.mp4", "통합본 2.mp4", "통합본 3.mp4", "시퀀스.mp4"])
     }
 }
 
