@@ -1,4 +1,6 @@
 import AVFoundation
+import CoreImage
+import ImageIO
 import OSLog
 
 /// 시퀀스를 재생·내보내기에 함께 쓰는 AVFoundation 합성으로 만든 결과. 미리보기와 결과물이 같은 합성을 쓰게 하기 위함이다.
@@ -9,12 +11,14 @@ nonisolated struct SequenceComposition {
     let duration: CMTime
 }
 
-/// 1단계(#5): 메인 영상 트랙(맨 아래 영상 트랙)과 그 소리, 오디오 트랙들을 합성한다.
-/// 위쪽 영상 트랙(오버레이)과 이미지 클립은 2단계(#9와 함께)에서 그린다. 그전까지 메인 트랙의 이미지 자리는 검은 화면이다.
+/// 시퀀스의 모든 영상 트랙(아래 트랙이 먼저, 위 트랙이 그 위에)과 이미지 클립을 클립마다의 위치·크기·불투명도로 겹쳐 그리고(#5 2단계, #9),
+/// 영상 클립의 소리와 오디오 트랙을 함께 넣는다. 그리기는 `LayerCompositor`가 한다.
 nonisolated enum SequenceComposer {
     static let frameDuration = CMTime(value: 1, timescale: 30)
     /// 화면비 프리셋의 짧은 변(픽셀).
     static let renderShortSide = 1080.0
+    /// 이미지 층을 불러올 때의 최대 긴 변(픽셀). 화면보다 크게 불러 와도 보이는 차이가 없어 메모리를 아낀다.
+    static let maximumImagePixelSize = 2160
 
     // MARK: - Queries
 
@@ -23,21 +27,6 @@ nonisolated enum SequenceComposer {
         let height = Double(preset.heightRatio)
         let scale = renderShortSide / min(width, height)
         return CGSize(width: (width * scale).rounded(), height: (height * scale).rounded())
-    }
-
-    /// 원본 영상(회전 정보 포함)을 화면 안에 비율을 지켜 가운데 맞춘다. 남는 곳은 검은 띠가 된다.
-    static func fitTransform(naturalSize: CGSize, preferredTransform: CGAffineTransform, into renderSize: CGSize) -> CGAffineTransform {
-        let displayed = CGRect(origin: .zero, size: naturalSize).applying(preferredTransform)
-        guard displayed.width > 0, displayed.height > 0 else { return preferredTransform }
-        let scale = min(renderSize.width / displayed.width, renderSize.height / displayed.height)
-        let normalized = preferredTransform.concatenating(CGAffineTransform(translationX: -displayed.minX, y: -displayed.minY))
-        let offset = CGPoint(
-            x: (renderSize.width - displayed.width * scale) / 2,
-            y: (renderSize.height - displayed.height * scale) / 2
-        )
-        return normalized
-            .concatenating(CGAffineTransform(scaleX: scale, y: scale))
-            .concatenating(CGAffineTransform(translationX: offset.x, y: offset.y))
     }
 
     // MARK: - Composition
@@ -51,24 +40,34 @@ nonisolated enum SequenceComposer {
     ) async -> SequenceComposition? {
         guard sequence.duration > .zero else { return nil }
         let composition = AVMutableComposition()
-        let renderSize = renderSize(for: aspectRatio)
-        var videoSegments: [(range: CMTimeRange, transform: CGAffineTransform)] = []
+        // 층으로 그릴 클립: (타임라인 구간, 층, 쌓는 순서 — 클수록 위).
+        var placedLayers: [(range: CMTimeRange, layer: CompositionLayer, order: Int)] = []
+        var images: [MediaAsset.ID: CIImage] = [:]
 
-        // 메인 영상 트랙: 화면 아래쪽(배열 뒤쪽)의 영상 트랙이 메인이다.
-        if let mainTrack = sequence.tracks.last(where: { $0.kind == .video }) {
+        for (trackIndex, track) in sequence.tracks.enumerated() where track.kind == .video {
+            // 트랙 배열은 화면 위쪽부터라, 앞에 있을수록 위에 그린다.
+            let order = sequence.tracks.count - trackIndex
             let videoTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
             let soundTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
-            for clip in mainTrack.clips.sorted(by: { $0.timelineStart < $1.timelineStart }) {
-                guard let asset = assets.first(where: { $0.id == clip.assetID }), asset.kind == .video else { continue }
+            for clip in track.clips.sorted(by: { $0.timelineStart < $1.timelineStart }) {
+                guard let asset = assets.first(where: { $0.id == clip.assetID }) else { continue }
+                if asset.kind == .image {
+                    if images[asset.id] == nil {
+                        images[asset.id] = loadImage(at: resolveURL(asset))
+                    }
+                    if let image = images[asset.id] {
+                        placedLayers.append((clip.timelineRange, CompositionLayer(content: .image(image), transform: clip.transform), order))
+                    }
+                    continue
+                }
+                // 원본 에셋을 변수로 붙잡아 둬야 한다. 임시로 만든 에셋이 사라지면 그 트랙을 합성에 넣지 못한다.
                 let source = AVURLAsset(url: resolveURL(asset))
                 do {
                     if let sourceVideo = try await source.loadTracks(withMediaType: .video).first, let videoTrack {
                         try videoTrack.insertTimeRange(clip.sourceRange, of: sourceVideo, at: clip.timelineStart)
                         let (naturalSize, preferredTransform) = try await sourceVideo.load(.naturalSize, .preferredTransform)
-                        videoSegments.append((
-                            clip.timelineRange,
-                            fitTransform(naturalSize: naturalSize, preferredTransform: preferredTransform, into: renderSize)
-                        ))
+                        let content = CompositionLayer.Content.video(trackID: videoTrack.trackID, naturalSize: naturalSize, preferredTransform: preferredTransform)
+                        placedLayers.append((clip.timelineRange, CompositionLayer(content: content, transform: clip.transform), order))
                     }
                     if let sourceAudio = try await source.loadTracks(withMediaType: .audio).first, let soundTrack {
                         try soundTrack.insertTimeRange(clip.sourceRange, of: sourceAudio, at: clip.timelineStart)
@@ -84,7 +83,6 @@ nonisolated enum SequenceComposer {
             let audioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
             for clip in track.clips {
                 guard let asset = assets.first(where: { $0.id == clip.assetID }) else { continue }
-                // 원본 에셋을 변수로 붙잡아 둬야 한다. 임시로 만든 에셋이 사라지면 그 트랙을 합성에 넣지 못한다.
                 let source = AVURLAsset(url: resolveURL(asset))
                 do {
                     if let sourceAudio = try await source.loadTracks(withMediaType: .audio).first, let audioTrack {
@@ -100,49 +98,55 @@ nonisolated enum SequenceComposer {
         for track in composition.tracks where track.segments.isEmpty {
             composition.removeTrack(track)
         }
-        // 클립이 있어도 재생 길이는 시퀀스 길이로 맞춘다(뒤쪽 빈 시간·이미지 자리도 재생되게).
         let duration = sequence.duration
-        guard let videoTrack = composition.tracks(withMediaType: .video).first else {
+        guard !placedLayers.isEmpty else {
             return SequenceComposition(asset: composition, videoComposition: nil, duration: duration)
         }
         return SequenceComposition(
             asset: composition,
-            videoComposition: makeVideoComposition(track: videoTrack, segments: videoSegments, duration: duration, renderSize: renderSize),
+            videoComposition: makeVideoComposition(layers: placedLayers, duration: duration, renderSize: renderSize(for: aspectRatio)),
             duration: duration
         )
     }
 
-    /// 클립 구간마다 맞춤 변환을, 빈 구간에는 검은 화면을 그리는 지시를 처음부터 끝까지 빈틈없이 만든다.
+    /// 클립 경계마다 구간을 나누고, 구간마다 그 시각에 걸친 층을 아래부터 쌓는다. 처음부터 끝까지 빈틈없이 덮는다.
     private static func makeVideoComposition(
-        track: AVCompositionTrack,
-        segments: [(range: CMTimeRange, transform: CGAffineTransform)],
+        layers: [(range: CMTimeRange, layer: CompositionLayer, order: Int)],
         duration: CMTime,
         renderSize: CGSize
     ) -> AVVideoComposition {
-        var instructions: [AVVideoCompositionInstruction] = []
-        var cursor = CMTime.zero
-        func appendInstruction(_ range: CMTimeRange, transform: CGAffineTransform?) {
-            guard range.duration > .zero else { return }
-            let instruction = AVMutableVideoCompositionInstruction()
-            instruction.timeRange = range
-            if let transform {
-                let layer = AVMutableVideoCompositionLayerInstruction(assetTrack: track)
-                layer.setTransform(transform, at: range.start)
-                instruction.layerInstructions = [layer]
-            }
-            instructions.append(instruction)
+        let boundaries = Set([CMTime.zero, duration] + layers.flatMap { [$0.range.start, $0.range.end] })
+            .filter { $0 >= .zero && $0 <= duration }
+            .sorted()
+        let instructions = zip(boundaries, boundaries.dropFirst()).compactMap { start, end -> LayerInstruction? in
+            guard start < end else { return nil }
+            let active = layers
+                .filter { $0.range.start <= start && start < $0.range.end }
+                .sorted { $0.order < $1.order }
+                .map(\.layer)
+            return LayerInstruction(timeRange: CMTimeRange(start: start, end: end), layers: active)
         }
-        for segment in segments.sorted(by: { $0.range.start < $1.range.start }) {
-            appendInstruction(CMTimeRange(start: cursor, end: segment.range.start), transform: nil)
-            appendInstruction(segment.range, transform: segment.transform)
-            cursor = segment.range.end
-        }
-        appendInstruction(CMTimeRange(start: cursor, end: duration), transform: nil)
 
         let videoComposition = AVMutableVideoComposition()
+        videoComposition.customVideoCompositorClass = LayerCompositor.self
         videoComposition.renderSize = renderSize
         videoComposition.frameDuration = frameDuration
         videoComposition.instructions = instructions
         return videoComposition
+    }
+
+    /// 방향 정보를 반영해 바로 선 이미지로 불러온다. 읽지 못하면 `nil`.
+    private static func loadImage(at url: URL) -> CIImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                  kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceCreateThumbnailWithTransform: true,
+                  kCGImageSourceThumbnailMaxPixelSize: maximumImagePixelSize,
+              ] as CFDictionary)
+        else {
+            Logger.playback.error("합성에서 이미지를 읽지 못함: \(url.lastPathComponent, privacy: .public)")
+            return nil
+        }
+        return CIImage(cgImage: image)
     }
 }

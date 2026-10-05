@@ -153,26 +153,32 @@ struct MainWindowView: View {
             let maxTimelineHeight = max(MainWindowMetrics.timelineMinHeight, geometry.size.height - MainWindowMetrics.previewMinHeight)
 
             VStack(spacing: 0) {
-                PreviewPlayerView(previewPlayer: previewPlayer, hasProjectAssets: !editor.project.assets.isEmpty)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .dropDestination(for: URL.self) { urls, _ in
-                        importMedia(from: urls)
-                        return true
+                PreviewPlayerView(
+                    previewPlayer: previewPlayer,
+                    hasProjectAssets: !editor.project.assets.isEmpty,
+                    transformTarget: transformTarget(in: currentSequence),
+                    renderSize: SequenceComposer.renderSize(for: aspectRatio),
+                    setTransform: { clipID, transform in editor.setTransform(transform, for: clipID) }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .dropDestination(for: URL.self) { urls, _ in
+                    importMedia(from: urls)
+                    return true
+                }
+                // 타임라인을 접고 펴는 버튼은 툴바가 아니라 타임라인과 맞닿은 미리보기 오른쪽 위에 둔다.
+                .overlay(alignment: .topTrailing) {
+                    Button {
+                        isTimelineVisible.toggle()
+                    } label: {
+                        Label("타임라인", systemImage: "rectangle.bottomhalf.inset.filled")
+                            .labelStyle(.iconOnly)
+                            .padding(6)
+                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 6))
                     }
-                    // 타임라인을 접고 펴는 버튼은 툴바가 아니라 타임라인과 맞닿은 미리보기 오른쪽 위에 둔다.
-                    .overlay(alignment: .topTrailing) {
-                        Button {
-                            isTimelineVisible.toggle()
-                        } label: {
-                            Label("타임라인", systemImage: "rectangle.bottomhalf.inset.filled")
-                                .labelStyle(.iconOnly)
-                                .padding(6)
-                                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 6))
-                        }
-                        .buttonStyle(.plain)
-                        .help(ShortcutGuide.toggleTimeline.helpText)
-                        .padding(8)
-                    }
+                    .buttonStyle(.plain)
+                    .help(ShortcutGuide.toggleTimeline.helpText)
+                    .padding(8)
+                }
                 if isTimelineVisible {
                     TimelineResizeHandle(
                         timelineHeight: $timelineHeight,
@@ -265,9 +271,13 @@ struct MainWindowView: View {
                 .clipped()
         }
         .inspector(isPresented: $isInspectorPresented) {
-            InspectorView(clip: selectedClip, asset: selectedClipAsset, selectedClipCount: selectedClipIDs.count) { clipID, start, end in
-                editor.setClipSource(clipID, start: start, end: end)
-            }
+            InspectorView(
+                clip: selectedClip,
+                asset: selectedClipAsset,
+                selectedClipCount: selectedClipIDs.count,
+                setClipSource: { clipID, start, end in editor.setClipSource(clipID, start: start, end: end) },
+                setTransform: { clipID, transform in editor.setTransform(transform, for: clipID) }
+            )
             .inspectorColumnWidth(
                 min: MainWindowMetrics.inspectorMinWidth,
                 ideal: MainWindowMetrics.inspectorIdealWidth,
@@ -281,6 +291,16 @@ struct MainWindowView: View {
                 importMedia: { isImporterPresented = true }
             )
         }
+    }
+
+    /// 미리보기에서 테두리로 옮기고 크기를 바꿀 클립. 클립 하나를 골랐고 화면에 그려지는(소리만 있지 않은) 경우만.
+    private func transformTarget(in sequence: EditSequence) -> (clip: Clip, asset: MediaAsset)? {
+        guard selectedClipIDs.count == 1,
+              let clip = selectedClipIDs.first.flatMap({ sequence.clip(id: $0) }),
+              let asset = editor.asset(id: clip.assetID),
+              asset.kind != .audio
+        else { return nil }
+        return (clip, asset)
     }
 
     /// 원본을 훑어보기(Quick Look) 창으로 연다. 원본 전용 미리보기는 두지 않는다.

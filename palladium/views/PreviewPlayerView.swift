@@ -7,6 +7,11 @@ struct PreviewPlayerView: View {
     let previewPlayer: PreviewPlayer
     /// 프로젝트에 원본이 하나도 없으면 가져오기부터 안내한다.
     let hasProjectAssets: Bool
+    /// 타임라인에서 고른 클립(화면에 그려지는 영상·이미지 하나). 있으면 미리보기 위에 테두리와 손잡이를 그린다.
+    var transformTarget: (clip: Clip, asset: MediaAsset)?
+    var renderSize = SequenceComposer.renderSize(for: .landscape16x9)
+    var setTransform: (Clip.ID, ClipTransform) -> Void = { _, _ in }
+    @State private var targetContentSize: CGSize?
 
     var body: some View {
         switch previewPlayer.loadState {
@@ -23,6 +28,21 @@ struct PreviewPlayerView: View {
         case let .ready(timeline):
             VStack(spacing: 0) {
                 PlayerSurfaceView(player: previewPlayer.player)
+                    .overlay {
+                        if let transformTarget, let targetContentSize {
+                            TransformHandlesView(
+                                transform: transformTarget.clip.transform,
+                                contentSize: targetContentSize,
+                                renderSize: renderSize
+                            ) { setTransform(transformTarget.clip.id, $0) }
+                        }
+                    }
+                    .task(id: transformTarget?.asset.id) {
+                        targetContentSize = nil
+                        if let asset = transformTarget?.asset {
+                            targetContentSize = await ClipContentProvider.shared.contentSize(for: asset)
+                        }
+                    }
                 PlaybackControls(previewPlayer: previewPlayer, timeline: timeline)
             }
         }

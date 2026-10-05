@@ -107,6 +107,11 @@ final class ClipRecord {
     var sourceDurationTimescale: Int32
     var timelineStartValue: Int64
     var timelineStartTimescale: Int32
+    // 기본값이 있어야 이 속성이 생기기 전에 저장한 레코드도 열린다.
+    var transformCenterX: Double = 0.5
+    var transformCenterY: Double = 0.5
+    var transformScale: Double = 1
+    var transformOpacity: Double = 1
     var track: TrackRecord?
 
     init(
@@ -118,7 +123,8 @@ final class ClipRecord {
         sourceDurationValue: Int64,
         sourceDurationTimescale: Int32,
         timelineStartValue: Int64,
-        timelineStartTimescale: Int32
+        timelineStartTimescale: Int32,
+        transform: ClipTransform
     ) {
         self.id = id
         self.sortIndex = sortIndex
@@ -129,6 +135,10 @@ final class ClipRecord {
         self.sourceDurationTimescale = sourceDurationTimescale
         self.timelineStartValue = timelineStartValue
         self.timelineStartTimescale = timelineStartTimescale
+        transformCenterX = transform.centerX
+        transformCenterY = transform.centerY
+        transformScale = transform.scale
+        transformOpacity = transform.opacity
     }
 }
 

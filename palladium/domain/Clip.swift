@@ -9,6 +9,8 @@ nonisolated struct Clip {
     let assetID: MediaAsset.ID
     var sourceRange: CMTimeRange
     var timelineStart: CMTime
+    /// 화면에 그릴 위치·크기·불투명도(오버레이용). 기본은 화면에 꽉 맞춘 그대로다.
+    var transform = ClipTransform()
 
     init?(id: UUID = UUID(), assetID: MediaAsset.ID, sourceRange: CMTimeRange, timelineStart: CMTime) {
         guard sourceRange.start.isNumeric, sourceRange.duration.isNumeric, sourceRange.duration > .zero, timelineStart.isNumeric, timelineStart >= .zero else { return nil }

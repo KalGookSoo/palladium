@@ -10,6 +10,7 @@ struct InspectorView: View {
     var selectedClipCount = 0
     /// 트림 탭에서 원본 시작·끝 지점을 입력했을 때.
     var setClipSource: (Clip.ID, CMTime, CMTime) -> Void = { _, _, _ in }
+    var setTransform: (Clip.ID, ClipTransform) -> Void = { _, _ in }
     @State private var selectedTab: InspectorTab = .trim
 
     var body: some View {
@@ -35,7 +36,13 @@ struct InspectorView: View {
                         setClipSource(clip.id, start, end)
                     }
                 case .effect: EffectInspectorView()
-                case .transform: TransformInspectorView()
+                case .transform:
+                    // 소리만 있는 클립은 화면에 그리지 않는다.
+                    if asset?.kind == .audio {
+                        ContentUnavailableView("오디오 클립", systemImage: "waveform", description: Text("오디오 클립은 화면에 그리지 않습니다"))
+                    } else {
+                        TransformInspectorView(transform: clip.transform) { setTransform(clip.id, $0) }
+                    }
                 }
             }
         } else {

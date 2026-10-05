@@ -11,12 +11,15 @@ nonisolated extension Clip {
         let clippedEnd = CMTimeMinimum(end, timelineRange.end)
         guard clippedStart < clippedEnd else { return nil }
         let sourceStart = sourceRange.start + (clippedStart - timelineStart)
-        return Clip(
+        var portion = Clip(
             id: id,
             assetID: assetID,
             sourceRange: CMTimeRange(start: sourceStart, duration: clippedEnd - clippedStart),
             timelineStart: clippedStart
         )
+        // 나눈 조각도 같은 위치·크기·불투명도로 그린다.
+        portion?.transform = transform
+        return portion
     }
 }
 

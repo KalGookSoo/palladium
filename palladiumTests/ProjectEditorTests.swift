@@ -149,6 +149,24 @@ struct ProjectEditorTests {
         #expect(editor.currentSequence.clip(id: clip.id)?.sourceRange == CMTimeRange(start: CMTime(value: 1, timescale: 1), end: CMTime(value: 2, timescale: 1)))
     }
 
+    @Test("트랜스폼은 배율·불투명도를 범위로 맞춰 저장하고, 분할한 조각도 같은 트랜스폼을 가진다")
+    func transformCommands() throws {
+        let editor = try makeEditorWithSampleContent()
+        let clip = try #require(editor.currentSequence.tracks.first { $0.kind == .video }?.clips.first)
+
+        editor.setTransform(ClipTransform(centerX: 0.8, centerY: 0.2, scale: 99, opacity: 2), for: clip.id)
+        let stored = try #require(editor.currentSequence.clip(id: clip.id)?.transform)
+        #expect(stored == ClipTransform(centerX: 0.8, centerY: 0.2, scale: ClipTransform.scaleRange.upperBound, opacity: 1))
+
+        editor.splitClips([clip.id], at: clip.timelineStart + CMTime(value: 1, timescale: 1))
+        let pieces = editor.currentSequence.tracks.flatMap(\.clips).filter { $0.assetID == clip.assetID }
+        #expect(pieces.count >= 2)
+        #expect(pieces.allSatisfy { $0.transform == stored })
+
+        try editor.save()
+        #expect(try repository.project(id: editor.project.id) == editor.project)
+    }
+
     @Test("편집 커맨드는 실행 취소와 다시 실행으로 되돌릴 수 있다")
     func editsCanBeUndoneAndRedone() throws {
         let editor = try makeEditorWithSampleContent()

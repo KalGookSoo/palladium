@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreGraphics
 import Foundation
+import ImageIO
 
 /// 합성·내보내기 테스트용 미디어 파일을 임시 폴더에 만든다.
 enum TestMedia {
@@ -77,6 +78,34 @@ enum TestMedia {
             space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         )!
         let crop = image.cropping(to: CGRect(x: image.width / 2, y: image.height / 2, width: 1, height: 1)) ?? image
+        context.draw(crop, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        return (Int(pixel[0]), Int(pixel[1]), Int(pixel[2]))
+    }
+
+    /// 단색 PNG 이미지.
+    static func makeImage(red: UInt8, green: UInt8, blue: UInt8, width: Int = 100, height: Int = 100) throws -> URL {
+        let url = temporaryURL(extension: "png")
+        let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        context.setFillColor(CGColor(red: CGFloat(red) / 255, green: CGFloat(green) / 255, blue: CGFloat(blue) / 255, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil)!
+        CGImageDestinationAddImage(destination, context.makeImage()!, nil)
+        CGImageDestinationFinalize(destination)
+        return url
+    }
+
+    /// 이미지의 (가로 비율, 세로 비율) 위치(왼쪽 위 원점) 픽셀의 RGB.
+    static func color(of image: CGImage, atX x: Double, y: Double) -> (red: Int, green: Int, blue: Int) {
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let context = CGContext(
+            data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        let point = CGRect(x: Int(Double(image.width) * x), y: Int(Double(image.height) * y), width: 1, height: 1)
+        let crop = image.cropping(to: point) ?? image
         context.draw(crop, in: CGRect(x: 0, y: 0, width: 1, height: 1))
         return (Int(pixel[0]), Int(pixel[1]), Int(pixel[2]))
     }

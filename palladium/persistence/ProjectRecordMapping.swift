@@ -75,7 +75,8 @@ private extension SequenceRecord {
                     sourceDurationValue: clip.sourceRange.duration.value,
                     sourceDurationTimescale: clip.sourceRange.duration.timescale,
                     timelineStartValue: clip.timelineStart.value,
-                    timelineStartTimescale: clip.timelineStart.timescale
+                    timelineStartTimescale: clip.timelineStart.timescale,
+                    transform: clip.transform
                 )
             }
             return trackRecord
@@ -170,12 +171,13 @@ private extension ClipRecord {
             start: CMTime(value: sourceStartValue, timescale: sourceStartTimescale),
             duration: CMTime(value: sourceDurationValue, timescale: sourceDurationTimescale)
         )
-        let clip = Clip(
+        var clip = Clip(
             id: id,
             assetID: assetID,
             sourceRange: sourceRange,
             timelineStart: CMTime(value: timelineStartValue, timescale: timelineStartTimescale)
         )
+        clip?.transform = ClipTransform(centerX: transformCenterX, centerY: transformCenterY, scale: transformScale, opacity: transformOpacity)
         if clip == nil {
             let clipID = id
             Logger.project.error("Clip 불변식을 어기는 저장값이라 건너뜀: \(clipID, privacy: .public)")

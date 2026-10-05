@@ -1,4 +1,5 @@
 import AVFoundation
+import ImageIO
 import OSLog
 
 /// 타임라인 클립에 그릴 필름스트립 프레임과 오디오 파형을 만든다. 프로젝트에 저장하지 않고 앱이 켜져 있는 동안 메모리에만 둔다.
@@ -9,6 +10,39 @@ final class ClipContentProvider {
 
     private var frameCache: [String: CGImage] = [:]
     private var peakCache: [MediaAsset.ID: [Float]] = [:]
+    private var sizeCache: [MediaAsset.ID: CGSize] = [:]
+
+    /// 원본이 화면에 보이는 크기(영상은 회전 반영, 이미지는 픽셀 크기). 소리만 있거나 읽지 못하면 `nil`.
+    func contentSize(for asset: MediaAsset) async -> CGSize? {
+        if let cached = sizeCache[asset.id] {
+            return cached
+        }
+        let url = MediaFileAccess.resolvedURL(for: asset)
+        var size: CGSize?
+        switch asset.kind {
+        case .video:
+            let source = AVURLAsset(url: url)
+            if let track = try? await source.loadTracks(withMediaType: .video).first,
+               let (naturalSize, transform) = try? await track.load(.naturalSize, .preferredTransform)
+            {
+                size = CGRect(origin: .zero, size: naturalSize).applying(transform).size
+            }
+        case .image:
+            if let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+               let width = properties[kCGImagePropertyPixelWidth] as? Double,
+               let height = properties[kCGImagePropertyPixelHeight] as? Double
+            {
+                // 세로로 찍은 사진(방향 5~8)은 가로세로를 바꿔 보여준다.
+                let orientation = properties[kCGImagePropertyOrientation] as? Int ?? 1
+                size = orientation >= 5 ? CGSize(width: height, height: width) : CGSize(width: width, height: height)
+            }
+        case .audio:
+            size = nil
+        }
+        sizeCache[asset.id] = size
+        return size
+    }
 
     /// 프레임을 만들지 못한 칸은 `nil`이다. 이미지 원본은 모든 칸에 같은 축소본을 쓴다.
     func frames(for asset: MediaAsset, at times: [CMTime]) async -> [CGImage?] {

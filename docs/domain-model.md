@@ -77,7 +77,7 @@ classDiagram
 | `EditSequence` | 독립된 편집 결과물 하나(통합본 또는 하이라이트)                                 | Swift 표준 라이브러리의 `Sequence` 프로토콜과 이름이 겹치지 않도록 `EditSequence`로 짓는다        |
 | `Track`        | 시퀀스 안에서 클립이 시간순으로 놓이는 레인 하나                                 | `TrackKind`: `video`, `audio`                                           |
 | `Marker`       | 시퀀스의 특정 시각에 붙이는 책갈피(시각 + 이름)                                | 영상 내용은 바꾸지 않는 표시용 정보. 추가·삭제 편집은 [클립 이어붙이기](use-cases/joining-clips.md)(#3)에서 다룬다 |
-| `Clip`         | 원본의 어느 구간(`sourceRange`)을 타임라인의 어느 위치(`timelineStart`)에 놓을지 | 타임라인에서 차지하는 구간(`timelineRange`)은 저장하지 않고 계산한다                           |
+| `Clip`         | 원본의 어느 구간(`sourceRange`)을 타임라인의 어느 위치(`timelineStart`)에 놓을지, 화면 어디에 어떻게 그릴지(`transform: ClipTransform` — 위치·배율·불투명도, #9) | 타임라인에서 차지하는 구간(`timelineRange`)은 저장하지 않고 계산한다                           |
 
 보조 타입:
 
@@ -101,7 +101,7 @@ classDiagram
 ### 순수 값 타입으로 만든다
 
 - 모든 도메인 타입은 `struct`/`enum`이다. 대입하면 복사되므로 한 곳의 변경이 다른 곳에 몰래 전파되지 않고, 실행 취소는 이전 값을 보관하는 것만으로 구현할 수 있다.
-- `SwiftUI`와 `AVFoundation`을 import하지 않는다(`Foundation`, `CoreMedia`만 허용).
+- `SwiftUI`와 `AVFoundation`을 import하지 않는다(`Foundation`, `CoreMedia`와 값 타입(`CGSize`·`CGRect`)을 위한 `CoreGraphics`만 허용).
 - 앱 타깃의 기본 격리가 `MainActor`이므로, 도메인 타입과 그 프로토콜 채택(`extension`)은 `nonisolated`로 선언해 테스트와 백그라운드 작업(내보내기 등)에서도 쓸 수 있게 한다. `extension`에 빠뜨리면 `Equatable` 같은 채택이 메인 액터에 묶여, 메인 액터 밖에서 비교할 때 Swift 6 모드에서 오류가 된다.
 
 ### 규칙을 어기는 값은 만들어지지 않게 한다

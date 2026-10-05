@@ -168,6 +168,19 @@ final class ProjectEditor {
         editCurrentSequence("트림") { $0.setSourceRange(range, forClip: clipID) }
     }
 
+    /// 클립의 위치·크기·불투명도를 바꾼다. 배율·불투명도는 허용 범위로 맞춘다.
+    func setTransform(_ transform: ClipTransform, for clipID: Clip.ID) {
+        var clamped = transform
+        clamped.clamp()
+        editCurrentSequence("트랜스폼") { sequence in
+            for trackIndex in sequence.tracks.indices {
+                for clipIndex in sequence.tracks[trackIndex].clips.indices where sequence.tracks[trackIndex].clips[clipIndex].id == clipID {
+                    sequence.tracks[trackIndex].clips[clipIndex].transform = clamped
+                }
+            }
+        }
+    }
+
     /// `ripple`이면 지운 자리 뒤의 클립을 당겨 틈을 메운다(리플 삭제).
     func deleteClips(_ clipIDs: Set<Clip.ID>, ripple: Bool) {
         editCurrentSequence(ripple ? "리플 삭제" : "클립 삭제") { $0.removeClips(clipIDs, ripple: ripple) }
