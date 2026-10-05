@@ -42,6 +42,7 @@ nav_order: 3
 - 삭제: Delete는 자리를 비우고, ⇧Delete(리플 삭제)는 뒤 클립을 당겨 틈을 메운다.
 - 분할(QuickTime Player의 "클립 분할", 단축키는 Final Cut과 같은 ⌘B): 편집 > 클립 분할은 재생 헤드(파란 세로선, 눈금자를 클릭·드래그하거나 ←/→로 옮김) 위치에서 고른 클립(없으면 재생 헤드에 걸친 모든 클립)을 둘로 나눈다. 나눌 클립이 없으면 메뉴가 비활성화된다. 클립 중간 구간을 없애려면 구간 앞뒤에서 분할하고 가운데를 리플 삭제한다.
 - 클립 우클릭 메뉴: 삭제·리플 삭제·클립 분할(단축키 표시, 재생 헤드가 클립 위에 없으면 비활성), 미리보기에서 원본 열기, 미디어 패널에서 원본 보기. 고른 클립 위에서 열면 고른 클립 모두에 적용한다.
+- 마커(3단계): M을 누르거나 타임라인 머리의 마커 메뉴 > "재생 헤드에 마커 추가"로 재생 헤드 위치에 마커를 둔다(이름은 "마커 N", 시각 순으로 유지). 눈금자의 마커를 누르거나 마커 메뉴에서 고르면 재생 헤드가 그 마커로 가고, 마커를 우클릭해 이름을 바꾸거나 지운다. 모두 실행 취소할 수 있다.
 - 선택 해제: Esc를 누를 때마다 끄는 중인 편집 → 클립 선택 → 원본 선택 순으로 한 단계씩 푼다.
 - 클립 모양: 모서리를 둥글게 하고 맞닿은 클립 사이에 틈과 진한 테두리를 두어 경계를 구분한다. 이름 라벨은 클립 안에서 잘리고, 아주 좁은 클립에는 그리지 않는다.
 - 클립 보기(타임라인 머리의 "클립 보기" 메뉴, 보기 메뉴): "필름스트립 보기"와 "오디오 파형 보기"를 각각 켜고 끈다. 필름스트립은 그림이 있는 클립(영상·이미지)에, 파형은 소리가 있는 클립(오디오, 소리 있는 영상)에만 그려 모든 클립에 같은 뜻으로 적용된다. 영상 클립에 둘 다 켜면 위에 필름스트립, 아래 띠에 파형을 그린다. 둘 다 끄면 이름만 보인다.
@@ -58,7 +59,7 @@ nav_order: 3
 
 - 커맨드(구현): `ProjectEditor.placeAsset(_:onTrack:at:)`, `moveClip(_:toTrack:at:)`, `addTrack(kind:)`, `deleteTrack(_:)`(빈 트랙만), `deleteClips(_:ripple:)`, `splitClips(_:at:)`, 도메인 `EditSequence.addTrack(kind:)`·`place(_:onTrack:mode:)`·`moveClip`·`removeClips`·`split(at:clipIDs:)`
 - 쿼리(구현): `Track.insertionPoint(for:)`, `EditSequence.nearestTrackID(kind:toRow:)`, `EditSequence.snappedStart(_:duration:tolerance:excluding:extraEdges:)`, `canSplit(at:clipIDs:)`, `clip(id:)`, `trackID(containing:)`
-- 커맨드(예정): `addMarker(at:label:)`
+- 커맨드(구현): `ProjectEditor.addMarker(at:named:)`·`renameMarker(_:to:)`·`deleteMarker(_:)`
 - 쿼리: `timelineDuration() -> CMTime`, `tracks() -> [Track]`, `markers() -> [Marker]`
 
 ## 미정 사항

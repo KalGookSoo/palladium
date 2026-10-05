@@ -26,6 +26,9 @@ struct TimelineActions {
     var addSequence: () -> Void = {}
     var renameSequence: (EditSequence.ID, String) -> Void = { _, _ in }
     var deleteSequence: (EditSequence.ID) -> Void = { _ in }
+    var addMarker: () -> Void = {}
+    var renameMarker: (Marker.ID, String) -> Void = { _, _ in }
+    var deleteMarker: (Marker.ID) -> Void = { _ in }
     var addTrack: (TrackKind) -> Void = { _ in }
     /// 비어 있는 트랙만 지운다.
     var deleteTrack: (Track.ID) -> Void = { _ in }
@@ -61,6 +64,9 @@ struct TimelineEditorView: View {
     @State private var isRenamingSequence = false
     @State private var sequenceNameText = ""
     @State private var isConfirmingSequenceDeletion = false
+    /// 이름을 바꾸는 중인 마커.
+    @State private var renamingMarkerID: Marker.ID?
+    @State private var markerNameText = ""
     @State private var dragPreview: DragPreview?
     /// 타임라인 안에서 끄는 클립과 끈 거리. 원래 행에서 포인터를 따라 반투명하게 그린다.
     @State private var draggedClip: (clip: Clip, translation: CGSize)?
@@ -83,6 +89,7 @@ struct TimelineEditorView: View {
             HStack {
                 sequenceMenu
                 Spacer()
+                markerMenu
                 displayMenu
                 Button {
                     scale = scale.zoomedOut
@@ -141,6 +148,22 @@ struct TimelineEditorView: View {
             isDragCancelled = draggedClip != nil
             clearDrag()
         }
+        .alert("마커 이름 변경", isPresented: Binding(
+            get: { renamingMarkerID != nil },
+            set: {
+                if !$0 {
+                    renamingMarkerID = nil
+                }
+            }
+        )) {
+            TextField("마커 이름", text: $markerNameText)
+            Button("변경") {
+                if let renamingMarkerID {
+                    actions.renameMarker(renamingMarkerID, markerNameText)
+                }
+            }
+            Button("취소", role: .cancel) {}
+        }
         .alert("시퀀스 이름 변경", isPresented: $isRenamingSequence) {
             TextField("시퀀스 이름", text: $sequenceNameText)
             Button("변경") { actions.renameSequence(sequence.id, sequenceNameText) }
@@ -186,6 +209,32 @@ struct TimelineEditorView: View {
         .help("시퀀스 — 바꾸기·새로 만들기·이름 변경·삭제")
     }
 
+    /// 마커 목록. 고르면 재생 헤드가 그 마커로 간다.
+    private var markerMenu: some View {
+        Menu {
+            Button(ShortcutGuide.addMarker.title, action: actions.addMarker)
+            if !sequence.markers.isEmpty {
+                Divider()
+                ForEach(sequence.markers) { marker in
+                    Button("\(marker.name)  \(Duration.seconds(marker.time.seconds).formatted(.time(pattern: .minuteSecond)))") {
+                        playheadTime = marker.time
+                    }
+                }
+            }
+        } label: {
+            Label("마커", systemImage: "bookmark")
+        }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("마커 — 재생 헤드에 마커를 추가(M)하거나 마커로 이동합니다")
+    }
+
+    private func beginRenamingMarker(_ marker: Marker) {
+        markerNameText = marker.name
+        renamingMarkerID = marker.id
+    }
+
     /// 클립 안에 무엇을 그릴지 고른다. 그림이 있는 클립에는 필름스트립을, 소리가 있는 클립에는 파형을 그린다.
     private var displayMenu: some View {
         Menu {
@@ -212,7 +261,9 @@ struct TimelineEditorView: View {
                         scale: scale,
                         sequenceDuration: sequence.duration,
                         markers: sequence.markers,
-                        playheadTime: $playheadTime
+                        playheadTime: $playheadTime,
+                        renameMarker: beginRenamingMarker,
+                        deleteMarker: actions.deleteMarker
                     )
                     ForEach(Array(shownSequence.tracks.enumerated()), id: \.element.id) { index, track in
                         trackRow(track, at: index)

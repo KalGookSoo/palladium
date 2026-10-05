@@ -12,6 +12,7 @@ final class EditorKeyMonitor {
         case rippleDeleteSelection
         case selectAll
         case escape
+        case addMarker
     }
 
     /// 편집 창이 여러 개 열려 있어도 앞에 있는 창 하나만 반응하도록, 창이 앞에 있을 때만 받는다.
@@ -47,6 +48,7 @@ final class EditorKeyMonitor {
         case (51, .shift), (117, .shift): return .rippleDeleteSelection
         case (0, .command): return .selectAll
         case (53, []): return .escape
+        case (46, []): return .addMarker
         default: return nil
         }
     }

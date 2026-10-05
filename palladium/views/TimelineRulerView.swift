@@ -7,6 +7,8 @@ struct TimelineRulerView: View {
     let sequenceDuration: CMTime
     let markers: [Marker]
     @Binding var playheadTime: CMTime
+    var renameMarker: (Marker) -> Void = { _ in }
+    var deleteMarker: (Marker.ID) -> Void = { _ in }
 
     var body: some View {
         Canvas { context, size in
@@ -30,8 +32,13 @@ struct TimelineRulerView: View {
         .frame(height: TimelineMetrics.rulerHeight)
         .overlay(alignment: .topLeading) {
             ForEach(markers) { marker in
-                MarkerView(name: marker.name)
-                    .offset(x: scale.x(for: marker.time) - 5, y: TimelineMetrics.rulerHeight - 14)
+                MarkerView(
+                    name: marker.name,
+                    select: { playheadTime = marker.time },
+                    rename: { renameMarker(marker) },
+                    delete: { deleteMarker(marker.id) }
+                )
+                .offset(x: scale.x(for: marker.time) - 5, y: TimelineMetrics.rulerHeight - 14)
             }
         }
         .contentShape(Rectangle())

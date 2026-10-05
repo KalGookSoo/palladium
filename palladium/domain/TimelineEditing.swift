@@ -91,6 +91,27 @@ nonisolated extension EditSequence {
         return track.id
     }
 
+    /// `time`에 마커를 둔다. 이름이 비어 있으면 "마커 N"(N은 추가 후 개수). 마커는 시각 순으로 유지한다.
+    @discardableResult
+    mutating func addMarker(at time: CMTime, named name: String = "") -> Marker.ID {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let marker = Marker(id: UUID(), time: CMTimeMaximum(time, .zero), name: trimmedName.isEmpty ? "마커 \(markers.count + 1)" : trimmedName)
+        markers.append(marker)
+        markers.sort { $0.time < $1.time }
+        return marker.id
+    }
+
+    /// 앞뒤 공백을 빼고, 비어 있으면 바꾸지 않는다.
+    mutating func renameMarker(_ markerID: Marker.ID, to newName: String) {
+        let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, let index = markers.firstIndex(where: { $0.id == markerID }) else { return }
+        markers[index].name = trimmedName
+    }
+
+    mutating func removeMarker(_ markerID: Marker.ID) {
+        markers.removeAll { $0.id == markerID }
+    }
+
     /// 비어 있는 트랙만 지운다. 클립이 있는 트랙을 지우면 편집 내용을 잃기 쉬워 막는다.
     mutating func removeTrack(_ trackID: Track.ID) {
         tracks.removeAll { $0.id == trackID && $0.clips.isEmpty }

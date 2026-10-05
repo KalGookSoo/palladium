@@ -120,6 +120,22 @@ final class ProjectEditor {
         }
     #endif
 
+    /// 현재 시퀀스의 `time`에 마커를 둔다. 이름이 비어 있으면 "마커 N".
+    @discardableResult
+    func addMarker(at time: CMTime, named name: String = "") -> Marker.ID {
+        var markerID = UUID()
+        editCurrentSequence("마커 추가") { markerID = $0.addMarker(at: time, named: name) }
+        return markerID
+    }
+
+    func renameMarker(_ markerID: Marker.ID, to newName: String) {
+        editCurrentSequence("마커 이름 변경") { $0.renameMarker(markerID, to: newName) }
+    }
+
+    func deleteMarker(_ markerID: Marker.ID) {
+        editCurrentSequence("마커 삭제") { $0.removeMarker(markerID) }
+    }
+
     /// 새 영상 트랙은 기존 영상 트랙 위(오버레이용), 새 오디오 트랙은 맨 아래에 만든다.
     @discardableResult
     func addTrack(kind: TrackKind) -> Track.ID {

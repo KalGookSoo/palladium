@@ -164,3 +164,24 @@ struct TimelineEditingTests {
         track.clips.map { [$0.timelineStart.seconds, $0.timelineRange.end.seconds] }
     }
 }
+
+struct MarkerCommandTests {
+    private func seconds(_ value: Double) -> CMTime {
+        CMTime(seconds: value, preferredTimescale: standardTimescale)
+    }
+
+    @Test("마커는 시각 순으로 쌓이고, 이름이 비면 '마커 N'이며, 이름 변경·삭제가 된다")
+    func markerCommands() {
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let later = sequence.addMarker(at: seconds(5))
+        let earlier = sequence.addMarker(at: seconds(2), named: " 인트로 끝 ")
+
+        #expect(sequence.markers.map(\.id) == [earlier, later])
+        #expect(sequence.markers.map(\.name) == ["인트로 끝", "마커 1"])
+
+        sequence.renameMarker(later, to: "후렴")
+        sequence.renameMarker(later, to: "  ")
+        sequence.removeMarker(earlier)
+        #expect(sequence.markers.map(\.name) == ["후렴"])
+    }
+}

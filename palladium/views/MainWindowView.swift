@@ -258,6 +258,9 @@ struct MainWindowView: View {
                 editor.deleteSequence(sequenceID)
                 selectedClipIDs = []
             },
+            addMarker: { editor.addMarker(at: playheadTime) },
+            renameMarker: { markerID, name in editor.renameMarker(markerID, to: name) },
+            deleteMarker: { markerID in editor.deleteMarker(markerID) },
             addTrack: { kind in editor.addTrack(kind: kind) },
             deleteTrack: { trackID in editor.deleteTrack(trackID) }
         )
@@ -280,6 +283,8 @@ struct MainWindowView: View {
             selectedClipIDs = Set(editor.currentSequence.tracks.flatMap(\.clips).map(\.id))
         case .escape:
             return releaseOneLevel()
+        case .addMarker:
+            editor.addMarker(at: playheadTime)
         }
         return true
     }
