@@ -316,6 +316,95 @@ struct MaskTests {
     }
 }
 
+struct AdvancedTrimTests {
+    private let longAsset = UUID()
+    private let stillAsset = UUID()
+
+    private func seconds(_ value: Double) -> CMTime {
+        CMTime(seconds: value, preferredTimescale: standardTimescale)
+    }
+
+    /// 원본 10초짜리 영상 세 클립: A(원본 0~4, 타임라인 0~4), B(원본 2~5, 4~7), C(원본 0~2, 7~9).
+    private func makeTrack() throws -> (Track, a: Clip, b: Clip, c: Clip) {
+        let a = try #require(Clip(assetID: longAsset, sourceRange: CMTimeRange(start: .zero, duration: seconds(4)), timelineStart: .zero))
+        let b = try #require(Clip(assetID: longAsset, sourceRange: CMTimeRange(start: seconds(2), duration: seconds(3)), timelineStart: seconds(4)))
+        let c = try #require(Clip(assetID: longAsset, sourceRange: CMTimeRange(start: .zero, duration: seconds(2)), timelineStart: seconds(7)))
+        return (Track(id: UUID(), kind: .video, clips: [a, b, c]), a, b, c)
+    }
+
+    private func sourceDuration(_ assetID: MediaAsset.ID) -> CMTime? {
+        assetID == stillAsset ? nil : CMTime(seconds: 10, preferredTimescale: standardTimescale)
+    }
+
+    private func clip(_ id: Clip.ID, in track: Track) throws -> Clip {
+        try #require(track.clips.first { $0.id == id })
+    }
+
+    @Test("롤은 맞닿은 두 클립의 경계만 옮기고 전체 길이는 그대로이며, 원본 범위·최소 길이를 넘지 않는다")
+    func roll() throws {
+        var (track, a, b, c) = try makeTrack()
+        track.roll(a.id, edge: .end, by: seconds(1), sourceDuration: sourceDuration)
+        #expect(try clip(a.id, in: track).sourceRange == CMTimeRange(start: .zero, duration: seconds(5)))
+        #expect(try clip(b.id, in: track).sourceRange == CMTimeRange(start: seconds(3), duration: seconds(2)))
+        #expect(try clip(b.id, in: track).timelineStart == seconds(5))
+        #expect(try clip(c.id, in: track).timelineRange.end == seconds(9))
+
+        // B가 최소 길이만 남을 때까지만 오른쪽으로 간다.
+        track.roll(b.id, edge: .start, by: seconds(10), sourceDuration: sourceDuration)
+        #expect(try clip(b.id, in: track).sourceRange.duration == Clip.minimumDuration)
+        // 왼쪽으로는 B의 원본 시작(0)까지만 간다.
+        track.roll(b.id, edge: .start, by: seconds(-100), sourceDuration: sourceDuration)
+        #expect(try clip(b.id, in: track).sourceRange.start == .zero)
+        #expect(try clip(c.id, in: track).timelineRange.end == seconds(9))
+
+        // 맞닿은 클립이 없는 끝은 바꾸지 않는다.
+        let before = track
+        track.roll(c.id, edge: .end, by: seconds(1), sourceDuration: sourceDuration)
+        #expect(track == before)
+    }
+
+    @Test("슬립은 위치·길이는 두고 원본 구간만 옮기며 원본 범위 안에 머문다. 이미지는 바꾸지 않는다")
+    func slip() throws {
+        var (track, _, b, _) = try makeTrack()
+        track.slip(b.id, by: seconds(10), sourceDuration: seconds(10))
+        #expect(try clip(b.id, in: track).sourceRange == CMTimeRange(start: seconds(7), duration: seconds(3)))
+        track.slip(b.id, by: seconds(-100), sourceDuration: seconds(10))
+        #expect(try clip(b.id, in: track).sourceRange == CMTimeRange(start: .zero, duration: seconds(3)))
+        #expect(try clip(b.id, in: track).timelineStart == seconds(4))
+
+        let before = track
+        track.slip(b.id, by: seconds(1), sourceDuration: nil)
+        #expect(track == before)
+    }
+
+    @Test("슬라이드는 클립을 옮기며 맞닿은 앞 클립 끝과 뒤 클립 시작을 함께 바꾸고, 전체 길이는 그대로다")
+    func slide() throws {
+        var (track, a, b, c) = try makeTrack()
+        track.slide(b.id, by: seconds(1), sourceDuration: sourceDuration)
+        #expect(try clip(a.id, in: track).sourceRange.duration == seconds(5))
+        #expect(try clip(b.id, in: track).timelineStart == seconds(5))
+        #expect(try clip(b.id, in: track).sourceRange == CMTimeRange(start: seconds(2), duration: seconds(3)))
+        #expect(try clip(c.id, in: track).sourceRange == CMTimeRange(start: seconds(1), duration: seconds(1)))
+        #expect(try clip(c.id, in: track).timelineRange.end == seconds(9))
+
+        // 뒤 클립 C가 최소 길이가 될 때까지만 오른쪽으로 간다.
+        track.slide(b.id, by: seconds(5), sourceDuration: sourceDuration)
+        #expect(try clip(c.id, in: track).sourceRange.duration == Clip.minimumDuration)
+    }
+
+    @Test("맞닿은 이웃이 없는 쪽으로는 틈 안에서만 슬라이드한다")
+    func slideWithinGap() throws {
+        let lone = try #require(Clip(assetID: longAsset, sourceRange: CMTimeRange(start: .zero, duration: seconds(2)), timelineStart: seconds(3)))
+        let after = try #require(Clip(assetID: longAsset, sourceRange: CMTimeRange(start: .zero, duration: seconds(2)), timelineStart: seconds(6)))
+        var track = Track(id: UUID(), kind: .video, clips: [lone, after])
+        track.slide(lone.id, by: seconds(-10), sourceDuration: sourceDuration)
+        #expect(try clip(lone.id, in: track).timelineStart == .zero)
+        track.slide(lone.id, by: seconds(10), sourceDuration: sourceDuration)
+        #expect(try clip(lone.id, in: track).timelineRange.end == seconds(6))
+        #expect(try clip(after.id, in: track).timelineStart == seconds(6))
+    }
+}
+
 struct TrimTests {
     private let assetID = UUID()
 

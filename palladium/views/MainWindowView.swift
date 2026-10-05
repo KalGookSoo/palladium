@@ -313,6 +313,9 @@ struct MainWindowView: View {
                 editor.moveClip(clipID, toTrack: trackID, at: time)
             },
             trimClip: { clipID, edge, delta in editor.trimClip(clipID, edge: edge, by: delta) },
+            rollClip: { clipID, edge, delta in editor.rollClip(clipID, edge: edge, by: delta) },
+            slipClip: { clipID, delta in editor.slipClip(clipID, by: delta) },
+            slideClip: { clipID, delta in editor.slideClip(clipID, by: delta) },
             deleteClips: { clipIDs, ripple in
                 editor.deleteClips(clipIDs, ripple: ripple)
                 selectedClipIDs.subtract(clipIDs)

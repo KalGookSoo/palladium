@@ -128,7 +128,7 @@ struct TrackRowView: View {
                     .onChanged { value in trimChanged(clip, edge, value.translation.width) }
                     .onEnded { value in trimEnded(clip, edge, value.translation.width) }
             )
-            .help("끌어서 클립을 트림합니다. 뒤 클립이 따라오고, ⌥를 누르면 정밀하게 조정합니다")
+            .help("끌어서 클립을 트림합니다. 뒤 클립이 따라오고, ⌥를 누르면 정밀하게, ⌘를 누르면 이웃 클립과의 경계를 옮깁니다(롤)")
     }
 
     /// ⌘ 클릭은 선택에 더하거나 빼고, ⇧ 클릭은 같은 트랙에서 이미 고른 클립과 이 클립 사이를 모두 고른다.

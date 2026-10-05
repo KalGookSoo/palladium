@@ -226,6 +226,26 @@ final class ProjectEditor {
         editCurrentSequence("클립 이동") { $0.moveClip(clipID, toTrack: trackID, at: time) }
     }
 
+    /// 롤: 클립과 맞닿은 이웃 사이 경계를 옮긴다(`edge`가 `.end`면 뒤 클립과, `.start`면 앞 클립과). 전체 길이는 그대로다(#58).
+    func rollClip(_ clipID: Clip.ID, edge: ClipEdge, by delta: CMTime) {
+        editCurrentSequence("롤 트림") { $0.roll(clipID, edge: edge, by: delta, sourceDuration: sourceDuration(of:)) }
+    }
+
+    /// 슬립: 클립 위치·길이는 두고 원본에서 쓰는 구간만 옮긴다(#58).
+    func slipClip(_ clipID: Clip.ID, by delta: CMTime) {
+        editCurrentSequence("슬립 트림") { $0.slip(clipID, by: delta, sourceDuration: sourceDuration(of:)) }
+    }
+
+    /// 슬라이드: 클립을 옮기며 맞닿은 앞뒤 클립의 경계를 함께 바꾼다. 전체 길이는 그대로다(#58).
+    func slideClip(_ clipID: Clip.ID, by delta: CMTime) {
+        editCurrentSequence("슬라이드 트림") { $0.slide(clipID, by: delta, sourceDuration: sourceDuration(of:)) }
+    }
+
+    /// 원본 길이. 이미지는 길이 제한이 없어 `nil`.
+    func sourceDuration(of assetID: MediaAsset.ID) -> CMTime? {
+        asset(id: assetID)?.trimmableDuration
+    }
+
     /// 클립의 한쪽 끝을 `delta`만큼 옮긴다(리플 트림 — 뒤 클립이 따라온다). 원본 범위를 넘지 않고 최소 한 프레임은 남는다.
     func trimClip(_ clipID: Clip.ID, edge: ClipEdge, by delta: CMTime) {
         guard let clip = currentSequence.clip(id: clipID) else { return }

@@ -47,6 +47,9 @@ enum ShortcutGuide {
     static let addMarker = ShortcutGuideEntry(title: "재생 헤드에 마커 추가", summary: "나중에 다시 찾을 시점에 책갈피를 둡니다", keys: "M")
     static let addSubtitle = ShortcutGuideEntry(title: "재생 헤드에 자막 추가", summary: "재생 헤드부터 3초 동안 나오는 자막을 자막 트랙에 둡니다", keys: "T")
     static let preciseTrim = ShortcutGuideEntry(title: "정밀 트림", summary: "클립 끝을 끌 때 이동량을 줄여 프레임 단위로 맞춥니다", keys: "⌥ 누른 채 끌기")
+    static let rollTrim = ShortcutGuideEntry(title: "롤 트림", summary: "클립 끝을 끌어 맞닿은 이웃 클립과의 경계를 옮깁니다(전체 길이 그대로)", keys: "⌘ 누른 채 끝 끌기")
+    static let slipTrim = ShortcutGuideEntry(title: "슬립 트림", summary: "클립 위치·길이는 두고 원본에서 쓰는 구간만 옮깁니다", keys: "⌘ 누른 채 클립 끌기")
+    static let slideTrim = ShortcutGuideEntry(title: "슬라이드 트림", summary: "클립을 옮기며 맞닿은 앞뒤 클립의 경계를 함께 바꿉니다", keys: "⇧ 누른 채 클립 끌기")
     static let deselect = ShortcutGuideEntry(title: "선택 해제", summary: "끄는 중인 편집을 취소하거나, 고른 클립·원본 선택을 한 단계씩 풉니다", keys: "Esc")
     static let toggleFilmstrip = ShortcutGuideEntry(title: "필름스트립 보기", summary: "영상·이미지 클립 안에 프레임을 그립니다", keys: nil)
     static let toggleWaveform = ShortcutGuideEntry(title: "오디오 파형 보기", summary: "소리가 있는 클립 안에 파형을 그립니다", keys: nil)
@@ -65,7 +68,7 @@ enum ShortcutGuide {
         ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline]),
         ("재생", [playPause, previousFrame, nextFrame, narration]),
         ("편집", [undo, redo, renameAsset]),
-        ("타임라인", [deleteClips, rippleDeleteClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect, addMarker, addSubtitle, preciseTrim]),
+        ("타임라인", [deleteClips, rippleDeleteClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect, addMarker, addSubtitle, preciseTrim, rollTrim, slipTrim, slideTrim]),
         ("도움말", [showHelp, showShortcuts]),
     ]
 }
