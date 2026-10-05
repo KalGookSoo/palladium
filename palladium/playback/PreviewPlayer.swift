@@ -48,6 +48,7 @@ final class PreviewPlayer {
         let resumeTime = CMTimeMinimum(currentTime, composition.duration)
         let item = AVPlayerItem(asset: composition.asset)
         item.videoComposition = composition.videoComposition
+        item.audioMix = composition.audioMix
         // 재생 길이를 시퀀스 길이로 맞춘다(뒤쪽 빈 시간·이미지 자리도 재생되게).
         item.forwardPlaybackEndTime = composition.duration
         player.replaceCurrentItem(with: item)

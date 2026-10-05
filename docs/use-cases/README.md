@@ -23,6 +23,7 @@ has_children: true
 - [단축키](./keyboard-shortcuts.md)
 - [환경설정](./preferences.md)
 - [도움말](./help.md)
+- [음량 조절과 오디오 믹싱](./audio-mixing.md)
 
 ## 공통 Mermaid 색상 기준
 

@@ -130,4 +130,31 @@ struct SequenceComposerTests {
         let after = try await TestMedia.color(of: generator.image(at: seconds(1.5)).image, atX: 0.25, y: 0.25)
         #expect(after.red > 200 && after.blue < 60)
     }
+
+    @Test("클립 음량과 트랙 음소거를 오디오 믹스에 반영한다")
+    func audioMixReflectsVolumes() async throws {
+        let toneURL = try TestMedia.makeTone(seconds: 2)
+        let tone = MediaAsset(id: UUID(), name: "tone.wav", sourceURL: toneURL, kind: .audio, duration: seconds(2))
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let loudID = sequence.addTrack(kind: .audio)
+        let mutedID = sequence.addTrack(kind: .audio)
+        var quiet = try #require(tone.makeClip(at: .zero))
+        quiet.volume = 0.25
+        sequence.place(quiet, onTrack: loudID)
+        try sequence.place(#require(tone.makeClip(at: .zero)), onTrack: mutedID)
+        sequence.tracks[1].isMuted = true
+
+        let composition = try #require(await SequenceComposer.makeComposition(
+            sequence: sequence, assets: [tone], aspectRatio: .landscape16x9, resolveURL: \.sourceURL
+        ))
+        let parameters = try #require(composition.audioMix?.inputParameters)
+        let volumes = parameters.map { input -> Float in
+            var start: Float = -1
+            var end: Float = -1
+            var range = CMTimeRange()
+            _ = input.getVolumeRamp(for: seconds(0.5), startVolume: &start, endVolume: &end, timeRange: &range)
+            return start
+        }
+        #expect(volumes.sorted() == [0, 0.25])
+    }
 }

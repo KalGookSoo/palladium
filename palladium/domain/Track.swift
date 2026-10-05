@@ -5,6 +5,9 @@ nonisolated struct Track {
     let id: UUID
     let kind: TrackKind
     var clips: [Clip]
+    /// 트랙 전체 소리의 크기(0~1)와 음소거. 클립 음량에 곱해진다(#44).
+    var volume = 1.0
+    var isMuted = false
 }
 
 nonisolated enum TrackKind: String {

@@ -65,6 +65,8 @@ private extension SequenceRecord {
         let record = SequenceRecord(id: sequence.id, sortIndex: sortIndex, name: sequence.name)
         record.tracks = sequence.tracks.enumerated().map { trackIndex, track in
             let trackRecord = TrackRecord(id: track.id, sortIndex: trackIndex, kindRawValue: track.kind.rawValue)
+            trackRecord.volume = track.volume
+            trackRecord.isMuted = track.isMuted
             trackRecord.clips = track.clips.enumerated().map { clipIndex, clip in
                 ClipRecord(
                     id: clip.id,
@@ -78,6 +80,7 @@ private extension SequenceRecord {
                     timelineStartTimescale: clip.timelineStart.timescale,
                     transform: clip.transform
                 )
+                .withAudio(volume: clip.volume, isMuted: clip.isMuted)
             }
             return trackRecord
         }
@@ -161,11 +164,20 @@ private extension TrackRecord {
             Logger.project.error("알 수 없는 트랙 종류라 건너뜀: \(storedKind, privacy: .public)")
             return nil
         }
-        return Track(id: id, kind: kind, clips: clips.sorted { $0.sortIndex < $1.sortIndex }.compactMap { $0.makeClip() })
+        var track = Track(id: id, kind: kind, clips: clips.sorted { $0.sortIndex < $1.sortIndex }.compactMap { $0.makeClip() })
+        track.volume = volume
+        track.isMuted = isMuted
+        return track
     }
 }
 
 private extension ClipRecord {
+    func withAudio(volume: Double, isMuted: Bool) -> ClipRecord {
+        self.volume = volume
+        self.isMuted = isMuted
+        return self
+    }
+
     func makeClip() -> Clip? {
         let sourceRange = CMTimeRange(
             start: CMTime(value: sourceStartValue, timescale: sourceStartTimescale),
@@ -178,6 +190,8 @@ private extension ClipRecord {
             timelineStart: CMTime(value: timelineStartValue, timescale: timelineStartTimescale)
         )
         clip?.transform = ClipTransform(centerX: transformCenterX, centerY: transformCenterY, scale: transformScale, opacity: transformOpacity)
+        clip?.volume = volume
+        clip?.isMuted = isMuted
         if clip == nil {
             let clipID = id
             Logger.project.error("Clip 불변식을 어기는 저장값이라 건너뜀: \(clipID, privacy: .public)")

@@ -181,6 +181,30 @@ final class ProjectEditor {
         }
     }
 
+    /// 클립 음량(0~1)과 음소거. 결과물(미리보기·내보내기)에 반영된다.
+    func setClipAudio(volume: Double, isMuted: Bool, for clipID: Clip.ID) {
+        let clampedVolume = min(max(volume, 0), 1)
+        editCurrentSequence("클립 음량") { sequence in
+            for trackIndex in sequence.tracks.indices {
+                for clipIndex in sequence.tracks[trackIndex].clips.indices where sequence.tracks[trackIndex].clips[clipIndex].id == clipID {
+                    sequence.tracks[trackIndex].clips[clipIndex].volume = clampedVolume
+                    sequence.tracks[trackIndex].clips[clipIndex].isMuted = isMuted
+                }
+            }
+        }
+    }
+
+    /// 트랙 전체 음량(0~1)과 음소거.
+    func setTrackAudio(volume: Double, isMuted: Bool, for trackID: Track.ID) {
+        let clampedVolume = min(max(volume, 0), 1)
+        editCurrentSequence(isMuted ? "트랙 음소거" : "트랙 음량") { sequence in
+            for index in sequence.tracks.indices where sequence.tracks[index].id == trackID {
+                sequence.tracks[index].volume = clampedVolume
+                sequence.tracks[index].isMuted = isMuted
+            }
+        }
+    }
+
     /// `ripple`이면 지운 자리 뒤의 클립을 당겨 틈을 메운다(리플 삭제).
     func deleteClips(_ clipIDs: Set<Clip.ID>, ripple: Bool) {
         editCurrentSequence(ripple ? "리플 삭제" : "클립 삭제") { $0.removeClips(clipIDs, ripple: ripple) }

@@ -237,3 +237,16 @@ struct TrimTests {
         #expect(shorter.start == .zero && shorter.duration == seconds(3))
     }
 }
+
+struct AudioVolumeTests {
+    @Test("들리는 음량은 클립 음량 × 트랙 음량이고, 어느 쪽이든 음소거면 0이다")
+    func effectiveVolume() throws {
+        var clip = try #require(Clip(assetID: UUID(), sourceRange: CMTimeRange(start: .zero, duration: CMTime(value: 1, timescale: 1)), timelineStart: .zero))
+        clip.volume = 0.5
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [Track(id: UUID(), kind: .audio, clips: [clip])])
+        sequence.tracks[0].volume = 0.5
+        #expect(sequence.effectiveVolume(of: clip.id) == 0.25)
+        sequence.tracks[0].isMuted = true
+        #expect(sequence.effectiveVolume(of: clip.id) == 0)
+    }
+}

@@ -32,6 +32,8 @@ struct TimelineActions {
     var addMarker: () -> Void = {}
     var renameMarker: (Marker.ID, String) -> Void = { _, _ in }
     var deleteMarker: (Marker.ID) -> Void = { _ in }
+    /// 트랙 전체 음량(0~1)과 음소거.
+    var setTrackAudio: (Track.ID, Double, Bool) -> Void = { _, _, _ in }
     var addTrack: (TrackKind) -> Void = { _ in }
     /// 비어 있는 트랙만 지운다.
     var deleteTrack: (Track.ID) -> Void = { _ in }
@@ -480,19 +482,41 @@ private struct TrackHeaderColumn: View {
                     ? tracks[index...].filter { $0.kind == .video }.count
                     : tracks[...index].filter { $0.kind == .audio }.count
 
-                Label("\(track.kind.title) \(number)", systemImage: track.kind.symbolName)
-                    .font(.caption)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(height: TimelineMetrics.trackHeight)
-                    .padding(.horizontal, 8)
-                    .contentShape(Rectangle())
-                    .contextMenu {
-                        addTrackButtons
-                        Divider()
-                        // 클립이 있는 트랙을 지우면 편집 내용을 잃기 쉬워 빈 트랙만 지운다.
-                        Button("트랙 삭제") { actions.deleteTrack(track.id) }
-                            .disabled(!track.clips.isEmpty)
+                HStack(spacing: 2) {
+                    Label("\(track.kind.title) \(number)", systemImage: track.kind.symbolName)
+                        .font(.caption)
+                    Spacer(minLength: 0)
+                    // 트랙 전체 소리를 끄고 켠다(결과물에 반영).
+                    Button {
+                        actions.setTrackAudio(track.id, track.volume, !track.isMuted)
+                    } label: {
+                        Image(systemName: track.isMuted ? "speaker.slash.fill" : "speaker.wave.2")
+                            .font(.caption2)
+                            .foregroundStyle(track.isMuted ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
                     }
+                    .buttonStyle(.plain)
+                    .help(track.isMuted ? "트랙 음소거 해제" : "트랙 음소거 — 이 트랙의 소리를 결과물에서 뺍니다")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: TimelineMetrics.trackHeight)
+                .padding(.horizontal, 8)
+                .contentShape(Rectangle())
+                .contextMenu {
+                    addTrackButtons
+                    Divider()
+                    Menu("트랙 음량") {
+                        ForEach([1.0, 0.75, 0.5, 0.25], id: \.self) { volume in
+                            Toggle(volume.formatted(.percent), isOn: Binding(
+                                get: { abs(track.volume - volume) < 0.001 },
+                                set: { _ in actions.setTrackAudio(track.id, volume, track.isMuted) }
+                            ))
+                        }
+                    }
+                    Divider()
+                    // 클립이 있는 트랙을 지우면 편집 내용을 잃기 쉬워 빈 트랙만 지운다.
+                    Button("트랙 삭제") { actions.deleteTrack(track.id) }
+                        .disabled(!track.clips.isEmpty)
+                }
             }
             // 트랙 아래 빈 곳에서도 트랙을 추가할 수 있다.
             Color.clear

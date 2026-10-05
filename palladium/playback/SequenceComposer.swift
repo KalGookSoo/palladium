@@ -8,6 +8,8 @@ nonisolated struct SequenceComposition {
     let asset: AVComposition
     /// 영상 트랙이 없으면(소리만 있으면) `nil`.
     let videoComposition: AVVideoComposition?
+    /// 클립·트랙 음량과 음소거(#44).
+    let audioMix: AVAudioMix?
     let duration: CMTime
 }
 
@@ -43,6 +45,8 @@ nonisolated enum SequenceComposer {
         // 층으로 그릴 클립: (타임라인 구간, 층, 쌓는 순서 — 클수록 위).
         var placedLayers: [(range: CMTimeRange, layer: CompositionLayer, order: Int)] = []
         var images: [MediaAsset.ID: CIImage] = [:]
+        // 소리 구간마다의 음량: (합성 오디오 트랙, 클립 시작, 음량).
+        var volumes: [(trackID: CMPersistentTrackID, start: CMTime, volume: Float)] = []
 
         for (trackIndex, track) in sequence.tracks.enumerated() where track.kind == .video {
             // 트랙 배열은 화면 위쪽부터라, 앞에 있을수록 위에 그린다.
@@ -71,6 +75,7 @@ nonisolated enum SequenceComposer {
                     }
                     if let sourceAudio = try await source.loadTracks(withMediaType: .audio).first, let soundTrack {
                         try soundTrack.insertTimeRange(clip.sourceRange, of: sourceAudio, at: clip.timelineStart)
+                        volumes.append((soundTrack.trackID, clip.timelineStart, Float(sequence.effectiveVolume(of: clip.id))))
                     }
                 } catch {
                     Logger.playback.error("합성에서 클립을 건너뜀: \(asset.name, privacy: .public), \(error.localizedDescription, privacy: .public)")
@@ -87,6 +92,7 @@ nonisolated enum SequenceComposer {
                 do {
                     if let sourceAudio = try await source.loadTracks(withMediaType: .audio).first, let audioTrack {
                         try audioTrack.insertTimeRange(clip.sourceRange, of: sourceAudio, at: clip.timelineStart)
+                        volumes.append((audioTrack.trackID, clip.timelineStart, Float(sequence.effectiveVolume(of: clip.id))))
                     }
                 } catch {
                     Logger.playback.error("합성에서 클립을 건너뜀: \(asset.name, privacy: .public), \(error.localizedDescription, privacy: .public)")
@@ -99,12 +105,14 @@ nonisolated enum SequenceComposer {
             composition.removeTrack(track)
         }
         let duration = sequence.duration
+        let audioMix = makeAudioMix(composition: composition, volumes: volumes)
         guard !placedLayers.isEmpty else {
-            return SequenceComposition(asset: composition, videoComposition: nil, duration: duration)
+            return SequenceComposition(asset: composition, videoComposition: nil, audioMix: audioMix, duration: duration)
         }
         return SequenceComposition(
             asset: composition,
             videoComposition: makeVideoComposition(layers: placedLayers, duration: duration, renderSize: renderSize(for: aspectRatio)),
+            audioMix: audioMix,
             duration: duration
         )
     }
@@ -133,6 +141,24 @@ nonisolated enum SequenceComposer {
         videoComposition.frameDuration = frameDuration
         videoComposition.instructions = instructions
         return videoComposition
+    }
+
+    /// 합성 오디오 트랙마다 클립이 시작하는 시각에 그 클립의 음량을 둔다(다음 클립 시작까지 유지).
+    private static func makeAudioMix(
+        composition: AVComposition,
+        volumes: [(trackID: CMPersistentTrackID, start: CMTime, volume: Float)]
+    ) -> AVAudioMix? {
+        let parameters = composition.tracks(withMediaType: .audio).map { track in
+            let trackParameters = AVMutableAudioMixInputParameters(track: track)
+            for entry in volumes.filter({ $0.trackID == track.trackID }).sorted(by: { $0.start < $1.start }) {
+                trackParameters.setVolume(entry.volume, at: entry.start)
+            }
+            return trackParameters
+        }
+        guard !parameters.isEmpty else { return nil }
+        let audioMix = AVMutableAudioMix()
+        audioMix.inputParameters = parameters
+        return audioMix
     }
 
     /// 방향 정보를 반영해 바로 선 이미지로 불러온다. 읽지 못하면 `nil`.

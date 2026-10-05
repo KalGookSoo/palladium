@@ -11,6 +11,7 @@ struct InspectorView: View {
     /// 트림 탭에서 원본 시작·끝 지점을 입력했을 때.
     var setClipSource: (Clip.ID, CMTime, CMTime) -> Void = { _, _, _ in }
     var setTransform: (Clip.ID, ClipTransform) -> Void = { _, _ in }
+    var setClipAudio: (Clip.ID, Double, Bool) -> Void = { _, _, _ in }
     @State private var selectedTab: InspectorTab = .trim
 
     var body: some View {
@@ -34,6 +35,12 @@ struct InspectorView: View {
                 case .trim:
                     TrimInspectorView(clip: clip, sourceDuration: asset?.trimmableDuration) { start, end in
                         setClipSource(clip.id, start, end)
+                    }
+                case .audio:
+                    if asset?.kind == .image {
+                        ContentUnavailableView("이미지 클립", systemImage: "photo", description: Text("이미지 클립에는 소리가 없습니다"))
+                    } else {
+                        AudioInspectorView(clip: clip) { volume, isMuted in setClipAudio(clip.id, volume, isMuted) }
                     }
                 case .effect: EffectInspectorView()
                 case .transform:
@@ -65,6 +72,7 @@ struct InspectorView: View {
 
 private enum InspectorTab: CaseIterable, Identifiable {
     case trim
+    case audio
     case effect
     case transform
 
@@ -75,6 +83,7 @@ private enum InspectorTab: CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .trim: "트림"
+        case .audio: "오디오"
         case .effect: "이펙트"
         case .transform: "트랜스폼"
         }

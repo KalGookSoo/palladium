@@ -167,6 +167,21 @@ struct ProjectEditorTests {
         #expect(try repository.project(id: editor.project.id) == editor.project)
     }
 
+    @Test("클립·트랙 음량과 음소거를 바꾸고 저장하면 그대로 불러온다")
+    func audioCommands() throws {
+        let editor = try makeEditorWithSampleContent()
+        let audioTrack = try #require(editor.currentSequence.tracks.first { $0.kind == .audio })
+        let clipID = try #require(audioTrack.clips.first?.id)
+
+        editor.setClipAudio(volume: 3, isMuted: false, for: clipID)
+        editor.setTrackAudio(volume: 0.5, isMuted: true, for: audioTrack.id)
+
+        #expect(editor.currentSequence.clip(id: clipID)?.volume == 1)
+        #expect(editor.currentSequence.tracks.first { $0.id == audioTrack.id }?.isMuted == true)
+        try editor.save()
+        #expect(try repository.project(id: editor.project.id) == editor.project)
+    }
+
     @Test("편집 커맨드는 실행 취소와 다시 실행으로 되돌릴 수 있다")
     func editsCanBeUndoneAndRedone() throws {
         let editor = try makeEditorWithSampleContent()

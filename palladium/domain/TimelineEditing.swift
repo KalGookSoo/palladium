@@ -17,8 +17,10 @@ nonisolated extension Clip {
             sourceRange: CMTimeRange(start: sourceStart, duration: clippedEnd - clippedStart),
             timelineStart: clippedStart
         )
-        // 나눈 조각도 같은 위치·크기·불투명도로 그린다.
+        // 나눈 조각도 같은 위치·크기·불투명도·음량을 가진다.
         portion?.transform = transform
+        portion?.volume = volume
+        portion?.isMuted = isMuted
         return portion
     }
 }
@@ -196,6 +198,14 @@ nonisolated extension EditSequence {
                 tracks[trackIndex].removeClip(id: clip.id, ripple: ripple)
             }
         }
+    }
+
+    /// 클립 소리가 실제로 들리는 크기: 클립 음량 × 트랙 음량, 어느 쪽이든 음소거면 0.
+    func effectiveVolume(of clipID: Clip.ID) -> Double {
+        guard let track = tracks.first(where: { $0.clips.contains { $0.id == clipID } }),
+              let clip = track.clips.first(where: { $0.id == clipID })
+        else { return 0 }
+        return clip.isMuted || track.isMuted ? 0 : clip.volume * track.volume
     }
 
     /// 클립이 있는 트랙에서 원본 구간을 바꾼다(리플 트림).

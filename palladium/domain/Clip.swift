@@ -11,6 +11,9 @@ nonisolated struct Clip {
     var timelineStart: CMTime
     /// 화면에 그릴 위치·크기·불투명도(오버레이용). 기본은 화면에 꽉 맞춘 그대로다.
     var transform = ClipTransform()
+    /// 이 클립 소리의 크기(0~1). 영상 클립은 영상에 담긴 소리다(#44).
+    var volume = 1.0
+    var isMuted = false
 
     init?(id: UUID = UUID(), assetID: MediaAsset.ID, sourceRange: CMTimeRange, timelineStart: CMTime) {
         guard sourceRange.start.isNumeric, sourceRange.duration.isNumeric, sourceRange.duration > .zero, timelineStart.isNumeric, timelineStart >= .zero else { return nil }

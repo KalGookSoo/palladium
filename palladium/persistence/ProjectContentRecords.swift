@@ -86,6 +86,9 @@ final class TrackRecord {
     var id: UUID
     var sortIndex: Int
     var kindRawValue: String
+    // 기본값이 있어야 이 속성이 생기기 전에 저장한 레코드도 열린다.
+    var volume: Double = 1
+    var isMuted = false
     @Relationship(deleteRule: .cascade, inverse: \ClipRecord.track) var clips: [ClipRecord] = []
     var sequence: SequenceRecord?
 
@@ -112,6 +115,8 @@ final class ClipRecord {
     var transformCenterY: Double = 0.5
     var transformScale: Double = 1
     var transformOpacity: Double = 1
+    var volume: Double = 1
+    var isMuted = false
     var track: TrackRecord?
 
     init(

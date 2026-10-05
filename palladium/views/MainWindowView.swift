@@ -239,6 +239,7 @@ struct MainWindowView: View {
             addMarker: { editor.addMarker(at: playheadTime) },
             renameMarker: { markerID, name in editor.renameMarker(markerID, to: name) },
             deleteMarker: { markerID in editor.deleteMarker(markerID) },
+            setTrackAudio: { trackID, volume, isMuted in editor.setTrackAudio(volume: volume, isMuted: isMuted, for: trackID) },
             addTrack: { kind in editor.addTrack(kind: kind) },
             deleteTrack: { trackID in editor.deleteTrack(trackID) }
         )
@@ -276,7 +277,8 @@ struct MainWindowView: View {
                 asset: selectedClipAsset,
                 selectedClipCount: selectedClipIDs.count,
                 setClipSource: { clipID, start, end in editor.setClipSource(clipID, start: start, end: end) },
-                setTransform: { clipID, transform in editor.setTransform(transform, for: clipID) }
+                setTransform: { clipID, transform in editor.setTransform(transform, for: clipID) },
+                setClipAudio: { clipID, volume, isMuted in editor.setClipAudio(volume: volume, isMuted: isMuted, for: clipID) }
             )
             .inspectorColumnWidth(
                 min: MainWindowMetrics.inspectorMinWidth,
