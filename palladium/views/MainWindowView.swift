@@ -229,6 +229,7 @@ struct MainWindowView: View {
     private func importMedia(from urls: [URL]) {
         Task {
             let report = await editor.importMedia(from: urls)
+            ProxyGenerator.shared.generateIfNeeded(for: report.imported, threshold: proxyThreshold)
             if let lastAssetID = report.imported.last?.id ?? report.duplicateIDs.last {
                 selectedAssetID = lastAssetID
             }
@@ -633,6 +634,11 @@ struct MainWindowView: View {
         return true
     }
 
+    /// 환경설정의 프록시 기준(#43).
+    private var proxyThreshold: ProxyThreshold {
+        UserDefaults.standard.string(forKey: AppPreferences.proxyThresholdKey).flatMap(ProxyThreshold.init(rawValue:)) ?? .defaultValue
+    }
+
     /// 내레이션 녹음을 시작하거나 멈춘다(#10). 시작하면 재생 헤드부터 미리보기를 재생하고, 헤드폰이 아니면 소리를 끈다.
     /// 멈추면 녹음 파일을 가져와 녹음을 시작한 시각에 오디오 클립으로 놓고 고른다.
     private func toggleNarration() {
@@ -735,14 +741,15 @@ private struct SequencePlayback: ViewModifier {
     func body(content: Content) -> some View {
         content
             // 시퀀스·원본·화면비가 바뀌면 다시 합성한다. 연달아 바뀔 때 매번 합성하지 않도록 잠깐 기다린다.
-            .task(id: CompositionKey(sequence: sequence, assets: assets, aspectRatio: aspectRatio)) {
+            // 프록시가 생기거나 없어져도 다시 합성해 미리보기가 그 파일을 쓰게 한다(#43).
+            .task(id: CompositionKey(sequence: sequence, assets: assets, aspectRatio: aspectRatio, proxyRevision: ProxyGenerator.shared.revision)) {
                 try? await Task.sleep(for: .milliseconds(150))
                 guard !Task.isCancelled else { return }
                 let composition = await SequenceComposer.makeComposition(
                     sequence: sequence,
                     assets: assets,
                     aspectRatio: aspectRatio,
-                    resolveURL: MediaFileAccess.resolvedURL
+                    resolveURL: ProxyGenerator.previewURL
                 )
                 guard !Task.isCancelled else { return }
                 previewPlayer.loadSequence(composition)
@@ -767,6 +774,7 @@ private struct CompositionKey: Equatable {
     let sequence: EditSequence
     let assets: [MediaAsset]
     let aspectRatio: AspectRatioPreset
+    let proxyRevision: Int
 }
 
 /// 미리보기와 타임라인 사이의 경계. 위아래로 끌어 타임라인 높이를 바꾼다.

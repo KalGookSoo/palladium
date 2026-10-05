@@ -224,6 +224,15 @@ struct MediaPanelView: View {
                 tagEditingAssetID = assetID
             }
         }
+        let videos = assetIDs.compactMap { editor.asset(id: $0) }.filter { $0.kind == .video }
+        if !videos.isEmpty {
+            Divider()
+            Button("프록시 만들기") { videos.forEach(ProxyGenerator.shared.generate(for:)) }
+                .disabled(videos.allSatisfy { ProxyGenerator.shared.hasProxy($0) })
+            Button("프록시 삭제") { videos.forEach(ProxyGenerator.shared.removeProxy(for:)) }
+                .disabled(!videos.contains { ProxyGenerator.shared.hasProxy($0) || ProxyGenerator.shared.progress[$0.id] != nil })
+            Divider()
+        }
         Menu("폴더로 이동") {
             Button("분류 안 됨") { editor.moveAssets(Array(assetIDs), toFolder: nil) }
             Divider()
@@ -318,6 +327,22 @@ private struct MediaAssetRow<Name: View>: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .lineLimit(1)
+                // 프록시를 만드는 중이면 진행률을, 다 만들었으면 표시를 보여준다(#43).
+                if let fraction = ProxyGenerator.shared.progress[asset.id] {
+                    ProgressView(value: fraction) {
+                        Text("프록시 만드는 중")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .controlSize(.mini)
+                } else if ProxyGenerator.shared.hasProxy(asset) {
+                    Text("프록시")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 4)
+                        .background(.quaternary, in: Capsule())
+                        .help("미리보기는 1080p 대체 파일로 재생하고, 내보내기는 원본으로 합니다")
+                }
             }
         }
         .accessibilityElement(children: .combine)

@@ -4,15 +4,16 @@ import SwiftUI
 enum AppPreferences {
     static let backupIntervalSecondsKey = "backupIntervalSeconds"
     static let defaultAspectRatioKey = "defaultAspectRatio"
+    static let proxyThresholdKey = "proxyThreshold"
     static let timelineShowsFilmstripKey = "timelineShowsFilmstrip"
     static let timelineShowsWaveformKey = "timelineShowsWaveform"
 }
 
 /// palladium > 설정…(⌘,)에서 여는 환경설정 창. 바꾸면 바로 저장된다(별도 저장 버튼 없음).
-/// 프록시 임계값(#43)은 그 기능이 생길 때 여기에 더한다.
 struct SettingsView: View {
     @AppStorage(AppPreferences.backupIntervalSecondsKey) private var backupIntervalSeconds = Int(BackupPolicy.defaultInterval.components.seconds)
     @AppStorage(AppPreferences.defaultAspectRatioKey) private var defaultAspectRatio = AspectRatioPreset.landscape16x9
+    @AppStorage(AppPreferences.proxyThresholdKey) private var proxyThreshold = ProxyThreshold.defaultValue
 
     var body: some View {
         Form {
@@ -24,6 +25,17 @@ struct SettingsView: View {
                 }
             } footer: {
                 Text("편집 창을 열 때 툴바의 화면비가 이 값으로 시작합니다. 내보내기는 툴바에서 고른 화면비로 합니다.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Picker("프록시 자동 생성", selection: $proxyThreshold) {
+                    ForEach(ProxyThreshold.allCases, id: \.self) { threshold in
+                        Text(threshold.title).tag(threshold)
+                    }
+                }
+            } footer: {
+                Text("이 해상도 이상인 영상을 가져오면 미리보기용 1080p 대체 파일(프록시)을 만들어 재생이 끊기지 않게 합니다. 내보내기는 항상 원본으로 합니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
