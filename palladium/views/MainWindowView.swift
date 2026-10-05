@@ -289,6 +289,7 @@ struct MainWindowView: View {
             addMarker: { editor.addMarker(at: playheadTime) },
             renameMarker: { markerID, name in editor.renameMarker(markerID, to: name) },
             deleteMarker: { markerID in editor.deleteMarker(markerID) },
+            setTransition: { clipID, transition in editor.setTransition(transition, forClip: clipID) },
             addSubtitle: addSubtitleAtPlayhead,
             setSubtitleRange: { subtitleID, start, end in editor.setSubtitleRange(subtitleID, start: start, end: end) },
             deleteSubtitle: deleteSubtitle,
@@ -332,6 +333,11 @@ struct MainWindowView: View {
                 setClipSource: { clipID, start, end in editor.setClipSource(clipID, start: start, end: end) },
                 setTransform: { clipID, transform in editor.setTransform(transform, for: clipID) },
                 setClipAudio: { clipID, volume, isMuted in editor.setClipAudio(volume: volume, isMuted: isMuted, for: clipID) },
+                maximumTransitionDuration: selectedClip.flatMap { clip in
+                    currentSequence.tracks.first { $0.clips.contains { $0.id == clip.id } }?.maximumTransitionDuration(into: clip)
+                } ?? .zero,
+                setTransition: { clipID, transition in editor.setTransition(transition, forClip: clipID) },
+                setAudioCrossfade: { clipID, duration in editor.setAudioCrossfade(duration, forClip: clipID) },
                 subtitle: currentSequence.subtitles.first { $0.id == selectedSubtitleID },
                 updateSubtitle: { subtitleID, text, style in editor.updateSubtitle(subtitleID, text: text, style: style) },
                 setSubtitleRange: { subtitleID, start, end in editor.setSubtitleRange(subtitleID, start: start, end: end) },

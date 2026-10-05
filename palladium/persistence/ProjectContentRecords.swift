@@ -119,6 +119,13 @@ final class ClipRecord {
     var transformOpacity: Double = 1
     var volume: Double = 1
     var isMuted = false
+    /// 전환 종류(`TransitionKind`). `nil`이면 전환이 없다.
+    var transitionKindRawValue: String?
+    var transitionDurationValue: Int64 = 0
+    var transitionDurationTimescale: Int32 = 600
+    /// 오디오 크로스페이드 길이. `nil`이면 없다.
+    var audioCrossfadeValue: Int64?
+    var audioCrossfadeTimescale: Int32 = 600
     var track: TrackRecord?
 
     init(

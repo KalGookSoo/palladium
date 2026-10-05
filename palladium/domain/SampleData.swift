@@ -36,7 +36,7 @@ nonisolated enum SampleData {
         kind: .video,
         clips: [
             makeClip(asset: introVideo, sourceStart: 0, duration: 8, timelineStart: 0),
-            makeClip(asset: bRollVideo, sourceStart: 2, duration: 10, timelineStart: 8),
+            makeClip(asset: bRollVideo, sourceStart: 2, duration: 10, timelineStart: 8, transitionIn: ClipTransition(kind: .dissolve, duration: seconds(1))),
         ]
     )
 
@@ -82,11 +82,19 @@ nonisolated enum SampleData {
         CMTime(seconds: value, preferredTimescale: standardTimescale)
     }
 
-    private static func makeClip(asset: MediaAsset, sourceStart: Double, duration: Double, timelineStart: Double) -> Clip {
+    private static func makeClip(
+        asset: MediaAsset,
+        sourceStart: Double,
+        duration: Double,
+        timelineStart: Double,
+        transitionIn: ClipTransition? = nil
+    ) -> Clip {
         let sourceRange = CMTimeRange(start: seconds(sourceStart), duration: seconds(duration))
-        guard let clip = Clip(assetID: asset.id, sourceRange: sourceRange, timelineStart: seconds(timelineStart)) else {
+        guard var clip = Clip(assetID: asset.id, sourceRange: sourceRange, timelineStart: seconds(timelineStart)) else {
             preconditionFailure("샘플 클립 값이 Clip 불변식을 어긴다: \(asset.name)")
         }
+        clip.transitionIn = transitionIn
+        clip.audioCrossfadeIn = transitionIn?.duration
         return clip
     }
 }

@@ -230,6 +230,59 @@ struct SubtitleTests {
     }
 }
 
+struct TransitionTests {
+    private let assetID = UUID()
+
+    private func seconds(_ value: Double) -> CMTime {
+        CMTime(seconds: value, preferredTimescale: standardTimescale)
+    }
+
+    private func clip(start: Double, duration: Double) throws -> Clip {
+        try #require(Clip(assetID: assetID, sourceRange: CMTimeRange(start: .zero, duration: seconds(duration)), timelineStart: seconds(start)))
+    }
+
+    @Test("전환은 앞에 맞닿은 클립이 있을 때만 두고, 길이는 두 클립 중 짧은 쪽을 넘지 않으며, 트림하면 그만큼 줄어든다")
+    func transitionRules() throws {
+        let first = try clip(start: 0, duration: 2)
+        let second = try clip(start: 2, duration: 4)
+        let apart = try clip(start: 7, duration: 2)
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [Track(id: UUID(), kind: .video, clips: [first, second, apart])])
+
+        sequence.setTransition(ClipTransition(kind: .wipe, duration: seconds(10)), forClip: second.id)
+        sequence.setTransition(ClipTransition(kind: .dissolve, duration: seconds(1)), forClip: apart.id)
+        sequence.setAudioCrossfade(seconds(0.01), forClip: second.id)
+        let track = sequence.tracks[0]
+        let placed = try #require(sequence.clip(id: second.id))
+        #expect(placed.transitionIn == ClipTransition(kind: .wipe, duration: seconds(2)))
+        #expect(placed.audioCrossfadeIn == ClipTransition.minimumDuration)
+        #expect(sequence.clip(id: apart.id)?.transitionIn == nil)
+        #expect(track.effectiveTransition(into: first) == nil)
+
+        // 앞 클립을 1초로 줄이면 전환도 1초가 된다(저장값은 그대로 두고 그릴 때 줄인다).
+        sequence.setSourceRange(CMTimeRange(start: .zero, duration: seconds(1)), forClip: first.id)
+        let trimmed = try #require(sequence.clip(id: second.id))
+        #expect(sequence.tracks[0].effectiveTransition(into: trimmed)?.duration == seconds(1))
+
+        sequence.setTransition(nil, forClip: second.id)
+        #expect(sequence.clip(id: second.id)?.transitionIn == nil)
+    }
+
+    @Test("전환이 있는 클립을 나누면 앞 조각만 전환을 갖는다")
+    func splitKeepsTransitionOnFirstPart() throws {
+        let first = try clip(start: 0, duration: 2)
+        let second = try clip(start: 2, duration: 4)
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [Track(id: UUID(), kind: .video, clips: [first, second])])
+        sequence.setTransition(ClipTransition(kind: .dissolve, duration: seconds(1)), forClip: second.id)
+
+        sequence.split(at: seconds(4), clipIDs: [second.id])
+
+        let parts = sequence.tracks[0].clips.filter { $0.timelineStart >= seconds(2) }.sorted { $0.timelineStart < $1.timelineStart }
+        #expect(parts.count == 2)
+        #expect(parts.first?.transitionIn != nil)
+        #expect(parts.last?.transitionIn == nil)
+    }
+}
+
 struct TrimTests {
     private let assetID = UUID()
 

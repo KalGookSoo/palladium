@@ -21,6 +21,11 @@ nonisolated extension Clip {
         portion?.transform = transform
         portion?.volume = volume
         portion?.isMuted = isMuted
+        // 앞 클립과의 전환은 원래 시작을 가진 조각에만 남는다.
+        if clippedStart == timelineStart {
+            portion?.transitionIn = transitionIn
+            portion?.audioCrossfadeIn = audioCrossfadeIn
+        }
         return portion
     }
 }

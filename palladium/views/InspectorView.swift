@@ -12,6 +12,10 @@ struct InspectorView: View {
     var setClipSource: (Clip.ID, CMTime, CMTime) -> Void = { _, _, _ in }
     var setTransform: (Clip.ID, ClipTransform) -> Void = { _, _ in }
     var setClipAudio: (Clip.ID, Double, Bool) -> Void = { _, _, _ in }
+    /// 고른 클립과 바로 앞 클립 사이 전환의 최대 길이. 맞닿은 앞 클립이 없으면 0이다.
+    var maximumTransitionDuration = CMTime.zero
+    var setTransition: (Clip.ID, ClipTransition?) -> Void = { _, _ in }
+    var setAudioCrossfade: (Clip.ID, CMTime?) -> Void = { _, _ in }
     /// 자막 트랙에서 고른 자막. 있으면 클립 대신 자막 속성을 보여준다.
     var subtitle: Subtitle?
     var updateSubtitle: (Subtitle.ID, String, SubtitleStyle) -> Void = { _, _, _ in }
@@ -63,6 +67,15 @@ struct InspectorView: View {
                     } else {
                         TransformInspectorView(transform: clip.transform) { setTransform(clip.id, $0) }
                     }
+                case .transition:
+                    TransitionInspectorView(
+                        clip: clip,
+                        hasPicture: asset?.kind != .audio,
+                        hasSound: asset?.kind != .image,
+                        maximumDuration: maximumTransitionDuration,
+                        setTransition: { setTransition(clip.id, $0) },
+                        setAudioCrossfade: { setAudioCrossfade(clip.id, $0) }
+                    )
                 }
             }
         } else {
@@ -88,6 +101,7 @@ private enum InspectorTab: CaseIterable, Identifiable {
     case audio
     case effect
     case transform
+    case transition
 
     var id: Self {
         self
@@ -99,6 +113,7 @@ private enum InspectorTab: CaseIterable, Identifiable {
         case .audio: "오디오"
         case .effect: "이펙트"
         case .transform: "트랜스폼"
+        case .transition: "전환"
         }
     }
 }

@@ -42,6 +42,34 @@ struct SequenceExporterTests {
         #expect(center.red > 180 && center.blue < 80)
     }
 
+    @Test("전환이 있는 시퀀스도 길이 그대로 내보내고, 컷 지점에서 두 클립이 섞인다")
+    func exportsTransition() async throws {
+        let redURL = try await TestMedia.makeVideo(red: 255, green: 0, blue: 0, seconds: 1)
+        let blueURL = try await TestMedia.makeVideo(red: 0, green: 0, blue: 255, seconds: 1)
+        let red = MediaAsset(id: UUID(), name: "red.mov", sourceURL: redURL, kind: .video, duration: seconds(1))
+        let blue = MediaAsset(id: UUID(), name: "blue.mov", sourceURL: blueURL, kind: .video, duration: seconds(1))
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let trackID = sequence.addTrack(kind: .video)
+        try sequence.place(#require(red.makeClip(at: .zero)), onTrack: trackID)
+        let blueClip = try #require(blue.makeClip(at: seconds(1)))
+        sequence.place(blueClip, onTrack: trackID)
+        sequence.setTransition(ClipTransition(kind: .dissolve, duration: seconds(0.6)), forClip: blueClip.id)
+        let composition = try #require(await SequenceComposer.makeComposition(
+            sequence: sequence, assets: [red, blue], aspectRatio: .landscape16x9, resolveURL: \.sourceURL
+        ))
+        let output = TestMedia.temporaryURL(extension: "mp4")
+
+        try await SequenceExporter.export(composition, to: output) { _ in }
+
+        let exported = AVURLAsset(url: output)
+        #expect(try await abs(exported.load(.duration).seconds - 2) < 0.1)
+        let generator = AVAssetImageGenerator(asset: exported)
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        let middle = try await TestMedia.centerColor(of: generator.image(at: seconds(1)).image)
+        #expect(middle.red > 60 && middle.blue > 60)
+    }
+
     @Test("자막만 있는 시퀀스도 자막 길이만큼 내보내고 자막이 화면에 박힌다")
     func exportsSubtitleOnlySequence() async throws {
         var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])

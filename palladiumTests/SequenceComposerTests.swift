@@ -220,4 +220,75 @@ struct SequenceComposerTests {
         #expect(abs(bottom.midX - 960) < 1)
         #expect(bottom.width < render.width * SubtitleRenderer.maximumWidthRatio)
     }
+
+    /// 빨간 2초 영상 뒤에 파란 2초 영상을 붙이고 파란 클립에 1초 전환을 둔 합성의 프레임 생성기.
+    private func transitionGenerator(kind: TransitionKind) async throws -> AVAssetImageGenerator {
+        let redURL = try await TestMedia.makeVideo(red: 255, green: 0, blue: 0, seconds: 2)
+        let blueURL = try await TestMedia.makeVideo(red: 0, green: 0, blue: 255, seconds: 2)
+        let red = MediaAsset(id: UUID(), name: "red.mov", sourceURL: redURL, kind: .video, duration: seconds(2))
+        let blue = MediaAsset(id: UUID(), name: "blue.mov", sourceURL: blueURL, kind: .video, duration: seconds(2))
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let trackID = sequence.addTrack(kind: .video)
+        try sequence.place(#require(red.makeClip(at: .zero)), onTrack: trackID)
+        let blueClip = try #require(blue.makeClip(at: seconds(2)))
+        sequence.place(blueClip, onTrack: trackID)
+        sequence.setTransition(ClipTransition(kind: kind, duration: seconds(1)), forClip: blueClip.id)
+
+        let composition = try #require(await SequenceComposer.makeComposition(
+            sequence: sequence, assets: [red, blue], aspectRatio: .landscape16x9, resolveURL: \.sourceURL
+        ))
+        #expect(abs(composition.duration.seconds - 4) < 0.01)
+        let generator = AVAssetImageGenerator(asset: composition.asset)
+        generator.videoComposition = composition.videoComposition
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        return generator
+    }
+
+    @Test("디졸브는 컷 지점을 가운데 두고 앞 클립에서 뒤 클립으로 서서히 바뀐다(원본 여분이 없으면 끝·첫 프레임을 멈춰 쓴다)")
+    func dissolveBlendsAcrossCut() async throws {
+        let generator = try await transitionGenerator(kind: .dissolve)
+        let before = try await TestMedia.centerColor(of: generator.image(at: seconds(1.2)).image)
+        let middle = try await TestMedia.centerColor(of: generator.image(at: seconds(2)).image)
+        let after = try await TestMedia.centerColor(of: generator.image(at: seconds(2.8)).image)
+        #expect(before.red > 200 && before.blue < 60)
+        #expect(middle.red > 60 && middle.blue > 60)
+        #expect(after.blue > 200 && after.red < 60)
+    }
+
+    @Test("와이프는 뒤 클립이 왼쪽부터 밀고 들어온다")
+    func wipeRevealsFromLeft() async throws {
+        let generator = try await transitionGenerator(kind: .wipe)
+        let frame = try await generator.image(at: seconds(2)).image
+        let left = TestMedia.color(of: frame, atX: 0.25, y: 0.5)
+        let right = TestMedia.color(of: frame, atX: 0.75, y: 0.5)
+        #expect(left.blue > 200 && left.red < 60)
+        #expect(right.red > 200 && right.blue < 60)
+    }
+
+    @Test("오디오 크로스페이드는 컷 지점 앞뒤로 앞 클립 소리를 줄이고 뒤 클립 소리를 키운다")
+    func audioCrossfadeRamps() async throws {
+        let toneURL = try TestMedia.makeTone(seconds: 2)
+        let tone = MediaAsset(id: UUID(), name: "tone.wav", sourceURL: toneURL, kind: .audio, duration: seconds(2))
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let trackID = sequence.addTrack(kind: .audio)
+        try sequence.place(#require(tone.makeClip(at: .zero)), onTrack: trackID)
+        let second = try #require(tone.makeClip(at: seconds(2)))
+        sequence.place(second, onTrack: trackID)
+        sequence.setAudioCrossfade(seconds(1), forClip: second.id)
+
+        let composition = try #require(await SequenceComposer.makeComposition(
+            sequence: sequence, assets: [tone], aspectRatio: .landscape16x9, resolveURL: \.sourceURL
+        ))
+        let parameters = try #require(composition.audioMix?.inputParameters)
+        let rampsAtCut = parameters.map { input -> (Float, Float) in
+            var start: Float = -1
+            var end: Float = -1
+            var range = CMTimeRange()
+            _ = input.getVolumeRamp(for: seconds(2), startVolume: &start, endVolume: &end, timeRange: &range)
+            return (start, end)
+        }
+        #expect(rampsAtCut.contains { $0 == (1, 0) })
+        #expect(rampsAtCut.contains { $0 == (0, 1) })
+    }
 }

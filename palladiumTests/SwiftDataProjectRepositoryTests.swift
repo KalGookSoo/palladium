@@ -62,7 +62,7 @@ struct SwiftDataProjectRepositoryTests {
         #expect(try repository.project(id: UUID()) == nil)
     }
 
-    @Test("저장한 프로젝트를 다시 불러오면 원본·폴더·시퀀스·트랙·클립·마커·자막(스타일 포함)이 순서까지 그대로다")
+    @Test("저장한 프로젝트를 다시 불러오면 원본·폴더·시퀀스·트랙·클립·마커·자막(스타일 포함)·전환이 순서까지 그대로다")
     func savedProjectRoundTrips() throws {
         let repository = SwiftDataProjectRepository(modelContext: container.mainContext)
         let created = try repository.createProject(named: "샘플")

@@ -14,6 +14,10 @@ nonisolated struct Clip {
     /// 이 클립 소리의 크기(0~1). 영상 클립은 영상에 담긴 소리다(#44).
     var volume = 1.0
     var isMuted = false
+    /// 바로 앞 클립에서 넘어오는 영상 전환(#8). 앞 클립과 맞닿아 있을 때만 그린다.
+    var transitionIn: ClipTransition?
+    /// 바로 앞 클립과의 오디오 크로스페이드 길이(#8). 영상 전환과 따로 정한다.
+    var audioCrossfadeIn: CMTime?
 
     init?(id: UUID = UUID(), assetID: MediaAsset.ID, sourceRange: CMTimeRange, timelineStart: CMTime) {
         guard sourceRange.start.isNumeric, sourceRange.duration.isNumeric, sourceRange.duration > .zero, timelineStart.isNumeric, timelineStart >= .zero else { return nil }

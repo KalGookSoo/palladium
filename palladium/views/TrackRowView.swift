@@ -34,6 +34,12 @@ struct TrackRowView: View {
                     .overlay(alignment: .topLeading) { trimHandles(for: clip) }
             }
 
+            // 컷 지점을 가운데 둔 전환 구간. 영상 전환은 띠로, 오디오 크로스페이드는 아래쪽 막대로 보여준다.
+            ForEach(track.clips) { clip in
+                transitionMarks(for: clip)
+            }
+            .allowsHitTesting(false)
+
             if let placeholder {
                 PlaceholderView()
                     .frame(width: scale.width(for: placeholder.sourceRange.duration), height: clipHeight)
@@ -71,6 +77,31 @@ struct TrackRowView: View {
                 .onEnded { value in dragEnded(clip, value.translation) }
         )
         .contextMenu { clipMenu(for: clip) }
+    }
+
+    @ViewBuilder
+    private func transitionMarks(for clip: Clip) -> some View {
+        let cut = scale.x(for: clip.timelineStart)
+        if let transition = track.effectiveTransition(into: clip) {
+            let width = scale.width(for: transition.duration)
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.accentColor.opacity(0.25))
+                .strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 1)
+                .overlay {
+                    Image(systemName: transition.kind == .dissolve ? "circle.lefthalf.filled" : "rectangle.lefthalf.inset.filled")
+                        .font(.caption2)
+                        .foregroundStyle(Color.accentColor)
+                }
+                .frame(width: max(width, 6), height: clipHeight)
+                .offset(x: cut - max(width, 6) / 2, y: TimelineMetrics.clipVerticalInset)
+        }
+        if let crossfade = track.effectiveAudioCrossfade(into: clip) {
+            let width = max(scale.width(for: crossfade), 6)
+            Capsule()
+                .fill(Color.orange.opacity(0.8))
+                .frame(width: width, height: 3)
+                .offset(x: cut - width / 2, y: TimelineMetrics.trackHeight - TimelineMetrics.clipVerticalInset - 4)
+        }
     }
 
     /// 클립 양 끝의 잡는 영역. 끌면 그쪽 끝을 트림한다(클립 이동보다 먼저 받는다).
@@ -133,6 +164,16 @@ struct TrackRowView: View {
         Button(ShortcutGuide.splitAtPlayhead.title) { actions.splitClips(targetIDs) }
             .keyboardShortcut("b", modifiers: .command)
             .disabled(!canSplit)
+        // 앞 클립과 맞닿은 클립 하나에만 전환을 둔다. 길이는 기본 1초이고 인스펙터 전환 탭에서 바꾼다.
+        if targetIDs.count == 1, track.kind == .video, track.maximumTransitionDuration(into: clip) >= ClipTransition.minimumDuration {
+            Menu("앞 클립과 전환") {
+                Button("디졸브") { actions.setTransition(clip.id, ClipTransition(kind: .dissolve, duration: clip.transitionIn?.duration ?? ClipTransition.defaultDuration)) }
+                Button("와이프") { actions.setTransition(clip.id, ClipTransition(kind: .wipe, duration: clip.transitionIn?.duration ?? ClipTransition.defaultDuration)) }
+                Divider()
+                Button("전환 없음") { actions.setTransition(clip.id, nil) }
+                    .disabled(clip.transitionIn == nil)
+            }
+        }
         Divider()
         Button("원본 훑어보기") { actions.openAsset(clip.assetID) }
         Button("미디어 패널에서 원본 보기") { actions.revealAsset(clip.assetID) }

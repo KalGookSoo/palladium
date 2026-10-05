@@ -12,8 +12,15 @@ nonisolated struct CompositionLayer {
         case subtitle(Subtitle)
     }
 
+    /// 앞 클립 위로 나타나는 전환(#8). 구간 동안 0에서 1로 나아간다.
+    struct Fade {
+        let range: CMTimeRange
+        let kind: TransitionKind
+    }
+
     let content: Content
     let transform: ClipTransform
+    var fade: Fade?
 }
 
 /// 시퀀스 구간 하나와 그 구간에 그릴 층들. 빈 구간은 층이 없어 검은 화면이다.
@@ -59,7 +66,10 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
         let canvas = CGRect(origin: .zero, size: renderSize)
         var image = CIImage(color: .black).cropped(to: canvas)
         for layer in instruction.layers {
-            guard let layerImage = placedImage(for: layer, request: request, renderSize: renderSize) else { continue }
+            guard var layerImage = placedImage(for: layer, request: request, renderSize: renderSize) else { continue }
+            if let fade = layer.fade {
+                layerImage = Self.applying(fade, at: request.compositionTime, to: layerImage, renderSize: renderSize)
+            }
             image = layerImage.composited(over: image)
         }
         context.render(image.cropped(to: canvas), to: output)
@@ -127,6 +137,18 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
         let frame = clipTransform.frame(contentSize: imageSize, in: renderSize)
         return CGAffineTransform(scaleX: frame.width / imageSize.width, y: frame.height / imageSize.height)
             .concatenating(CGAffineTransform(translationX: frame.minX, y: renderSize.height - frame.maxY))
+    }
+
+    /// 전환 진행만큼 디졸브는 투명도를, 와이프는 왼쪽부터 보이는 폭을 정한다.
+    static func applying(_ fade: CompositionLayer.Fade, at time: CMTime, to image: CIImage, renderSize: CGSize) -> CIImage {
+        let elapsed = (time - fade.range.start).seconds / max(fade.range.duration.seconds, 0.001)
+        let progress = min(max(elapsed, 0), 1)
+        switch fade.kind {
+        case .dissolve:
+            return applyingOpacity(progress, to: image)
+        case .wipe:
+            return image.cropped(to: CGRect(x: 0, y: 0, width: renderSize.width * progress, height: renderSize.height))
+        }
     }
 
     private static func applyingOpacity(_ opacity: Double, to image: CIImage) -> CIImage {

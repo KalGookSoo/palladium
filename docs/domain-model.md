@@ -63,6 +63,8 @@ classDiagram
         assetID: MediaAsset.ID
         sourceRange: CMTimeRange
         timelineStart: CMTime
+        transitionIn: ClipTransition?
+        audioCrossfadeIn: CMTime?
     }
     Project "1" *-- "0..*" MediaAsset
     Project "1" *-- "0..*" MediaFolder
@@ -87,6 +89,7 @@ classDiagram
 | `Marker`       | 시퀀스의 특정 시각에 붙이는 책갈피(시각 + 이름)                                | 영상 내용은 바꾸지 않는 표시용 정보. 추가·삭제 편집은 [클립 이어붙이기](use-cases/joining-clips.md)(#3)에서 다룬다 |
 | `Subtitle`     | 시퀀스(결과물) 시간의 한 구간에 보이는 글자와 모양(`SubtitleStyle` — 크기·위치(위/가운데/아래)·색(흰색/노란색)·배경 상자, #4) | 클립과 상관없이 그 시각에 맨 위에 그린다. 시퀀스 길이에 자막 끝도 포함한다. SRT 읽기·쓰기는 `SubtitleFile` |
 | `Clip`         | 원본의 어느 구간(`sourceRange`)을 타임라인의 어느 위치(`timelineStart`)에 놓을지, 화면 어디에 어떻게 그릴지(`transform: ClipTransform` — 위치·배율·불투명도, #9) | 타임라인에서 차지하는 구간(`timelineRange`)은 저장하지 않고 계산한다                           |
+| `ClipTransition` | 바로 앞 클립에서 이 클립으로 넘어가는 영상 전환(종류: 디졸브·와이프, 길이). 오디오 크로스페이드는 `Clip.audioCrossfadeIn`(#8) | 앞 클립과 맞닿아 있을 때만 그리고, 그릴 때 두 클립 중 짧은 쪽 길이로 줄인다([트랜지션](use-cases/transitions.md)) |
 
 보조 타입:
 
@@ -148,7 +151,6 @@ classDiagram
 
 아래 개념은 해당 기능 이슈에서 이 문서에 추가한다.
 
-- 트랜지션([트랜지션](use-cases/transitions.md))
 - 오버레이·마스크([오버레이 및 마스킹](use-cases/overlays.md))
 - 마커 추가·삭제 편집([클립 이어붙이기](use-cases/joining-clips.md))
 - 프록시(#43)([미디어 가져오기](use-cases/media-import.md))

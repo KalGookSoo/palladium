@@ -45,22 +45,28 @@ nonisolated enum SequenceComposer {
         // 층으로 그릴 클립: (타임라인 구간, 층, 쌓는 순서 — 클수록 위).
         var placedLayers: [(range: CMTimeRange, layer: CompositionLayer, order: Int)] = []
         var images: [MediaAsset.ID: CIImage] = [:]
-        // 소리 구간마다의 음량: (합성 오디오 트랙, 클립 시작, 음량).
-        var volumes: [(trackID: CMPersistentTrackID, start: CMTime, volume: Float)] = []
+        // 합성 오디오 트랙마다의 음량 변화(클립 음량·크로스페이드).
+        var ramps: [VolumeRamp] = []
 
         for (trackIndex, track) in sequence.tracks.enumerated() where track.kind == .video {
             // 트랙 배열은 화면 위쪽부터라, 앞에 있을수록 위에 그린다.
             let order = sequence.tracks.count - trackIndex
-            let videoTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
-            let soundTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+            // 전환·크로스페이드가 있으면 앞뒤 클립이 컷 지점에서 겹치므로 합성 트랙 두 줄(A/B)을 번갈아 쓴다.
+            let videoRolls = Rolls(composition: composition, mediaType: .video)
+            let soundRolls = Rolls(composition: composition, mediaType: .audio)
             for clip in track.clips.sorted(by: { $0.timelineStart < $1.timelineStart }) {
                 guard let asset = assets.first(where: { $0.id == clip.assetID }) else { continue }
+                let edges = TransitionEdges(track: track, clip: clip)
+                let videoTrack = videoRolls.track(switching: edges.transition != nil)
+                let soundTrack = soundRolls.track(switching: edges.crossfadeIn != nil)
+                let layerRange = edges.videoRange(of: clip)
+                let fade = edges.transition.map { CompositionLayer.Fade(range: edges.transitionRange(of: clip), kind: $0.kind) }
                 if asset.kind == .image {
                     if images[asset.id] == nil {
                         images[asset.id] = loadImage(at: resolveURL(asset))
                     }
                     if let image = images[asset.id] {
-                        placedLayers.append((clip.timelineRange, CompositionLayer(content: .image(image), transform: clip.transform), order))
+                        placedLayers.append((layerRange, CompositionLayer(content: .image(image), transform: clip.transform, fade: fade), order))
                     }
                     continue
                 }
@@ -68,14 +74,14 @@ nonisolated enum SequenceComposer {
                 let source = AVURLAsset(url: resolveURL(asset))
                 do {
                     if let sourceVideo = try await source.loadTracks(withMediaType: .video).first, let videoTrack {
-                        try videoTrack.insertTimeRange(clip.sourceRange, of: sourceVideo, at: clip.timelineStart)
+                        try await insert(clip, of: sourceVideo, into: videoTrack, lead: edges.videoLead, tail: edges.videoTail, freezesMissingFrames: true)
                         let (naturalSize, preferredTransform) = try await sourceVideo.load(.naturalSize, .preferredTransform)
                         let content = CompositionLayer.Content.video(trackID: videoTrack.trackID, naturalSize: naturalSize, preferredTransform: preferredTransform)
-                        placedLayers.append((clip.timelineRange, CompositionLayer(content: content, transform: clip.transform), order))
+                        placedLayers.append((layerRange, CompositionLayer(content: content, transform: clip.transform, fade: fade), order))
                     }
                     if let sourceAudio = try await source.loadTracks(withMediaType: .audio).first, let soundTrack {
-                        try soundTrack.insertTimeRange(clip.sourceRange, of: sourceAudio, at: clip.timelineStart)
-                        volumes.append((soundTrack.trackID, clip.timelineStart, Float(sequence.effectiveVolume(of: clip.id))))
+                        try await insert(clip, of: sourceAudio, into: soundTrack, lead: edges.audioLead, tail: edges.audioTail, freezesMissingFrames: false)
+                        ramps += edges.volumeRamps(of: clip, trackID: soundTrack.trackID, volume: Float(sequence.effectiveVolume(of: clip.id)))
                     }
                 } catch {
                     Logger.playback.error("합성에서 클립을 건너뜀: \(asset.name, privacy: .public), \(error.localizedDescription, privacy: .public)")
@@ -83,16 +89,18 @@ nonisolated enum SequenceComposer {
             }
         }
 
-        // 오디오 트랙: 트랙마다 합성 오디오 트랙 하나.
+        // 오디오 트랙: 트랙마다 합성 오디오 트랙 두 줄(크로스페이드용).
         for track in sequence.tracks where track.kind == .audio {
-            let audioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
-            for clip in track.clips {
+            let audioRolls = Rolls(composition: composition, mediaType: .audio)
+            for clip in track.clips.sorted(by: { $0.timelineStart < $1.timelineStart }) {
                 guard let asset = assets.first(where: { $0.id == clip.assetID }) else { continue }
+                let edges = TransitionEdges(track: track, clip: clip)
+                let audioTrack = audioRolls.track(switching: edges.crossfadeIn != nil)
                 let source = AVURLAsset(url: resolveURL(asset))
                 do {
                     if let sourceAudio = try await source.loadTracks(withMediaType: .audio).first, let audioTrack {
-                        try audioTrack.insertTimeRange(clip.sourceRange, of: sourceAudio, at: clip.timelineStart)
-                        volumes.append((audioTrack.trackID, clip.timelineStart, Float(sequence.effectiveVolume(of: clip.id))))
+                        try await insert(clip, of: sourceAudio, into: audioTrack, lead: edges.audioLead, tail: edges.audioTail, freezesMissingFrames: false)
+                        ramps += edges.volumeRamps(of: clip, trackID: audioTrack.trackID, volume: Float(sequence.effectiveVolume(of: clip.id)))
                     }
                 } catch {
                     Logger.playback.error("합성에서 클립을 건너뜀: \(asset.name, privacy: .public), \(error.localizedDescription, privacy: .public)")
@@ -114,7 +122,7 @@ nonisolated enum SequenceComposer {
         if !placedLayers.isEmpty, composition.tracks(withMediaType: .video).isEmpty || composition.duration < duration {
             await addBlankBase(to: composition, duration: duration)
         }
-        let audioMix = makeAudioMix(composition: composition, volumes: volumes)
+        let audioMix = makeAudioMix(composition: composition, ramps: ramps)
         guard !placedLayers.isEmpty else {
             return SequenceComposition(asset: composition, videoComposition: nil, audioMix: audioMix, duration: duration)
         }
@@ -139,7 +147,8 @@ nonisolated enum SequenceComposer {
             guard start < end else { return nil }
             let active = layers
                 .filter { $0.range.start <= start && start < $0.range.end }
-                .sorted { $0.order < $1.order }
+                // 같은 트랙에서는 나중에 시작한 클립(전환으로 나타나는 클립)을 위에 그린다.
+                .sorted { ($0.order, $0.range.start.seconds) < ($1.order, $1.range.start.seconds) }
                 .map(\.layer)
             return LayerInstruction(timeRange: CMTimeRange(start: start, end: end), layers: active)
         }
@@ -152,15 +161,12 @@ nonisolated enum SequenceComposer {
         return videoComposition
     }
 
-    /// 합성 오디오 트랙마다 클립이 시작하는 시각에 그 클립의 음량을 둔다(다음 클립 시작까지 유지).
-    private static func makeAudioMix(
-        composition: AVComposition,
-        volumes: [(trackID: CMPersistentTrackID, start: CMTime, volume: Float)]
-    ) -> AVAudioMix? {
+    /// 합성 오디오 트랙마다 클립 음량과 크로스페이드를 음량 변화로 둔다.
+    private static func makeAudioMix(composition: AVComposition, ramps: [VolumeRamp]) -> AVAudioMix? {
         let parameters = composition.tracks(withMediaType: .audio).map { track in
             let trackParameters = AVMutableAudioMixInputParameters(track: track)
-            for entry in volumes.filter({ $0.trackID == track.trackID }).sorted(by: { $0.start < $1.start }) {
-                trackParameters.setVolume(entry.volume, at: entry.start)
+            for ramp in ramps.filter({ $0.trackID == track.trackID }).sorted(by: { $0.range.start < $1.range.start }) {
+                trackParameters.setVolumeRamp(fromStartVolume: ramp.from, toEndVolume: ramp.to, timeRange: ramp.range)
             }
             return trackParameters
         }
@@ -168,6 +174,36 @@ nonisolated enum SequenceComposer {
         let audioMix = AVMutableAudioMix()
         audioMix.inputParameters = parameters
         return audioMix
+    }
+
+    /// 클립을 합성 트랙에 넣는다. 전환으로 컷 앞(`lead`)·뒤(`tail`)까지 더 보여야 하면 원본의 앞뒤 여분을 쓰고,
+    /// 여분이 모자라면 영상은 첫·끝 프레임을 멈춰 채우고 소리는 비워 둔다.
+    private static func insert(
+        _ clip: Clip,
+        of source: AVAssetTrack,
+        into track: AVMutableCompositionTrack,
+        lead: CMTime,
+        tail: CMTime,
+        freezesMissingFrames: Bool
+    ) async throws {
+        let sourceEnd = try await source.load(.timeRange).end
+        let handleBefore = CMTimeMinimum(lead, clip.sourceRange.start)
+        let handleAfter = CMTimeMinimum(tail, CMTimeMaximum(sourceEnd - clip.sourceRange.end, .zero))
+        let sourceRange = CMTimeRange(start: clip.sourceRange.start - handleBefore, end: clip.sourceRange.end + handleAfter)
+        let missingBefore = lead - handleBefore
+        let missingAfter = tail - handleAfter
+
+        if freezesMissingFrames, missingBefore > .zero {
+            let frame = CMTimeRange(start: sourceRange.start, duration: frameDuration)
+            try track.insertTimeRange(frame, of: source, at: clip.timelineStart - lead)
+            track.scaleTimeRange(CMTimeRange(start: clip.timelineStart - lead, duration: frameDuration), toDuration: missingBefore)
+        }
+        try track.insertTimeRange(sourceRange, of: source, at: clip.timelineStart - handleBefore)
+        if freezesMissingFrames, missingAfter > .zero {
+            let frameStart = clip.timelineRange.end + handleAfter
+            try track.insertTimeRange(CMTimeRange(start: sourceRange.end - frameDuration, duration: frameDuration), of: source, at: frameStart)
+            track.scaleTimeRange(CMTimeRange(start: frameStart, duration: frameDuration), toDuration: missingAfter)
+        }
     }
 
     /// 시퀀스 처음부터 끝까지 덮는 바탕 영상 트랙. 층으로 그리지 않으므로 화면에는 보이지 않는다.
@@ -197,5 +233,87 @@ nonisolated enum SequenceComposer {
             return nil
         }
         return CIImage(cgImage: image)
+    }
+}
+
+/// 합성 오디오 트랙 하나의 한 구간 음량 변화.
+nonisolated struct VolumeRamp {
+    let trackID: CMPersistentTrackID
+    let range: CMTimeRange
+    let from: Float
+    let to: Float
+}
+
+/// 트랙 하나에 쓰는 합성 트랙 두 줄. 전환으로 앞 클립과 겹치는 클립만 다른 줄로 바꿔 넣는다.
+nonisolated private final class Rolls {
+    private let tracks: [AVMutableCompositionTrack?]
+    private var index = 0
+
+    init(composition: AVMutableComposition, mediaType: AVMediaType) {
+        tracks = [
+            composition.addMutableTrack(withMediaType: mediaType, preferredTrackID: kCMPersistentTrackID_Invalid),
+            composition.addMutableTrack(withMediaType: mediaType, preferredTrackID: kCMPersistentTrackID_Invalid),
+        ]
+    }
+
+    func track(switching: Bool) -> AVMutableCompositionTrack? {
+        if switching {
+            index = 1 - index
+        }
+        return tracks[index]
+    }
+}
+
+/// 클립 앞뒤의 전환·크로스페이드. 컷 지점을 가운데 두고 앞뒤로 절반씩 걸친다(#8).
+nonisolated private struct TransitionEdges {
+    let transition: ClipTransition?
+    let crossfadeIn: CMTime?
+    let crossfadeOut: CMTime?
+    let transitionOut: ClipTransition?
+
+    init(track: Track, clip: Clip) {
+        transition = track.effectiveTransition(into: clip)
+        crossfadeIn = track.effectiveAudioCrossfade(into: clip)
+        let next = track.clips.first { $0.timelineStart == clip.timelineRange.end && $0.id != clip.id }
+        transitionOut = next.flatMap { track.effectiveTransition(into: $0) }
+        crossfadeOut = next.flatMap { track.effectiveAudioCrossfade(into: $0) }
+    }
+
+    var videoLead: CMTime { half(transition?.duration) }
+    var videoTail: CMTime { half(transitionOut?.duration) }
+    var audioLead: CMTime { half(crossfadeIn) }
+    var audioTail: CMTime { half(crossfadeOut) }
+
+    /// 전환으로 컷 앞뒤까지 늘어난, 화면에 그릴 구간.
+    func videoRange(of clip: Clip) -> CMTimeRange {
+        CMTimeRange(start: clip.timelineStart - videoLead, end: clip.timelineRange.end + videoTail)
+    }
+
+    /// 이 클립이 나타나는 전환 구간.
+    func transitionRange(of clip: Clip) -> CMTimeRange {
+        CMTimeRange(start: clip.timelineStart - videoLead, end: clip.timelineStart + videoLead)
+    }
+
+    /// 크로스페이드 구간에서는 0과 클립 음량 사이를 오가고, 나머지는 클립 음량 그대로다.
+    func volumeRamps(of clip: Clip, trackID: CMPersistentTrackID, volume: Float) -> [VolumeRamp] {
+        let start = clip.timelineStart
+        let end = clip.timelineRange.end
+        var ramps: [VolumeRamp] = []
+        if audioLead > .zero {
+            ramps.append(VolumeRamp(trackID: trackID, range: CMTimeRange(start: start - audioLead, end: start + audioLead), from: 0, to: volume))
+        }
+        let steadyRange = CMTimeRange(start: start + audioLead, end: end - audioTail)
+        if steadyRange.duration > .zero {
+            ramps.append(VolumeRamp(trackID: trackID, range: steadyRange, from: volume, to: volume))
+        }
+        if audioTail > .zero {
+            ramps.append(VolumeRamp(trackID: trackID, range: CMTimeRange(start: end - audioTail, end: end + audioTail), from: volume, to: 0))
+        }
+        return ramps
+    }
+
+    private func half(_ duration: CMTime?) -> CMTime {
+        guard let duration else { return .zero }
+        return CMTimeMultiplyByRatio(duration, multiplier: 1, divisor: 2)
     }
 }

@@ -34,6 +34,8 @@ struct TimelineActions {
     var addMarker: () -> Void = {}
     var renameMarker: (Marker.ID, String) -> Void = { _, _ in }
     var deleteMarker: (Marker.ID) -> Void = { _ in }
+    /// 앞 클립과의 영상 전환. `nil`이면 없앤다(#8).
+    var setTransition: (Clip.ID, ClipTransition?) -> Void = { _, _ in }
     /// 재생 헤드에 자막을 둔다.
     var addSubtitle: () -> Void = {}
     var setSubtitleRange: (Subtitle.ID, CMTime, CMTime) -> Void = { _, _, _ in }

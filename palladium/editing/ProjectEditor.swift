@@ -230,6 +230,16 @@ final class ProjectEditor {
         }
     }
 
+    /// 앞 클립과의 영상 전환. `nil`이면 없앤다(#8).
+    func setTransition(_ transition: ClipTransition?, forClip clipID: Clip.ID) {
+        editCurrentSequence(transition == nil ? "전환 제거" : "전환") { $0.setTransition(transition, forClip: clipID) }
+    }
+
+    /// 앞 클립과의 오디오 크로스페이드. `nil`이면 없앤다(#8).
+    func setAudioCrossfade(_ duration: CMTime?, forClip clipID: Clip.ID) {
+        editCurrentSequence(duration == nil ? "크로스페이드 제거" : "크로스페이드") { $0.setAudioCrossfade(duration, forClip: clipID) }
+    }
+
     /// 트랙 전체 음량(0~1)과 음소거.
     func setTrackAudio(volume: Double, isMuted: Bool, for trackID: Track.ID) {
         let clampedVolume = min(max(volume, 0), 1)

@@ -81,6 +81,7 @@ private extension SequenceRecord {
                     transform: clip.transform
                 )
                 .withAudio(volume: clip.volume, isMuted: clip.isMuted)
+                .withTransitions(of: clip)
             }
             return trackRecord
         }
@@ -180,6 +181,15 @@ private extension ClipRecord {
         return self
     }
 
+    func withTransitions(of clip: Clip) -> ClipRecord {
+        transitionKindRawValue = clip.transitionIn?.kind.rawValue
+        transitionDurationValue = clip.transitionIn?.duration.value ?? 0
+        transitionDurationTimescale = clip.transitionIn?.duration.timescale ?? standardTimescale
+        audioCrossfadeValue = clip.audioCrossfadeIn?.value
+        audioCrossfadeTimescale = clip.audioCrossfadeIn?.timescale ?? standardTimescale
+        return self
+    }
+
     func makeClip() -> Clip? {
         let sourceRange = CMTimeRange(
             start: CMTime(value: sourceStartValue, timescale: sourceStartTimescale),
@@ -194,6 +204,10 @@ private extension ClipRecord {
         clip?.transform = ClipTransform(centerX: transformCenterX, centerY: transformCenterY, scale: transformScale, opacity: transformOpacity)
         clip?.volume = volume
         clip?.isMuted = isMuted
+        if let kind = transitionKindRawValue.flatMap(TransitionKind.init(rawValue:)) {
+            clip?.transitionIn = ClipTransition(kind: kind, duration: CMTime(value: transitionDurationValue, timescale: transitionDurationTimescale))
+        }
+        clip?.audioCrossfadeIn = audioCrossfadeValue.map { CMTime(value: $0, timescale: audioCrossfadeTimescale) }
         if clip == nil {
             let clipID = id
             Logger.project.error("Clip 불변식을 어기는 저장값이라 건너뜀: \(clipID, privacy: .public)")
