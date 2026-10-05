@@ -185,6 +185,13 @@ nonisolated extension EditSequence {
         subtitles.removeAll { $0.id == subtitleID }
     }
 
+    /// `range` 동안 비어 있는 첫 오디오 트랙. 녹음한 내레이션을 다른 클립을 밀지 않고 놓을 곳이다(#10).
+    func audioTrackID(freeDuring range: CMTimeRange) -> Track.ID? {
+        tracks.first { track in
+            track.kind == .audio && !track.clips.contains { $0.timelineRange.intersection(range).duration > .zero }
+        }?.id
+    }
+
     /// `time`에 마커를 둔다. 이름이 비어 있으면 "마커 N"(N은 추가 후 개수). 마커는 시각 순으로 유지한다.
     @discardableResult
     mutating func addMarker(at time: CMTime, named name: String = "") -> Marker.ID {

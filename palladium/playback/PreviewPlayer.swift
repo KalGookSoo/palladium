@@ -19,6 +19,8 @@ final class PreviewPlayer {
     /// 미리보기에서 듣는 소리 크기(0~1). 결과물에는 영향이 없고 저장하지 않는다(#44).
     private(set) var volume: Float = 1
     private(set) var isMuted = false
+    /// 내레이션을 녹음하는 동안 스피커 소리가 마이크로 들어가지 않게 사용자 음소거와 별도로 끈다(#10).
+    private(set) var isMutedForRecording = false
 
     @ObservationIgnored private var timeObserver: Any?
 
@@ -80,13 +82,28 @@ final class PreviewPlayer {
         player.volume = volume
         if volume > 0, isMuted {
             isMuted = false
-            player.isMuted = false
+            player.isMuted = isMutedForRecording
         }
     }
 
     func toggleMute() {
         isMuted.toggle()
-        player.isMuted = isMuted
+        player.isMuted = isMuted || isMutedForRecording
+    }
+
+    func setMutedForRecording(_ muted: Bool) {
+        isMutedForRecording = muted
+        player.isMuted = isMuted || muted
+    }
+
+    func play() {
+        player.play()
+        isPlaying = true
+    }
+
+    func pause() {
+        player.pause()
+        isPlaying = false
     }
 
     func stepFrame(by frameCount: Int, in timeline: PlaybackTimeline) {

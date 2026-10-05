@@ -51,6 +51,9 @@ struct MainWindowView: View {
     @State private var playheadTime: CMTime = .zero
     @State private var timelineScale = TimelineScale(pointsPerSecond: 40)
     @State private var previewPlayer = PreviewPlayer()
+    @State private var narration = NarrationRecorder()
+    /// 내레이션을 녹음하지 못했을 때의 안내.
+    @State private var narrationMessage: String?
     @Environment(\.undoManager) private var undoManager
 
     var body: some View {
@@ -71,6 +74,14 @@ struct MainWindowView: View {
             set: {
                 if !$0 {
                     importReport = nil
+                }
+            }
+        )
+        let isShowingNarrationMessage = Binding<Bool>(
+            get: { narrationMessage != nil },
+            set: {
+                if !$0 {
+                    narrationMessage = nil
                 }
             }
         )
@@ -178,6 +189,11 @@ struct MainWindowView: View {
             } message: {
                 Text(saveErrorMessage ?? "")
             }
+            .alert("내레이션 녹음", isPresented: isShowingNarrationMessage) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text(narrationMessage ?? "")
+            }
             .alert("자막 파일", isPresented: isShowingSubtitleFileMessage) {
                 Button("확인", role: .cancel) {}
             } message: {
@@ -216,7 +232,9 @@ struct MainWindowView: View {
                     renderSize: SequenceComposer.renderSize(for: aspectRatio),
                     setTransform: { clipID, transform in editor.setTransform(transform, for: clipID) },
                     maskTarget: currentSequence.masks.first { $0.id == selectedMaskID },
-                    setMaskArea: setMaskArea
+                    setMaskArea: setMaskArea,
+                    narrationStartedAt: narration.startedAt,
+                    toggleNarration: toggleNarration
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .dropDestination(for: URL.self) { urls, _ in
@@ -509,6 +527,8 @@ struct MainWindowView: View {
             editor.addMarker(at: playheadTime)
         case .addSubtitle:
             addSubtitleAtPlayhead()
+        case .toggleNarration:
+            toggleNarration()
         }
         return true
     }
@@ -530,6 +550,34 @@ struct MainWindowView: View {
             return false
         }
         return true
+    }
+
+    /// 내레이션 녹음을 시작하거나 멈춘다(#10). 시작하면 재생 헤드부터 미리보기를 재생하고, 헤드폰이 아니면 소리를 끈다.
+    /// 멈추면 녹음 파일을 가져와 녹음을 시작한 시각에 오디오 클립으로 놓고 고른다.
+    private func toggleNarration() {
+        if narration.isRecording {
+            previewPlayer.pause()
+            previewPlayer.setMutedForRecording(false)
+            guard let result = narration.stop() else { return }
+            Task {
+                if let clipID = await editor.addNarration(from: result.url, at: result.startTime) {
+                    selectedClipIDs = [clipID]
+                } else {
+                    narrationMessage = "녹음한 파일을 가져오지 못했습니다: \(result.url.lastPathComponent)"
+                }
+            }
+            return
+        }
+        let startTime = playheadTime
+        Task {
+            do {
+                try await narration.start(at: startTime)
+                previewPlayer.setMutedForRecording(!AudioOutputRoute.isHeadphonesConnected())
+                previewPlayer.play()
+            } catch {
+                narrationMessage = error.localizedDescription
+            }
+        }
     }
 
     /// 재생 헤드에 자막을 두고 골라, 인스펙터에서 바로 글자를 입력하게 한다.

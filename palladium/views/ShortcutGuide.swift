@@ -33,7 +33,7 @@ enum ShortcutGuide {
     static let playPause = ShortcutGuideEntry(title: "재생/일시정지", summary: "미리보기를 재생하거나 멈춥니다", keys: "Space")
     static let previousFrame = ShortcutGuideEntry(title: "이전 프레임", summary: "한 프레임 뒤로 이동합니다", keys: "←")
     static let nextFrame = ShortcutGuideEntry(title: "다음 프레임", summary: "한 프레임 앞으로 이동합니다", keys: "→")
-    static let narration = ShortcutGuideEntry(title: "내레이션 녹음", summary: "마이크로 내레이션을 녹음합니다(준비 중)", keys: nil)
+    static let narration = ShortcutGuideEntry(title: "내레이션 녹음 시작/정지", summary: "재생 헤드부터 영상을 재생하며 마이크로 내레이션을 녹음하고, 멈추면 오디오 트랙에 놓습니다", keys: "R")
 
     static let zoomInTimeline = ShortcutGuideEntry(title: "타임라인 확대", summary: "타임라인을 더 자세히 봅니다", keys: "⌘=")
     static let zoomOutTimeline = ShortcutGuideEntry(title: "타임라인 축소", summary: "타임라인을 더 넓게 봅니다", keys: "⌘-")
@@ -62,7 +62,7 @@ enum ShortcutGuide {
     static let sections: [(title: String, entries: [ShortcutGuideEntry])] = [
         ("파일", [openProjectList, newProject, save, close, importMedia, export]),
         ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline]),
-        ("재생", [playPause, previousFrame, nextFrame]),
+        ("재생", [playPause, previousFrame, nextFrame, narration]),
         ("편집", [undo, redo, renameAsset]),
         ("타임라인", [deleteClips, rippleDeleteClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect, addMarker, addSubtitle, preciseTrim]),
         ("도움말", [showHelp, showShortcuts]),

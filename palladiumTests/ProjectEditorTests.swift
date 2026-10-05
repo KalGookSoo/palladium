@@ -136,6 +136,28 @@ struct ProjectEditorTests {
         #expect(editor.currentSequence.tracks.count == trackCount)
     }
 
+    @Test("녹음한 내레이션은 가져와서 녹음을 시작한 시각에 놓고, 그 구간이 빈 오디오 트랙이 없으면 새 트랙을 만들어 기존 클립을 밀지 않는다")
+    func narrationIsImportedAndPlaced() async throws {
+        let editor = try makeEditorWithSampleContent()
+        let musicClip = try #require(editor.currentSequence.tracks.first { $0.kind == .audio }?.clips.first)
+        let atFive = CMTime(seconds: 5, preferredTimescale: standardTimescale)
+        let atThirty = CMTime(seconds: 30, preferredTimescale: standardTimescale)
+
+        // 배경음악(0~18초)이 있는 구간: 새 오디오 트랙에 놓는다.
+        let firstID = try #require(await editor.addNarration(from: makeSilentAudio(), at: atFive))
+        // 배경음악이 끝난 뒤: 기존 오디오 트랙의 빈 곳에 놓는다.
+        let secondID = try #require(await editor.addNarration(from: makeSilentAudio(), at: atThirty))
+
+        let audioTracks = editor.currentSequence.tracks.filter { $0.kind == .audio }
+        #expect(audioTracks.count == 2)
+        #expect(audioTracks[0].clips.map(\.id).contains(secondID))
+        #expect(audioTracks[1].clips.map(\.id) == [firstID])
+        #expect(editor.currentSequence.clip(id: firstID)?.timelineStart == atFive)
+        #expect(editor.currentSequence.clip(id: secondID)?.timelineStart == atThirty)
+        #expect(editor.currentSequence.clip(id: musicClip.id) == musicClip)
+        #expect(editor.project.assets.count == SampleData.project.assets.count + 2)
+    }
+
     @Test("트림과 시간 입력은 원본 범위 안으로 맞춘다")
     func trimCommands() throws {
         let editor = try makeEditorWithSampleContent()

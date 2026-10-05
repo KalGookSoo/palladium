@@ -89,6 +89,19 @@ final class ProjectEditor {
         return clip.id
     }
 
+    /// 녹음한 내레이션 파일을 가져와 `time`에 오디오 클립으로 놓는다(#10). 그 구간이 비어 있는 첫 오디오 트랙에 넣고,
+    /// 없으면 오디오 트랙을 새로 만들어 기존 클립을 밀지 않는다. 가져오지 못하면 `nil`.
+    @discardableResult
+    func addNarration(from url: URL, at time: CMTime) async -> Clip.ID? {
+        let report = await importMedia(from: [url])
+        guard let asset = report.imported.first, let clip = asset.makeClip(at: time) else { return nil }
+        editCurrentSequence("내레이션 배치") { sequence in
+            let trackID = sequence.audioTrackID(freeDuring: clip.timelineRange) ?? sequence.addTrack(kind: .audio)
+            sequence.place(clip, onTrack: trackID)
+        }
+        return clip.id
+    }
+
     /// 저장소에 저장하고, 더 이상 필요 없는 백업본을 지운다.
     func save() throws {
         try repository.save(project)

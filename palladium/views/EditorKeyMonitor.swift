@@ -14,6 +14,7 @@ final class EditorKeyMonitor {
         case escape
         case addMarker
         case addSubtitle
+        case toggleNarration
     }
 
     /// 편집 창이 여러 개 열려 있어도 앞에 있는 창 하나만 반응하도록, 창이 앞에 있을 때만 받는다.
@@ -51,6 +52,7 @@ final class EditorKeyMonitor {
         case (53, []): return .escape
         case (46, []): return .addMarker
         case (17, []): return .addSubtitle
+        case (15, []): return .toggleNarration
         default: return nil
         }
     }

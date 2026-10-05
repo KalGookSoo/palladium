@@ -1,4 +1,3 @@
-import OSLog
 import SwiftUI
 
 /// 시퀀스(결과물)를 재생한다. 원본 전용 미리보기는 두지 않고, 원본 확인은 훑어보기(Quick Look) 창으로 한다(#5).
@@ -14,6 +13,9 @@ struct PreviewPlayerView: View {
     /// 마스크 레인에서 고른 마스크. 있으면 미리보기 위에 영역과 손잡이를 그린다(#59).
     var maskTarget: Mask?
     var setMaskArea: (Mask.ID, MaskArea) -> Void = { _, _ in }
+    /// 내레이션을 녹음 중이면 녹음을 시작한 때(#10).
+    var narrationStartedAt: Date?
+    var toggleNarration: () -> Void = {}
     @State private var targetContentSize: CGSize?
 
     var body: some View {
@@ -49,7 +51,12 @@ struct PreviewPlayerView: View {
                             targetContentSize = await ClipContentProvider.shared.contentSize(for: asset)
                         }
                     }
-                PlaybackControls(previewPlayer: previewPlayer, timeline: timeline)
+                PlaybackControls(
+                    previewPlayer: previewPlayer,
+                    timeline: timeline,
+                    narrationStartedAt: narrationStartedAt,
+                    toggleNarration: toggleNarration
+                )
             }
         }
     }
@@ -58,6 +65,8 @@ struct PreviewPlayerView: View {
 private struct PlaybackControls: View {
     let previewPlayer: PreviewPlayer
     let timeline: PlaybackTimeline
+    let narrationStartedAt: Date?
+    let toggleNarration: () -> Void
 
     var body: some View {
         let progress = Binding<Double>(
@@ -103,10 +112,27 @@ private struct PlaybackControls: View {
                 .help(ShortcutGuide.nextFrame.helpText)
 
                 HStack {
-                    Button(action: requestNarrationRecording) {
-                        Label("내레이션 녹음", systemImage: "mic.fill")
+                    Button(action: toggleNarration) {
+                        if narrationStartedAt == nil {
+                            Label("내레이션 녹음", systemImage: "mic.fill")
+                        } else {
+                            Label("녹음 정지", systemImage: "stop.circle.fill")
+                                .foregroundStyle(.red)
+                        }
                     }
                     .help(ShortcutGuide.narration.helpText)
+                    if let narrationStartedAt {
+                        // 녹음한 시간. 스피커로 듣고 있으면 소리가 꺼져 있다는 것도 함께 알린다.
+                        TimelineView(.periodic(from: narrationStartedAt, by: 1)) { context in
+                            Text(Duration.seconds(context.date.timeIntervalSince(narrationStartedAt)).formatted(.time(pattern: .minuteSecond)))
+                                .font(.callout)
+                                .foregroundStyle(.red)
+                                .monospacedDigit()
+                        }
+                        .help(previewPlayer.isMutedForRecording
+                            ? "녹음 중 — 스피커 소리가 마이크에 들어가지 않도록 미리보기 소리를 껐습니다. 헤드폰을 연결하면 들으며 녹음할 수 있습니다"
+                            : "녹음 중 — 헤드폰으로 원본 소리를 들려줍니다")
+                    }
 
                     VolumeControl(previewPlayer: previewPlayer)
                 }
@@ -149,10 +175,6 @@ private struct VolumeControl: View {
         }
         return previewPlayer.volume < 0.5 ? "speaker.wave.1.fill" : "speaker.wave.3.fill"
     }
-}
-
-private func requestNarrationRecording() {
-    Logger.narration.info("내레이션 녹음 요청: 아직 구현되지 않음")
 }
 
 #Preview {
