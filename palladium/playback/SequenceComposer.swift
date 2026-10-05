@@ -128,7 +128,9 @@ nonisolated enum SequenceComposer {
         }
         return SequenceComposition(
             asset: composition,
-            videoComposition: makeVideoComposition(layers: placedLayers, duration: duration, renderSize: renderSize(for: aspectRatio)),
+            videoComposition: makeVideoComposition(
+                layers: placedLayers, masks: sequence.masks, duration: duration, renderSize: renderSize(for: aspectRatio)
+            ),
             audioMix: audioMix,
             duration: duration
         )
@@ -137,10 +139,11 @@ nonisolated enum SequenceComposer {
     /// 클립 경계마다 구간을 나누고, 구간마다 그 시각에 걸친 층을 아래부터 쌓는다. 처음부터 끝까지 빈틈없이 덮는다.
     private static func makeVideoComposition(
         layers: [(range: CMTimeRange, layer: CompositionLayer, order: Int)],
+        masks: [Mask],
         duration: CMTime,
         renderSize: CGSize
     ) -> AVVideoComposition {
-        let boundaries = Set([CMTime.zero, duration] + layers.flatMap { [$0.range.start, $0.range.end] })
+        let boundaries = Set([CMTime.zero, duration] + layers.flatMap { [$0.range.start, $0.range.end] } + masks.flatMap { [$0.range.start, $0.range.end] })
             .filter { $0 >= .zero && $0 <= duration }
             .sorted()
         let instructions = zip(boundaries, boundaries.dropFirst()).compactMap { start, end -> LayerInstruction? in
@@ -150,7 +153,8 @@ nonisolated enum SequenceComposer {
                 // 같은 트랙에서는 나중에 시작한 클립(전환으로 나타나는 클립)을 위에 그린다.
                 .sorted { ($0.order, $0.range.start.seconds) < ($1.order, $1.range.start.seconds) }
                 .map(\.layer)
-            return LayerInstruction(timeRange: CMTimeRange(start: start, end: end), layers: active)
+            let activeMasks = masks.filter { $0.range.start <= start && start < $0.range.end }
+            return LayerInstruction(timeRange: CMTimeRange(start: start, end: end), layers: active, masks: activeMasks)
         }
 
         let videoComposition = AVMutableVideoComposition()

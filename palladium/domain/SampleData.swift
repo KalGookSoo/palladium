@@ -61,6 +61,12 @@ nonisolated enum SampleData {
                 id: UUID(), range: CMTimeRange(start: seconds(9), duration: seconds(2.5)), text: "바닷가로",
                 style: SubtitleStyle(fontSize: 72, position: .top, color: .yellow, hasBackground: false)
             ),
+        ],
+        masks: [
+            Mask(
+                id: UUID(), range: CMTimeRange(start: seconds(2), duration: seconds(4)),
+                area: MaskArea(centerX: 0.7, centerY: 0.35, width: 0.2, height: 0.25), shape: .ellipse, effect: .mosaic, strength: 0.6
+            ),
         ]
     )
 

@@ -283,6 +283,39 @@ struct TransitionTests {
     }
 }
 
+struct MaskTests {
+    private func seconds(_ value: Double) -> CMTime {
+        CMTime(seconds: value, preferredTimescale: standardTimescale)
+    }
+
+    @Test("마스크는 시각 순으로 쌓이고, 영역·세기는 범위로 맞추며, 시간은 0 이전·최소 길이 미만이 되지 않는다")
+    func maskCommands() throws {
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let later = sequence.addMask(at: seconds(4))
+        let earlier = sequence.addMask(at: seconds(-1))
+        #expect(sequence.masks.map(\.id) == [earlier, later])
+        #expect(sequence.masks.first?.range.start == .zero)
+        #expect(sequence.duration == .zero)
+
+        var edited = try #require(sequence.masks.first { $0.id == later })
+        edited.area = MaskArea(centerX: 2, centerY: -1, width: 0, height: 5)
+        edited.strength = 3
+        edited.effect = .mosaic
+        edited.range = CMTimeRange(start: seconds(100), duration: seconds(1))
+        sequence.updateMask(edited)
+        let updated = try #require(sequence.masks.first { $0.id == later })
+        #expect(updated.area == MaskArea(centerX: 1, centerY: 0, width: MaskArea.sizeRange.lowerBound, height: 1))
+        #expect(updated.strength == 1)
+        #expect(updated.effect == .mosaic)
+        #expect(updated.range.start == seconds(4))
+
+        sequence.setMaskRange(later, start: seconds(1), end: seconds(0.5))
+        #expect(sequence.masks.first { $0.id == later }?.range.duration == Mask.minimumDuration)
+        sequence.removeMask(earlier)
+        #expect(sequence.masks.map(\.id) == [later])
+    }
+}
+
 struct TrimTests {
     private let assetID = UUID()
 

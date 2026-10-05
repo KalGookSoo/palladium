@@ -43,6 +43,8 @@ struct MainWindowView: View {
     @State private var selectedClipIDs: Set<Clip.ID> = []
     /// 자막 트랙에서 고른 자막. 클립 선택과 함께 있지 않는다.
     @State private var selectedSubtitleID: Subtitle.ID?
+    /// 마스크 레인에서 고른 마스크(#59). 클립·자막 선택과 함께 있지 않는다.
+    @State private var selectedMaskID: Mask.ID?
     /// 타임라인에서 클립·원본을 끄는 중인지. Esc로 끌기를 취소할 때 쓴다.
     @State private var isTimelineDragging = false
     @State private var timelineDragCancelCount = 0
@@ -124,15 +126,23 @@ struct MainWindowView: View {
                 playheadTime: $playheadTime
             ))
             .quickLookPreview($quickLookURL)
-            // 클립과 자막은 함께 고르지 않는다. 한쪽을 고르면 다른 쪽 선택을 푼다.
+            // 클립·자막·마스크는 함께 고르지 않는다. 하나를 고르면 나머지 선택을 푼다.
             .onChange(of: selectedSubtitleID) {
                 if selectedSubtitleID != nil {
                     selectedClipIDs = []
+                    selectedMaskID = nil
+                }
+            }
+            .onChange(of: selectedMaskID) {
+                if selectedMaskID != nil {
+                    selectedClipIDs = []
+                    selectedSubtitleID = nil
                 }
             }
             .onChange(of: selectedClipIDs) {
                 if !selectedClipIDs.isEmpty {
                     selectedSubtitleID = nil
+                    selectedMaskID = nil
                 }
             }
 
@@ -204,7 +214,9 @@ struct MainWindowView: View {
                     hasProjectAssets: !editor.project.assets.isEmpty,
                     transformTarget: transformTarget(in: currentSequence),
                     renderSize: SequenceComposer.renderSize(for: aspectRatio),
-                    setTransform: { clipID, transform in editor.setTransform(transform, for: clipID) }
+                    setTransform: { clipID, transform in editor.setTransform(transform, for: clipID) },
+                    maskTarget: currentSequence.masks.first { $0.id == selectedMaskID },
+                    setMaskArea: setMaskArea
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .dropDestination(for: URL.self) { urls, _ in
@@ -236,6 +248,7 @@ struct MainWindowView: View {
                         assets: editor.project.assets,
                         selectedClipIDs: $selectedClipIDs,
                         selectedSubtitleID: $selectedSubtitleID,
+                        selectedMaskID: $selectedMaskID,
                         playheadTime: $playheadTime,
                         scale: $timelineScale,
                         isDragging: $isTimelineDragging,
@@ -274,17 +287,20 @@ struct MainWindowView: View {
                 editor.switchToSequence(sequenceID)
                 selectedClipIDs = []
                 selectedSubtitleID = nil
+                selectedMaskID = nil
             },
             addSequence: {
                 editor.addSequence(named: "")
                 selectedClipIDs = []
                 selectedSubtitleID = nil
+                selectedMaskID = nil
             },
             renameSequence: { sequenceID, name in editor.renameSequence(sequenceID, to: name) },
             deleteSequence: { sequenceID in
                 editor.deleteSequence(sequenceID)
                 selectedClipIDs = []
                 selectedSubtitleID = nil
+                selectedMaskID = nil
             },
             addMarker: { editor.addMarker(at: playheadTime) },
             renameMarker: { markerID, name in editor.renameMarker(markerID, to: name) },
@@ -293,6 +309,12 @@ struct MainWindowView: View {
             addSubtitle: addSubtitleAtPlayhead,
             setSubtitleRange: { subtitleID, start, end in editor.setSubtitleRange(subtitleID, start: start, end: end) },
             deleteSubtitle: deleteSubtitle,
+            addMask: {
+                selectedMaskID = editor.addMask(at: playheadTime)
+                isInspectorPresented = true
+            },
+            setMaskRange: { maskID, start, end in editor.setMaskRange(maskID, start: start, end: end) },
+            deleteMask: deleteMask,
             setTrackAudio: { trackID, volume, isMuted in editor.setTrackAudio(volume: volume, isMuted: isMuted, for: trackID) },
             addTrack: { kind in editor.addTrack(kind: kind) },
             deleteTrack: { trackID in editor.deleteTrack(trackID) }
@@ -341,7 +363,11 @@ struct MainWindowView: View {
                 subtitle: currentSequence.subtitles.first { $0.id == selectedSubtitleID },
                 updateSubtitle: { subtitleID, text, style in editor.updateSubtitle(subtitleID, text: text, style: style) },
                 setSubtitleRange: { subtitleID, start, end in editor.setSubtitleRange(subtitleID, start: start, end: end) },
-                deleteSubtitle: deleteSubtitle
+                deleteSubtitle: deleteSubtitle,
+                mask: currentSequence.masks.first { $0.id == selectedMaskID },
+                updateMask: { mask in editor.updateMask(mask) },
+                setMaskRange: { maskID, start, end in editor.setMaskRange(maskID, start: start, end: end) },
+                deleteMask: deleteMask
             )
             .inspectorColumnWidth(
                 min: MainWindowMetrics.inspectorMinWidth,
@@ -469,6 +495,10 @@ struct MainWindowView: View {
                 deleteSubtitle(selectedSubtitleID)
                 return true
             }
+            if let selectedMaskID {
+                deleteMask(selectedMaskID)
+                return true
+            }
             guard !selectedClipIDs.isEmpty else { return false }
             timelineActions.deleteClips(selectedClipIDs, key == .rippleDeleteSelection)
         case .selectAll:
@@ -490,6 +520,8 @@ struct MainWindowView: View {
             timelineDragCancelCount += 1
         } else if selectedSubtitleID != nil {
             selectedSubtitleID = nil
+        } else if selectedMaskID != nil {
+            selectedMaskID = nil
         } else if !selectedClipIDs.isEmpty {
             selectedClipIDs = []
         } else if selectedAssetID != nil {
@@ -504,6 +536,19 @@ struct MainWindowView: View {
     private func addSubtitleAtPlayhead() {
         selectedSubtitleID = editor.addSubtitle(at: playheadTime)
         isInspectorPresented = true
+    }
+
+    private func deleteMask(_ maskID: Mask.ID) {
+        editor.deleteMask(maskID)
+        if selectedMaskID == maskID {
+            selectedMaskID = nil
+        }
+    }
+
+    private func setMaskArea(_ maskID: Mask.ID, _ area: MaskArea) {
+        guard var mask = editor.currentSequence.masks.first(where: { $0.id == maskID }) else { return }
+        mask.area = area
+        editor.updateMask(mask)
     }
 
     private func deleteSubtitle(_ subtitleID: Subtitle.ID) {

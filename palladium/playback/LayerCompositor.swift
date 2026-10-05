@@ -31,10 +31,13 @@ final nonisolated class LayerInstruction: NSObject, AVVideoCompositionInstructio
     let requiredSourceTrackIDs: [NSValue]?
     let passthroughTrackID = kCMPersistentTrackID_Invalid
     let layers: [CompositionLayer]
+    /// 이 구간에 걸친 마스크(#59). 자막 아래, 영상·이미지 층 위에 적용한다.
+    let masks: [Mask]
 
-    init(timeRange: CMTimeRange, layers: [CompositionLayer]) {
+    init(timeRange: CMTimeRange, layers: [CompositionLayer], masks: [Mask] = []) {
         self.timeRange = timeRange
         self.layers = layers
+        self.masks = masks
         let trackIDs = layers.compactMap { layer -> CMPersistentTrackID? in
             if case let .video(trackID, _, _) = layer.content {
                 return trackID
@@ -65,12 +68,21 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
         let renderSize = request.renderContext.size
         let canvas = CGRect(origin: .zero, size: renderSize)
         var image = CIImage(color: .black).cropped(to: canvas)
+        var masksApplied = instruction.masks.isEmpty
         for layer in instruction.layers {
+            // 자막은 가리지 않도록, 자막 층을 그리기 직전에 마스크를 적용한다.
+            if !masksApplied, case .subtitle = layer.content {
+                image = Self.applying(instruction.masks, to: image, renderSize: renderSize)
+                masksApplied = true
+            }
             guard var layerImage = placedImage(for: layer, request: request, renderSize: renderSize) else { continue }
             if let fade = layer.fade {
                 layerImage = Self.applying(fade, at: request.compositionTime, to: layerImage, renderSize: renderSize)
             }
             image = layerImage.composited(over: image)
+        }
+        if !masksApplied {
+            image = Self.applying(instruction.masks, to: image, renderSize: renderSize)
         }
         context.render(image.cropped(to: canvas), to: output)
         request.finish(withComposedVideoFrame: output)
@@ -137,6 +149,51 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
         let frame = clipTransform.frame(contentSize: imageSize, in: renderSize)
         return CGAffineTransform(scaleX: frame.width / imageSize.width, y: frame.height / imageSize.height)
             .concatenating(CGAffineTransform(translationX: frame.minX, y: renderSize.height - frame.maxY))
+    }
+
+    /// 마스크 영역만 흐리거나 모자이크한 화면. 마스크 사각형은 왼쪽 위 원점이라 Core Image 좌표로 뒤집는다.
+    static func applying(_ masks: [Mask], to image: CIImage, renderSize: CGSize) -> CIImage {
+        let canvas = CGRect(origin: .zero, size: renderSize)
+        let shortSide = min(renderSize.width, renderSize.height)
+        return masks.reduce(image) { current, mask in
+            let topLeft = mask.area.rect(in: renderSize)
+            let rect = CGRect(x: topLeft.minX, y: renderSize.height - topLeft.maxY, width: topLeft.width, height: topLeft.height)
+            let filtered: CIImage = switch mask.effect {
+            case .blur:
+                current.clampedToExtent().applyingGaussianBlur(sigma: 4 + mask.strength * shortSide * 0.04).cropped(to: canvas)
+            case .mosaic:
+                current.clampedToExtent().applyingFilter("CIPixellate", parameters: [
+                    kCIInputScaleKey: 6 + mask.strength * shortSide * 0.06,
+                    kCIInputCenterKey: CIVector(x: rect.minX, y: rect.minY),
+                ]).cropped(to: canvas)
+            }
+            return filtered.applyingFilter("CIBlendWithMask", parameters: [
+                kCIInputBackgroundImageKey: current,
+                kCIInputMaskImageKey: maskImage(shape: mask.shape, rect: rect, canvas: canvas),
+            ]).cropped(to: canvas)
+        }
+    }
+
+    /// 영역 안은 흰색, 밖은 검은색인 가림 판.
+    private static func maskImage(shape: MaskShape, rect: CGRect, canvas: CGRect) -> CIImage {
+        let black = CIImage(color: .black).cropped(to: canvas)
+        let white: CIImage
+        switch shape {
+        case .rectangle:
+            white = CIImage(color: .white).cropped(to: rect)
+        case .ellipse:
+            // 반지름 1인 원을 그려 영역 크기의 타원으로 늘린다.
+            let circle = CIFilter(name: "CIRadialGradient", parameters: [
+                "inputCenter": CIVector(x: 0, y: 0),
+                "inputRadius0": 0.97,
+                "inputRadius1": 1.0,
+                "inputColor0": CIColor.white,
+                "inputColor1": CIColor.black,
+            ])?.outputImage?.cropped(to: CGRect(x: -1, y: -1, width: 2, height: 2)) ?? CIImage.empty()
+            white = circle.transformed(by: CGAffineTransform(scaleX: rect.width / 2, y: rect.height / 2)
+                .concatenating(CGAffineTransform(translationX: rect.midX, y: rect.midY)))
+        }
+        return white.composited(over: black)
     }
 
     /// 전환 진행만큼 디졸브는 투명도를, 와이프는 왼쪽부터 보이는 폭을 정한다.

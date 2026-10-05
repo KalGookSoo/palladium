@@ -11,6 +11,9 @@ struct PreviewPlayerView: View {
     var transformTarget: (clip: Clip, asset: MediaAsset)?
     var renderSize = SequenceComposer.renderSize(for: .landscape16x9)
     var setTransform: (Clip.ID, ClipTransform) -> Void = { _, _ in }
+    /// 마스크 레인에서 고른 마스크. 있으면 미리보기 위에 영역과 손잡이를 그린다(#59).
+    var maskTarget: Mask?
+    var setMaskArea: (Mask.ID, MaskArea) -> Void = { _, _ in }
     @State private var targetContentSize: CGSize?
 
     var body: some View {
@@ -35,6 +38,9 @@ struct PreviewPlayerView: View {
                                 contentSize: targetContentSize,
                                 renderSize: renderSize
                             ) { setTransform(transformTarget.clip.id, $0) }
+                        }
+                        if let maskTarget {
+                            MaskHandlesView(mask: maskTarget, renderSize: renderSize) { setMaskArea(maskTarget.id, $0) }
                         }
                     }
                     .task(id: transformTarget?.asset.id) {

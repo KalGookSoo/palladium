@@ -97,6 +97,23 @@ enum TestMedia {
         return url
     }
 
+    /// 왼쪽 절반은 빨강, 오른쪽 절반은 파랑인 PNG 이미지(16:9).
+    static func makeSplitImage(width: Int = 1920, height: Int = 1080) throws -> URL {
+        let url = temporaryURL(extension: "png")
+        let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width / 2, height: height))
+        context.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+        context.fill(CGRect(x: width / 2, y: 0, width: width - width / 2, height: height))
+        let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil)!
+        CGImageDestinationAddImage(destination, context.makeImage()!, nil)
+        CGImageDestinationFinalize(destination)
+        return url
+    }
+
     /// 이미지의 (가로 비율, 세로 비율) 위치(왼쪽 위 원점) 픽셀의 RGB.
     static func color(of image: CGImage, atX x: Double, y: Double) -> (red: Int, green: Int, blue: Int) {
         var pixel = [UInt8](repeating: 0, count: 4)

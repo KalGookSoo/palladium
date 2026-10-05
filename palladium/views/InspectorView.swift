@@ -21,6 +21,11 @@ struct InspectorView: View {
     var updateSubtitle: (Subtitle.ID, String, SubtitleStyle) -> Void = { _, _, _ in }
     var setSubtitleRange: (Subtitle.ID, CMTime, CMTime) -> Void = { _, _, _ in }
     var deleteSubtitle: (Subtitle.ID) -> Void = { _ in }
+    /// 마스크 레인에서 고른 마스크(#59).
+    var mask: Mask?
+    var updateMask: (Mask) -> Void = { _ in }
+    var setMaskRange: (Mask.ID, CMTime, CMTime) -> Void = { _, _, _ in }
+    var deleteMask: (Mask.ID) -> Void = { _ in }
     @State private var selectedTab: InspectorTab = .trim
 
     var body: some View {
@@ -32,6 +37,13 @@ struct InspectorView: View {
                 delete: { deleteSubtitle(subtitle.id) }
             )
             .id(subtitle.id)
+        } else if let mask {
+            MaskInspectorView(
+                mask: mask,
+                update: updateMask,
+                setRange: { start, end in setMaskRange(mask.id, start, end) },
+                delete: { deleteMask(mask.id) }
+            )
         } else if let clip {
             VStack(alignment: .leading, spacing: 0) {
                 InspectorHeader(clip: clip, asset: asset)
@@ -89,7 +101,7 @@ struct InspectorView: View {
                 ContentUnavailableView(
                     "선택한 클립 없음",
                     systemImage: "slider.horizontal.3",
-                    description: Text("타임라인에서 클립이나 자막을 선택하세요")
+                    description: Text("타임라인에서 클립·자막·마스크를 선택하세요")
                 )
             }
         }

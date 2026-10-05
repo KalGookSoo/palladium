@@ -122,6 +122,29 @@ final class ProjectEditor {
 
     // MARK: - Subtitles
 
+    // MARK: - Masks
+
+    /// 현재 시퀀스의 `time`에 기본 길이(3초) 마스크를 둔다.
+    @discardableResult
+    func addMask(at time: CMTime) -> Mask.ID {
+        var maskID = UUID()
+        editCurrentSequence("마스크 추가") { maskID = $0.addMask(at: time) }
+        return maskID
+    }
+
+    /// 영역·모양·효과·세기를 바꾼다.
+    func updateMask(_ mask: Mask) {
+        editCurrentSequence("마스크 편집") { $0.updateMask(mask) }
+    }
+
+    func setMaskRange(_ maskID: Mask.ID, start: CMTime, end: CMTime) {
+        editCurrentSequence("마스크 시간 조정") { $0.setMaskRange(maskID, start: start, end: end) }
+    }
+
+    func deleteMask(_ maskID: Mask.ID) {
+        editCurrentSequence("마스크 삭제") { $0.removeMask(maskID) }
+    }
+
     /// 현재 시퀀스의 `time`에 기본 길이(3초) 자막을 둔다.
     @discardableResult
     func addSubtitle(at time: CMTime) -> Subtitle.ID {

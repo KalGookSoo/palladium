@@ -44,6 +44,14 @@ nav_order: 5
 - 위쪽 영상 트랙의 영상(PIP)·이미지는 아래 트랙 위에 겹쳐 그리고, 영상의 소리도 함께 들린다. 회전은 이번 범위에 넣지 않았다.
 - 정적 마스킹은 #59.
 
+## 결정 사항(#59 정적 마스킹)
+
+- 마스크(`Mask`)는 클립이 아니라 **시퀀스(결과물) 시간**에 붙는다. 눈금자 아래 자막 레인 다음의 **마스크 레인**에 시작·끝이 있는 블록으로 놓고, 두 번 클릭하거나 우클릭해 재생 헤드에 기본 3초로 추가한다. 블록을 끌어 옮기고 양 끝을 끌어 시간을 바꾼다(자막 레인과 같은 조작).
+- 영역(`MaskArea`)은 화면 비율(가운데 X·Y, 너비·높이, 왼쪽 위 원점)이라 화면비를 바꿔도 같은 자리다. 화면에 고정되고 피사체를 따라가지 않는다. 마스크를 고르면 미리보기에 점선 테두리가 생겨 안을 끌어 옮기고 오른쪽 아래 손잡이로 너비·높이를 따로 바꾼다. 인스펙터에서 %로도 넣는다.
+- 모양: 사각형·타원. 효과: 블러(가우시안)·모자이크(픽셀화), 세기 0~100%(블러 반경·칸 크기).
+- 합성: 영상·이미지 층을 모두 그린 뒤, 자막을 그리기 전에 적용한다(자막은 가리지 않는다). 미리보기와 내보내기가 같다. 마스크는 시퀀스 길이에 넣지 않는다(가릴 화면이 있을 때만 의미가 있다).
+- 커맨드(`ProjectEditor`): `addMask(at:)`, `updateMask(_:)`(영역·모양·효과·세기, 범위로 맞춤), `setMaskRange(_:start:end:)`, `deleteMask(_:)`.
+
 ## 이미지 오버레이 UI/UX
 
 이미지를 가져오는 목적은 최종 영상의 특정 구간 위에 얹는 것이다. 프리미어 프로·Final Cut Pro처럼 미디어 패널은 재료 보관함이고, 얹는 일은 타임라인과 미리보기에서 한다.
@@ -76,12 +84,12 @@ nav_order: 5
 
 ## 관련 커맨드/쿼리
 
-- 커맨드: `addOverlay(source:track:transform:range:)`, `updateOverlayTransform(id:transform:)`, `applyStaticMask(region:effect:range:)`
-- 쿼리: `overlays(in:sequence:) -> [Overlay]`, `masks(in:sequence:) -> [Mask]`
+- 커맨드(`ProjectEditor`): `placeAsset(_:onTrack:at:)`, `setTransform(_:for:)`, `addMask(at:)`, `updateMask(_:)`, `setMaskRange(_:start:end:)`, `deleteMask(_:)`
+- 쿼리: `EditSequence.masks`
 
 ## 미정 사항
 
 - 오버레이 여러 개를 겹칠 때 z-order 제어 UX
-- 마스킹 영역 모양(사각형만 vs 원형/자유형까지)
+- 자유형 마스크 모양
 - 보조 영상(PIP) 오디오 기본 처리 방식(무음 vs 믹스)
 - 동적 오브젝트 트래킹(피사체를 따라 움직이는 마스킹)은 낮은 우선순위 보류 항목 — [기능명세서 보류 섹션](../video-editing-functional-spec.md#보류추후-논의-기능) 참고

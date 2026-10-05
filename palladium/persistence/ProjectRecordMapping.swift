@@ -95,6 +95,7 @@ private extension SequenceRecord {
             )
         }
         record.subtitles = sequence.subtitles.enumerated().map { SubtitleRecord(subtitle: $1, sortIndex: $0) }
+        record.masks = sequence.masks.enumerated().map { MaskRecord(mask: $1, sortIndex: $0) }
         return record
     }
 }
@@ -155,7 +156,8 @@ private extension SequenceRecord {
             markers: markers.sorted { $0.sortIndex < $1.sortIndex }.map {
                 Marker(id: $0.id, time: CMTime(value: $0.timeValue, timescale: $0.timeTimescale), name: $0.name)
             },
-            subtitles: subtitles.sorted { $0.sortIndex < $1.sortIndex }.map { $0.makeSubtitle() }
+            subtitles: subtitles.sorted { $0.sortIndex < $1.sortIndex }.map { $0.makeSubtitle() },
+            masks: masks.sorted { $0.sortIndex < $1.sortIndex }.map { $0.makeMask() }
         )
     }
 }

@@ -291,4 +291,50 @@ struct SequenceComposerTests {
         #expect(rampsAtCut.contains { $0 == (1, 0) })
         #expect(rampsAtCut.contains { $0 == (0, 1) })
     }
+
+    /// 빨강·파랑 반반 이미지 4초 위에 1~3초 동안 마스크를 둔 합성의 프레임 생성기.
+    private func maskGenerator(_ mask: Mask) async throws -> AVAssetImageGenerator {
+        let splitURL = try TestMedia.makeSplitImage()
+        let split = MediaAsset(id: UUID(), name: "split.png", sourceURL: splitURL, kind: .image, duration: MediaAsset.stillImageDuration)
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let trackID = sequence.addTrack(kind: .video)
+        var clip = try #require(split.makeClip(at: .zero))
+        clip.sourceRange = CMTimeRange(start: .zero, duration: seconds(4))
+        sequence.place(clip, onTrack: trackID)
+        sequence.masks = [mask]
+        let composition = try #require(await SequenceComposer.makeComposition(
+            sequence: sequence, assets: [split], aspectRatio: .landscape16x9, resolveURL: \.sourceURL
+        ))
+        let generator = AVAssetImageGenerator(asset: composition.asset)
+        generator.videoComposition = composition.videoComposition
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        return generator
+    }
+
+    @Test("블러 마스크는 지정한 시간 동안 영역 안만 흐리고, 영역 밖과 다른 시간은 그대로 둔다")
+    func blurMaskBlursOnlyArea() async throws {
+        let mask = Mask(id: UUID(), range: CMTimeRange(start: seconds(1), duration: seconds(2)), area: MaskArea(width: 0.5, height: 0.5), effect: .blur, strength: 1)
+        let generator = try await maskGenerator(mask)
+        let masked = try await generator.image(at: seconds(2)).image
+        let boundary = TestMedia.color(of: masked, atX: 0.5, y: 0.5)
+        let outside = TestMedia.color(of: masked, atX: 0.1, y: 0.5)
+        #expect(boundary.red > 50 && boundary.blue > 50)
+        #expect(outside.red > 200 && outside.blue < 30)
+        let unmasked = try await TestMedia.color(of: generator.image(at: seconds(0.5)).image, atX: 0.49, y: 0.5)
+        #expect(unmasked.red > 200 && unmasked.blue < 30)
+    }
+
+    @Test("모자이크 마스크는 영역 안을 큰 칸으로 칠해, 경계 양옆이 같은 칸이면 같은 색이 된다")
+    func mosaicMaskPixellates() async throws {
+        let mask = Mask(id: UUID(), range: CMTimeRange(start: seconds(1), duration: seconds(2)), area: MaskArea(width: 0.5, height: 0.5), effect: .mosaic, strength: 1)
+        let generator = try await maskGenerator(mask)
+        let frame = try await generator.image(at: seconds(2)).image
+        // 칸 크기 약 71px, 영역 왼쪽(480px)부터 칸을 나누므로 950px·970px은 같은 칸이다.
+        let left = TestMedia.color(of: frame, atX: 950.0 / 1920, y: 0.5)
+        let right = TestMedia.color(of: frame, atX: 970.0 / 1920, y: 0.5)
+        #expect(abs(left.red - right.red) < 10 && abs(left.blue - right.blue) < 10)
+        let outside = TestMedia.color(of: frame, atX: 0.1, y: 0.5)
+        #expect(outside.red > 200 && outside.blue < 30)
+    }
 }

@@ -73,6 +73,7 @@ final class SequenceRecord {
     @Relationship(deleteRule: .cascade, inverse: \TrackRecord.sequence) var tracks: [TrackRecord] = []
     @Relationship(deleteRule: .cascade, inverse: \MarkerRecord.sequence) var markers: [MarkerRecord] = []
     @Relationship(deleteRule: .cascade, inverse: \SubtitleRecord.sequence) var subtitles: [SubtitleRecord] = []
+    @Relationship(deleteRule: .cascade, inverse: \MaskRecord.sequence) var masks: [MaskRecord] = []
     var project: ProjectRecord?
     var backup: ProjectBackupRecord?
 
@@ -218,6 +219,55 @@ final class SubtitleRecord {
                 color: SubtitleColor(rawValue: colorRawValue) ?? .white,
                 hasBackground: hasBackground
             )
+        )
+    }
+}
+
+/// 마스크 하나(#59). 기존 저장소가 가벼운 마이그레이션으로 열리도록 모든 속성에 기본값을 둔다.
+@Model
+final class MaskRecord {
+    var id = UUID()
+    var sortIndex = 0
+    var startValue: Int64 = 0
+    var startTimescale: Int32 = 600
+    var durationValue: Int64 = 0
+    var durationTimescale: Int32 = 600
+    var centerX = 0.5
+    var centerY = 0.5
+    var width = 0.3
+    var height = 0.3
+    var shapeRawValue = "rectangle"
+    var effectRawValue = "blur"
+    var strength = 0.5
+    var sequence: SequenceRecord?
+
+    init(mask: Mask, sortIndex: Int) {
+        id = mask.id
+        self.sortIndex = sortIndex
+        startValue = mask.range.start.value
+        startTimescale = mask.range.start.timescale
+        durationValue = mask.range.duration.value
+        durationTimescale = mask.range.duration.timescale
+        centerX = mask.area.centerX
+        centerY = mask.area.centerY
+        width = mask.area.width
+        height = mask.area.height
+        shapeRawValue = mask.shape.rawValue
+        effectRawValue = mask.effect.rawValue
+        strength = mask.strength
+    }
+
+    func makeMask() -> Mask {
+        Mask(
+            id: id,
+            range: CMTimeRange(
+                start: CMTime(value: startValue, timescale: startTimescale),
+                duration: CMTime(value: durationValue, timescale: durationTimescale)
+            ),
+            area: MaskArea(centerX: centerX, centerY: centerY, width: width, height: height),
+            shape: MaskShape(rawValue: shapeRawValue) ?? .rectangle,
+            effect: MaskEffect(rawValue: effectRawValue) ?? .blur,
+            strength: strength
         )
     }
 }

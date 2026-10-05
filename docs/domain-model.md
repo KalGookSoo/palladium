@@ -41,6 +41,15 @@ classDiagram
         tracks: Array~Track~
         markers: Array~Marker~
         subtitles: Array~Subtitle~
+        masks: Array~Mask~
+    }
+    class Mask {
+        id: UUID
+        range: CMTimeRange
+        area: MaskArea
+        shape: MaskShape
+        effect: MaskEffect
+        strength: Double
     }
     class Subtitle {
         id: UUID
@@ -73,6 +82,7 @@ classDiagram
     EditSequence "1" *-- "0..*" Track
     EditSequence "1" *-- "0..*" Marker
     EditSequence "1" *-- "0..*" Subtitle
+    EditSequence "1" *-- "0..*" Mask
     Track "1" *-- "0..*" Clip
     Clip ..> MediaAsset : assetID로 참조
 ```
@@ -88,6 +98,7 @@ classDiagram
 | `Track`        | 시퀀스 안에서 클립이 시간순으로 놓이는 레인 하나                                 | `TrackKind`: `video`, `audio`                                           |
 | `Marker`       | 시퀀스의 특정 시각에 붙이는 책갈피(시각 + 이름)                                | 영상 내용은 바꾸지 않는 표시용 정보. 추가·삭제 편집은 [클립 이어붙이기](use-cases/joining-clips.md)(#3)에서 다룬다 |
 | `Subtitle`     | 시퀀스(결과물) 시간의 한 구간에 보이는 글자와 모양(`SubtitleStyle` — 크기·위치(위/가운데/아래)·색(흰색/노란색)·배경 상자, #4) | 클립과 상관없이 그 시각에 맨 위에 그린다. 시퀀스 길이에 자막 끝도 포함한다. SRT 읽기·쓰기는 `SubtitleFile` |
+| `Mask`         | 시퀀스 시간의 한 구간 동안 화면의 고정 영역(`MaskArea` — 화면 비율)을 블러·모자이크로 가린다(사각형·타원, 세기, #59) | 자막 아래, 영상·이미지 위에 적용한다. 시퀀스 길이에는 넣지 않는다([오버레이 및 마스킹](use-cases/overlays.md)) |
 | `Clip`         | 원본의 어느 구간(`sourceRange`)을 타임라인의 어느 위치(`timelineStart`)에 놓을지, 화면 어디에 어떻게 그릴지(`transform: ClipTransform` — 위치·배율·불투명도, #9) | 타임라인에서 차지하는 구간(`timelineRange`)은 저장하지 않고 계산한다                           |
 | `ClipTransition` | 바로 앞 클립에서 이 클립으로 넘어가는 영상 전환(종류: 디졸브·와이프, 길이). 오디오 크로스페이드는 `Clip.audioCrossfadeIn`(#8) | 앞 클립과 맞닿아 있을 때만 그리고, 그릴 때 두 클립 중 짧은 쪽 길이로 줄인다([트랜지션](use-cases/transitions.md)) |
 
@@ -141,7 +152,7 @@ classDiagram
 - 도메인 계층과 영속 계층을 분리한다. 이 문서의 순수 타입이 도메인의 기준이며, 타입별 저장 전용 `@Model` 레코드(예: `ClipRecord`)와 둘 사이의 변환은 영속 계층에 둔다. 도메인은 저장소를 `ProjectRepository`
   프로토콜로만 알고, SwiftData 구현은 영속 계층(`palladium/persistence/`)에 둔다.
 - 새 프로젝트는 만드는 즉시 저장되고(`ProjectRepository.createProject(named:)`), 이후 내용 변경은 사용자가 저장해야 반영된다(`ProjectRepository.save(_:)`). 편집 화면은 마지막으로 저장한 프로젝트와 지금 프로젝트를 비교(`Equatable`)해 저장하지 않은 변경을 판단한다.
-- 레코드 구성: `ProjectRecord`(목록 정보: id, 이름, 생성일, 수정일, 원본·시퀀스 개수 → 도메인 `ProjectSummary`) 아래에 `MediaAssetRecord`, `MediaFolderRecord`, `SequenceRecord` → `TrackRecord` → `ClipRecord`, `SequenceRecord` → `MarkerRecord`, `SequenceRecord` → `SubtitleRecord`. 프로젝트나 시퀀스를 지우면 하위 레코드도 함께 지워진다(`cascade`).
+- 레코드 구성: `ProjectRecord`(목록 정보: id, 이름, 생성일, 수정일, 원본·시퀀스 개수 → 도메인 `ProjectSummary`) 아래에 `MediaAssetRecord`, `MediaFolderRecord`, `SequenceRecord` → `TrackRecord` → `ClipRecord`, `SequenceRecord` → `MarkerRecord`, `SequenceRecord` → `SubtitleRecord`, `SequenceRecord` → `MaskRecord`. 프로젝트나 시퀀스를 지우면 하위 레코드도 함께 지워진다(`cascade`).
 - 저장은 무엇이 바뀌었는지 비교하지 않고 하위 레코드를 통째로 교체한다. 빠뜨린 삭제나 순서 변경이 남지 않게 하기 위함이다. 내용이 저장되기 전에 만든 레코드(시퀀스 없음)는 빈 시퀀스 하나로 연다.
 - 백업본: 저장하지 않은 변경은 1분(`BackupPolicy.defaultInterval`, 환경설정에서 30초~10분으로 조정, #19)마다, 마지막 백업 이후 또 바뀌었을 때만 `ProjectBackupRecord`(프로젝트당 하나)에 쓴다. 내용은 저장본과 같은 하위 레코드 구조와 변환(`ProjectContentRecords`)을 쓴다. 저장하거나 "저장 안 함"으로 닫으면 지우고, 마지막 저장보다 새 백업본이 남아 있으면(비정상 종료) 프로젝트를 열 때 복구를 묻는다. 복구한 내용은 저장하지 않은 변경 상태로 열린다.
 - 영속 계층 구현 시 유의: SwiftData 관계 배열은 순서를 보장하지 않으므로 정렬 인덱스를 별도로 저장하고, `CMTime`은 `value`/`timescale`로 분해해 저장하며, 도메인과 레코드는 같은 `id`를 공유한다.
@@ -151,7 +162,6 @@ classDiagram
 
 아래 개념은 해당 기능 이슈에서 이 문서에 추가한다.
 
-- 오버레이·마스크([오버레이 및 마스킹](use-cases/overlays.md))
 - 마커 추가·삭제 편집([클립 이어붙이기](use-cases/joining-clips.md))
 - 프록시(#43)([미디어 가져오기](use-cases/media-import.md))
 - 재생 속도·역재생([클립 자르기(트림)](use-cases/trimming.md))

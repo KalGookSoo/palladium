@@ -9,6 +9,8 @@ nonisolated struct EditSequence {
     var markers: [Marker] = []
     /// 결과물 시간에 붙는 자막(자막 트랙). 시작 시각 순으로 유지한다(#4).
     var subtitles: [Subtitle] = []
+    /// 화면 일부를 가리는 블러·모자이크(#59). 결과물 시간에 붙고, 시퀀스 길이에는 넣지 않는다(가릴 화면이 있을 때만 의미가 있다).
+    var masks: [Mask] = []
 }
 
 // MARK: - Queries
