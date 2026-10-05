@@ -18,6 +18,9 @@ struct TrackRowView: View {
     /// 끄는 동안과 놓았을 때 끈 거리와 함께 부른다. 시각·트랙 계산은 상위가 한다.
     let dragChanged: (Clip, CGSize) -> Void
     let dragEnded: (Clip, CGSize) -> Void
+    /// 클립 끝을 끄는 동안과 놓았을 때 가로로 끈 거리와 함께 부른다(트림).
+    let trimChanged: (Clip, ClipEdge, Double) -> Void
+    let trimEnded: (Clip, ClipEdge, Double) -> Void
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -28,6 +31,7 @@ struct TrackRowView: View {
 
             ForEach(track.clips) { clip in
                 clipView(clip, offset: .zero)
+                    .overlay(alignment: .topLeading) { trimHandles(for: clip) }
             }
 
             if let placeholder {
@@ -67,6 +71,33 @@ struct TrackRowView: View {
                 .onEnded { value in dragEnded(clip, value.translation) }
         )
         .contextMenu { clipMenu(for: clip) }
+    }
+
+    /// 클립 양 끝의 잡는 영역. 끌면 그쪽 끝을 트림한다(클립 이동보다 먼저 받는다).
+    private func trimHandles(for clip: Clip) -> some View {
+        let width = scale.width(for: clip.sourceRange.duration)
+        let handleWidth = min(6, width / 3)
+
+        return ZStack(alignment: .topLeading) {
+            trimHandle(clip, edge: .start, width: handleWidth)
+                .offset(x: scale.x(for: clip.timelineStart))
+            trimHandle(clip, edge: .end, width: handleWidth)
+                .offset(x: scale.x(for: clip.timelineRange.end) - handleWidth)
+        }
+        .offset(y: TimelineMetrics.clipVerticalInset)
+    }
+
+    private func trimHandle(_ clip: Clip, edge: ClipEdge, width: Double) -> some View {
+        Color.clear
+            .frame(width: width, height: clipHeight)
+            .contentShape(Rectangle())
+            .pointerStyle(.columnResize)
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { value in trimChanged(clip, edge, value.translation.width) }
+                    .onEnded { value in trimEnded(clip, edge, value.translation.width) }
+            )
+            .help("끌어서 클립을 트림합니다. 뒤 클립이 따라오고, ⌥를 누르면 정밀하게 조정합니다")
     }
 
     /// ⌘ 클릭은 선택에 더하거나 빼고, ⇧ 클릭은 같은 트랙에서 이미 고른 클립과 이 클립 사이를 모두 고른다.

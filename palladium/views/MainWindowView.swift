@@ -207,6 +207,7 @@ struct MainWindowView: View {
             moveClip: { clipID, trackID, time in
                 editor.moveClip(clipID, toTrack: trackID, at: time)
             },
+            trimClip: { clipID, edge, delta in editor.trimClip(clipID, edge: edge, by: delta) },
             deleteClips: { clipIDs, ripple in
                 editor.deleteClips(clipIDs, ripple: ripple)
                 selectedClipIDs.subtract(clipIDs)
@@ -264,12 +265,14 @@ struct MainWindowView: View {
                 .clipped()
         }
         .inspector(isPresented: $isInspectorPresented) {
-            InspectorView(clip: selectedClip, asset: selectedClipAsset, selectedClipCount: selectedClipIDs.count)
-                .inspectorColumnWidth(
-                    min: MainWindowMetrics.inspectorMinWidth,
-                    ideal: MainWindowMetrics.inspectorIdealWidth,
-                    max: MainWindowMetrics.inspectorMaxWidth
-                )
+            InspectorView(clip: selectedClip, asset: selectedClipAsset, selectedClipCount: selectedClipIDs.count) { clipID, start, end in
+                editor.setClipSource(clipID, start: start, end: end)
+            }
+            .inspectorColumnWidth(
+                min: MainWindowMetrics.inspectorMinWidth,
+                ideal: MainWindowMetrics.inspectorIdealWidth,
+                max: MainWindowMetrics.inspectorMaxWidth
+            )
         }
         .toolbar {
             MainWindowToolbar(

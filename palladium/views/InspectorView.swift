@@ -8,6 +8,8 @@ struct InspectorView: View {
     let asset: MediaAsset?
     /// 여러 클립을 골랐으면 속성 대신 고른 개수를 보여준다.
     var selectedClipCount = 0
+    /// 트림 탭에서 원본 시작·끝 지점을 입력했을 때.
+    var setClipSource: (Clip.ID, CMTime, CMTime) -> Void = { _, _, _ in }
     @State private var selectedTab: InspectorTab = .trim
 
     var body: some View {
@@ -28,7 +30,10 @@ struct InspectorView: View {
                 .padding(.horizontal)
 
                 switch selectedTab {
-                case .trim: TrimInspectorView(clip: clip)
+                case .trim:
+                    TrimInspectorView(clip: clip, sourceDuration: asset?.trimmableDuration) { start, end in
+                        setClipSource(clip.id, start, end)
+                    }
                 case .effect: EffectInspectorView()
                 case .transform: TransformInspectorView()
                 }

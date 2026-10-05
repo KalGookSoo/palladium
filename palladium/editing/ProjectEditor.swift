@@ -154,6 +154,20 @@ final class ProjectEditor {
         editCurrentSequence("클립 이동") { $0.moveClip(clipID, toTrack: trackID, at: time) }
     }
 
+    /// 클립의 한쪽 끝을 `delta`만큼 옮긴다(리플 트림 — 뒤 클립이 따라온다). 원본 범위를 넘지 않고 최소 한 프레임은 남는다.
+    func trimClip(_ clipID: Clip.ID, edge: ClipEdge, by delta: CMTime) {
+        guard let clip = currentSequence.clip(id: clipID) else { return }
+        let range = clip.trimmedSourceRange(edge: edge, by: delta, sourceDuration: asset(id: clip.assetID)?.trimmableDuration)
+        editCurrentSequence("트림") { $0.setSourceRange(range, forClip: clipID) }
+    }
+
+    /// 인스펙터에서 원본의 시작·끝 지점을 직접 입력한다. 원본 범위 안으로 맞춘다.
+    func setClipSource(_ clipID: Clip.ID, start: CMTime, end: CMTime) {
+        guard let clip = currentSequence.clip(id: clipID) else { return }
+        let range = clip.clampedSourceRange(start: start, end: end, sourceDuration: asset(id: clip.assetID)?.trimmableDuration)
+        editCurrentSequence("트림") { $0.setSourceRange(range, forClip: clipID) }
+    }
+
     /// `ripple`이면 지운 자리 뒤의 클립을 당겨 틈을 메운다(리플 삭제).
     func deleteClips(_ clipIDs: Set<Clip.ID>, ripple: Bool) {
         editCurrentSequence(ripple ? "리플 삭제" : "클립 삭제") { $0.removeClips(clipIDs, ripple: ripple) }

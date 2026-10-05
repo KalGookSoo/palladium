@@ -185,3 +185,55 @@ struct MarkerCommandTests {
         #expect(sequence.markers.map(\.name) == ["후렴"])
     }
 }
+
+struct TrimTests {
+    private let assetID = UUID()
+
+    private func seconds(_ value: Double) -> CMTime {
+        CMTime(seconds: value, preferredTimescale: standardTimescale)
+    }
+
+    private func clip(at start: Double, sourceStart: Double = 0, length: Double) throws -> Clip {
+        try #require(Clip(assetID: assetID, sourceRange: CMTimeRange(start: seconds(sourceStart), duration: seconds(length)), timelineStart: seconds(start)))
+    }
+
+    @Test("뒤 끝을 줄이면 뒤 클립이 당겨지고, 늘리면 밀리며, 원본 길이를 넘지 않는다")
+    func trimEndRipples() throws {
+        var track = try Track(id: UUID(), kind: .video, clips: [clip(at: 0, length: 4), clip(at: 4, length: 2)])
+        let first = track.clips[0]
+
+        track.setSourceRange(first.trimmedSourceRange(edge: .end, by: seconds(-1), sourceDuration: seconds(10)), forClip: first.id)
+        #expect(track.clips.map { [$0.timelineStart.seconds, $0.timelineRange.end.seconds] } == [[0, 3], [3, 5]])
+
+        let longer = track.clips[0].trimmedSourceRange(edge: .end, by: seconds(20), sourceDuration: seconds(10))
+        #expect(longer.end == seconds(10))
+    }
+
+    @Test("앞 끝을 자르면 원본 시작이 늦어지고 클립 시작 위치는 그대로이며 뒤 클립이 당겨진다")
+    func trimStartRipples() throws {
+        var track = try Track(id: UUID(), kind: .video, clips: [clip(at: 0, length: 4), clip(at: 4, length: 2)])
+        let first = track.clips[0]
+
+        track.setSourceRange(first.trimmedSourceRange(edge: .start, by: seconds(1.5), sourceDuration: seconds(10)), forClip: first.id)
+
+        #expect(track.clips[0].sourceRange.start == seconds(1.5))
+        #expect(track.clips[0].timelineStart == .zero)
+        #expect(track.clips[1].timelineStart == seconds(2.5))
+    }
+
+    @Test("한 프레임보다 짧게 자르지 않고, 앞 끝은 원본 처음보다 앞으로 가지 않는다")
+    func trimClamps() throws {
+        let original = try clip(at: 0, sourceStart: 1, length: 2)
+        #expect(original.trimmedSourceRange(edge: .end, by: seconds(-5), sourceDuration: seconds(10)).duration == Clip.minimumDuration)
+        #expect(original.trimmedSourceRange(edge: .start, by: seconds(-5), sourceDuration: seconds(10)).start == .zero)
+    }
+
+    @Test("이미지 클립은 원본 길이 제한 없이 늘리고 원본 시작은 0이다")
+    func imageTrimHasNoLimit() throws {
+        let image = try clip(at: 0, length: 5)
+        let longer = image.trimmedSourceRange(edge: .end, by: seconds(30), sourceDuration: nil)
+        let shorter = image.trimmedSourceRange(edge: .start, by: seconds(2), sourceDuration: nil)
+        #expect(longer.duration == seconds(35))
+        #expect(shorter.start == .zero && shorter.duration == seconds(3))
+    }
+}

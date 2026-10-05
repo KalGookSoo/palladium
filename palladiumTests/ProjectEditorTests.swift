@@ -136,6 +136,19 @@ struct ProjectEditorTests {
         #expect(editor.currentSequence.tracks.count == trackCount)
     }
 
+    @Test("트림과 시간 입력은 원본 범위 안으로 맞춘다")
+    func trimCommands() throws {
+        let editor = try makeEditorWithSampleContent()
+        let clip = try #require(editor.currentSequence.tracks.first { $0.kind == .video }?.clips.first)
+        let assetDuration = try #require(editor.asset(id: clip.assetID)?.duration)
+
+        editor.trimClip(clip.id, edge: .end, by: CMTime(value: 1000, timescale: 1))
+        #expect(editor.currentSequence.clip(id: clip.id)?.sourceRange.end == assetDuration)
+
+        editor.setClipSource(clip.id, start: CMTime(value: 1, timescale: 1), end: CMTime(value: 2, timescale: 1))
+        #expect(editor.currentSequence.clip(id: clip.id)?.sourceRange == CMTimeRange(start: CMTime(value: 1, timescale: 1), end: CMTime(value: 2, timescale: 1)))
+    }
+
     @Test("편집 커맨드는 실행 취소와 다시 실행으로 되돌릴 수 있다")
     func editsCanBeUndoneAndRedone() throws {
         let editor = try makeEditorWithSampleContent()

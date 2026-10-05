@@ -47,6 +47,17 @@ nonisolated extension Track {
         clips.sort { $0.timelineStart < $1.timelineStart }
     }
 
+    /// 클립의 원본 구간을 바꾼다(리플 트림). 클립의 타임라인 시작은 그대로 두고, 길이가 바뀐 만큼 뒤 클립들을 당기거나 민다.
+    mutating func setSourceRange(_ range: CMTimeRange, forClip clipID: Clip.ID) {
+        guard let index = clips.firstIndex(where: { $0.id == clipID }), range.duration > .zero else { return }
+        let oldEnd = clips[index].timelineRange.end
+        let change = range.duration - clips[index].sourceRange.duration
+        clips[index].sourceRange = range
+        for other in clips.indices where other != index && clips[other].timelineStart >= oldEnd {
+            clips[other].timelineStart = clips[other].timelineStart + change
+        }
+    }
+
     /// `ripple`이면 지운 클립 뒤의 클립을 지운 길이만큼 당겨 틈을 메운다.
     mutating func removeClip(id: Clip.ID, ripple: Bool) {
         guard let index = clips.firstIndex(where: { $0.id == id }) else { return }
@@ -69,7 +80,40 @@ nonisolated extension Track {
     }
 }
 
+/// 트림할 클립 끝.
+nonisolated enum ClipEdge {
+    case start
+    case end
+}
+
 nonisolated extension Clip {
+    /// 트림해도 남는 가장 짧은 길이(30fps 한 프레임).
+    static let minimumDuration = CMTime(value: 1, timescale: 30)
+
+    /// 원본 구간을 `start`~`end`로 바꾸되 원본 범위 안으로 맞춘다. `sourceDuration`이 `nil`이면(이미지) 길이 제한 없이 늘리고,
+    /// 원본 시작은 항상 0이다.
+    func clampedSourceRange(start: CMTime, end: CMTime, sourceDuration: CMTime?) -> CMTimeRange {
+        guard let sourceDuration else {
+            return CMTimeRange(start: .zero, duration: CMTimeMaximum(end - start, Self.minimumDuration))
+        }
+        let clampedEnd = CMTimeMinimum(CMTimeMaximum(end, Self.minimumDuration), sourceDuration)
+        let clampedStart = CMTimeMinimum(CMTimeMaximum(start, .zero), clampedEnd - Self.minimumDuration)
+        return CMTimeRange(start: clampedStart, end: clampedEnd)
+    }
+
+    /// 한쪽 끝을 `delta`만큼 옮긴 원본 구간. 앞 끝을 오른쪽(+)으로 옮기면 앞부분이 잘리고, 뒤 끝을 오른쪽으로 옮기면 길어진다.
+    func trimmedSourceRange(edge: ClipEdge, by delta: CMTime, sourceDuration: CMTime?) -> CMTimeRange {
+        switch edge {
+        case .start:
+            if sourceDuration == nil {
+                return clampedSourceRange(start: .zero, end: sourceRange.duration - delta, sourceDuration: nil)
+            }
+            return clampedSourceRange(start: sourceRange.start + delta, end: sourceRange.end, sourceDuration: sourceDuration)
+        case .end:
+            return clampedSourceRange(start: sourceRange.start, end: sourceRange.end + delta, sourceDuration: sourceDuration)
+        }
+    }
+
     func canSplit(at time: CMTime, clipIDs: Set<Clip.ID>?) -> Bool {
         (clipIDs?.contains(id) ?? true) && timelineStart < time && time < timelineRange.end
     }
@@ -151,6 +195,13 @@ nonisolated extension EditSequence {
         }
     }
 
+    /// 클립이 있는 트랙에서 원본 구간을 바꾼다(리플 트림).
+    mutating func setSourceRange(_ range: CMTimeRange, forClip clipID: Clip.ID) {
+        for index in tracks.indices where tracks[index].clips.contains(where: { $0.id == clipID }) {
+            tracks[index].setSourceRange(range, forClip: clipID)
+        }
+    }
+
     /// 그 시각에서 나눌 클립이 있는지. 메뉴를 비활성화하는 데 쓴다.
     func canSplit(at time: CMTime, clipIDs: Set<Clip.ID>?) -> Bool {
         tracks.contains { $0.clips.contains { $0.canSplit(at: time, clipIDs: clipIDs) } }
@@ -213,6 +264,11 @@ nonisolated extension MediaAsset {
     /// 타임라인에 처음 놓을 때의 길이. 이미지는 길이가 없어 정해진 길이를 쓴다.
     var placementDuration: CMTime {
         kind == .image ? Self.stillImageDuration : duration
+    }
+
+    /// 클립이 원본에서 쓸 수 있는 길이. 이미지는 길이 제한이 없어 `nil`.
+    var trimmableDuration: CMTime? {
+        kind == .image ? nil : duration
     }
 
     /// 이 원본 전체를 `time`에 놓는 새 클립. 길이가 0이면 `nil`.

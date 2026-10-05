@@ -1,3 +1,4 @@
+import AppKit
 import CoreMedia
 import SwiftUI
 import UniformTypeIdentifiers
@@ -16,6 +17,7 @@ struct TimelineActions {
     /// 미디어 패널에서 원본을 끌어다 놓았을 때. 트랙이 `nil`이면 트랙 밖(빈 곳)에 놓은 것이다.
     var dropAsset: (MediaAsset.ID, Track.ID?, CMTime) -> Void = { _, _, _ in }
     var moveClip: (Clip.ID, Track.ID, CMTime) -> Void = { _, _, _ in }
+    var trimClip: (Clip.ID, ClipEdge, CMTime) -> Void = { _, _, _ in }
     /// 두 번째 값이 `true`면 리플 삭제.
     var deleteClips: (Set<Clip.ID>, Bool) -> Void = { _, _ in }
     /// 재생 헤드에서 나눈다. 비어 있으면 재생 헤드에 걸친 모든 클립을 나눈다.
@@ -42,6 +44,8 @@ private struct DragPreview {
     let placeholderID: Clip.ID
     let trackID: Track.ID
     let time: CMTime
+    /// 옮기기·놓기는 들어갈 자리를 점선으로 보여주고, 트림은 클립 자체를 바뀐 길이로 그린다.
+    var showsPlaceholder = true
 }
 
 /// SwiftUI의 `TimelineView`(일정 주기로 다시 그리는 View)와 이름이 겹치지 않도록 `TimelineEditorView`로 짓는다.
@@ -146,7 +150,8 @@ struct TimelineEditorView: View {
         }
         .simultaneousGesture(pinch)
         .onChange(of: dragCancelCount) {
-            isDragCancelled = draggedClip != nil
+            // 옮기기·트림은 마우스를 놓을 때 끝나므로, 그때 결과를 반영하지 않도록 표시해 둔다.
+            isDragCancelled = dragPreview != nil && hoveringAssetID == nil
             clearDrag()
         }
         .alert("마커 이름 변경", isPresented: Binding(
@@ -296,10 +301,12 @@ struct TimelineEditorView: View {
     /// 나머지 클립은 미리보기 위치(뒤로 밀린 자리)에 그린다. 들어갈 자리는 강조 테두리로 보여준다.
     private func trackRow(_ track: Track, at index: Int) -> some View {
         let placeholder = dragPreview.flatMap { preview in
-            preview.trackID == track.id ? preview.sequence.clip(id: preview.placeholderID) : nil
+            preview.showsPlaceholder && preview.trackID == track.id ? preview.sequence.clip(id: preview.placeholderID) : nil
         }
         var shownTrack = track
-        shownTrack.clips.removeAll { $0.id == dragPreview?.placeholderID }
+        if dragPreview?.showsPlaceholder == true {
+            shownTrack.clips.removeAll { $0.id == dragPreview?.placeholderID }
+        }
         let ghost = draggedClip.flatMap { dragged in sequence.trackID(containing: dragged.clip.id) == track.id ? dragged : nil }
         let sourceIndex = sequence.tracks.firstIndex { $0.id == track.id } ?? index
 
@@ -315,7 +322,9 @@ struct TimelineEditorView: View {
             ghost: ghost,
             placeholder: placeholder,
             dragChanged: { clip, translation in previewClipMove(clip, fromTrackAt: sourceIndex, by: translation) },
-            dragEnded: { clip, translation in endClipMove(clip, fromTrackAt: sourceIndex, by: translation) }
+            dragEnded: { clip, translation in endClipMove(clip, fromTrackAt: sourceIndex, by: translation) },
+            trimChanged: { clip, edge, distance in previewTrim(clip, edge: edge, by: distance) },
+            trimEnded: { clip, edge, distance in endTrim(clip, edge: edge, by: distance) }
         )
     }
 
@@ -353,6 +362,36 @@ struct TimelineEditorView: View {
         guard !isDragCancelled else { return }
         let target = clipMoveTarget(clip, fromTrackAt: trackIndex, by: translation)
         actions.moveClip(clip.id, target.trackID, target.time)
+    }
+
+    /// 끈 거리를 트림할 시간으로 바꾼다. ⌥를 누르고 있으면 5분의 1로 줄여 프레임 단위로 맞추기 쉽게 하고,
+    /// 뒤 끝은 다른 클립 경계·재생 헤드에 붙인다(앞 끝은 리플 트림이라 클립 시작 위치가 그대로라 붙이지 않는다).
+    private func trimDelta(_ clip: Clip, edge: ClipEdge, distance: Double) -> CMTime {
+        let precision = NSEvent.modifierFlags.contains(.option) ? 0.2 : 1
+        let delta = CMTime(seconds: distance * precision / scale.pointsPerSecond, preferredTimescale: standardTimescale)
+        guard edge == .end else { return delta }
+        let movedEnd = clip.timelineRange.end + delta
+        return snappedStart(movedEnd, duration: .zero, excluding: clip.id) - clip.timelineRange.end
+    }
+
+    private func previewTrim(_ clip: Clip, edge: ClipEdge, by distance: Double) {
+        guard !isDragCancelled, let trackID = sequence.trackID(containing: clip.id) else { return }
+        isDragging = true
+        let sourceDuration = assets.first { $0.id == clip.assetID }?.trimmableDuration
+        let range = clip.trimmedSourceRange(edge: edge, by: trimDelta(clip, edge: edge, distance: distance), sourceDuration: sourceDuration)
+        guard dragPreview?.time != range.duration || dragPreview?.sequence.clip(id: clip.id)?.sourceRange != range else { return }
+        var preview = sequence
+        preview.setSourceRange(range, forClip: clip.id)
+        dragPreview = DragPreview(sequence: preview, placeholderID: clip.id, trackID: trackID, time: range.duration, showsPlaceholder: false)
+    }
+
+    private func endTrim(_ clip: Clip, edge: ClipEdge, by distance: Double) {
+        defer {
+            isDragCancelled = false
+            clearDrag()
+        }
+        guard !isDragCancelled else { return }
+        actions.trimClip(clip.id, edge, trimDelta(clip, edge: edge, distance: distance))
     }
 
     /// 놓을 트랙과 시각. 놓은 높이에서 가장 가까운 같은 종류의 트랙에 넣고, 새 트랙은 만들지 않는다(트랙 머리 우클릭으로 직접 만든다).
