@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreImage
 import CoreMedia
 import Foundation
 @testable import palladium
@@ -156,5 +157,67 @@ struct SequenceComposerTests {
             return start
         }
         #expect(volumes.sorted() == [0, 0.25])
+    }
+
+    @Test("자막은 모든 층 위에 스타일대로 그리고, 클립보다 늦게 끝나는 자막도 그 시간까지 보인다")
+    func drawsSubtitlesOnTop() async throws {
+        let redURL = try await TestMedia.makeVideo(red: 255, green: 0, blue: 0, seconds: 1)
+        let red = MediaAsset(id: UUID(), name: "red.mov", sourceURL: redURL, kind: .video, duration: seconds(1))
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let videoID = sequence.addTrack(kind: .video)
+        try sequence.place(#require(red.makeClip(at: .zero)), onTrack: videoID)
+        let subtitleID = sequence.addSubtitle(at: .zero, text: "■")
+        sequence.updateSubtitle(subtitleID, text: "■", style: SubtitleStyle(fontSize: 120, position: .middle, color: .yellow, hasBackground: true))
+        let subtitle = try #require(sequence.subtitles.first)
+
+        let composition = try #require(await SequenceComposer.makeComposition(
+            sequence: sequence, assets: [red], aspectRatio: .landscape16x9, resolveURL: \.sourceURL
+        ))
+        #expect(abs(composition.duration.seconds - 3) < 0.01)
+        let generator = AVAssetImageGenerator(asset: composition.asset)
+        generator.videoComposition = composition.videoComposition
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+
+        let render = SequenceComposer.renderSize(for: .landscape16x9)
+        let box = try #require(SubtitleRenderer.image(for: subtitle, renderSize: render)).extent
+        // 상자 왼쪽 여백: 빨간 화면 위의 반투명 검은 배경(Core Image는 선형 공간에서 섞어 생각보다 밝다).
+        let backgroundX = (box.minX + 4) / render.width
+        let middleY = (render.height - box.midY) / render.height
+        let frame = try await generator.image(at: seconds(0.5)).image
+        let background = TestMedia.color(of: frame, atX: backgroundX, y: middleY)
+        #expect(background.red > 60 && background.red < 190 && background.green < 40)
+        let glyph = TestMedia.centerColor(of: frame)
+        #expect(glyph.red > 200 && glyph.green > 160 && glyph.blue < 80)
+        // 자막 밖은 영상 그대로다.
+        let outside = TestMedia.color(of: frame, atX: 0.1, y: 0.1)
+        #expect(outside.red > 200 && outside.green < 40)
+
+        // 클립이 끝난 뒤(1~3초)에도 자막만 검은 화면 위에 보인다.
+        let late = try await generator.image(at: seconds(2)).image
+        let lateGlyph = TestMedia.centerColor(of: late)
+        let lateOutside = TestMedia.color(of: late, atX: 0.1, y: 0.1)
+        #expect(lateGlyph.red > 200 && lateGlyph.green > 160)
+        #expect(lateOutside.red < 30 && lateOutside.green < 30)
+    }
+
+    @Test("자막은 위·가운데·아래 위치에 따라 화면 위쪽·가운데·아래쪽에 놓인다")
+    func subtitlePositions() throws {
+        let render = CGSize(width: 1920, height: 1080)
+        func box(_ position: SubtitlePosition) throws -> CGRect {
+            let subtitle = Subtitle(
+                id: UUID(), range: CMTimeRange(start: .zero, duration: seconds(1)), text: "안녕하세요",
+                style: SubtitleStyle(position: position)
+            )
+            return try #require(SubtitleRenderer.image(for: subtitle, renderSize: render)).extent
+        }
+        // Core Image 좌표(왼쪽 아래 원점).
+        let bottom = try box(.bottom)
+        let middle = try box(.middle)
+        let top = try box(.top)
+        #expect(bottom.minY < 100 && top.maxY > 980)
+        #expect(abs(middle.midY - 540) < 1)
+        #expect(abs(bottom.midX - 960) < 1)
+        #expect(bottom.width < render.width * SubtitleRenderer.maximumWidthRatio)
     }
 }

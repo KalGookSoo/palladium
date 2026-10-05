@@ -8,6 +8,10 @@ extension FocusedValues {
     @Entry var importMedia: (() -> Void)?
     /// 내보낼 클립이 있는 편집 창이 앞에 있을 때만 값이 있다.
     @Entry var exportSequence: (() -> Void)?
+    /// 편집 창이 앞에 있을 때만 값이 있다.
+    @Entry var importSubtitles: (() -> Void)?
+    /// 자막이 있는 편집 창이 앞에 있을 때만 값이 있다.
+    @Entry var exportSubtitles: (() -> Void)?
 }
 
 struct FileCommands: Commands {
@@ -15,6 +19,8 @@ struct FileCommands: Commands {
     @FocusedValue(\.saveProject) private var saveProject
     @FocusedValue(\.importMedia) private var importMedia
     @FocusedValue(\.exportSequence) private var exportSequence
+    @FocusedValue(\.importSubtitles) private var importSubtitles
+    @FocusedValue(\.exportSubtitles) private var exportSubtitles
 
     var body: some Commands {
         // 기본 "새 윈도우"는 프로젝트 없이 편집 창을 열기 때문에, 프로젝트 목록(시작 창)을 여는 항목으로 바꾼다.
@@ -45,6 +51,15 @@ struct FileCommands: Commands {
             }
             .keyboardShortcut("e")
             .disabled(exportSequence == nil)
+            Divider()
+            Button("자막 가져오기(SRT)…") {
+                importSubtitles?()
+            }
+            .disabled(importSubtitles == nil)
+            Button("자막 내보내기(SRT)…") {
+                exportSubtitles?()
+            }
+            .disabled(exportSubtitles == nil)
         }
     }
 }

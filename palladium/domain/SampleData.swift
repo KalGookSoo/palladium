@@ -54,7 +54,14 @@ nonisolated enum SampleData {
         id: UUID(),
         name: "통합본",
         tracks: [videoTrack, audioTrack],
-        markers: [introEndMarker]
+        markers: [introEndMarker],
+        subtitles: [
+            Subtitle(id: UUID(), range: CMTimeRange(start: seconds(1), duration: seconds(3)), text: "여행 첫날"),
+            Subtitle(
+                id: UUID(), range: CMTimeRange(start: seconds(9), duration: seconds(2.5)), text: "바닷가로",
+                style: SubtitleStyle(fontSize: 72, position: .top, color: .yellow, hasBackground: false)
+            ),
+        ]
     )
 
     static let project: Project = {

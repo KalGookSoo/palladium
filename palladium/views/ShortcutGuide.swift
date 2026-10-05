@@ -44,6 +44,7 @@ enum ShortcutGuide {
     static let rippleDeleteClips = ShortcutGuideEntry(title: "리플 삭제", summary: "고른 클립을 지우고 뒤 클립을 당겨 틈을 메웁니다", keys: "⇧⌫")
     static let splitAtPlayhead = ShortcutGuideEntry(title: "클립 분할", summary: "재생 헤드(파란 세로선) 위치에서 고른 클립(없으면 재생 헤드에 걸친 모든 클립)을 둘로 나눕니다", keys: "⌘B")
     static let addMarker = ShortcutGuideEntry(title: "재생 헤드에 마커 추가", summary: "나중에 다시 찾을 시점에 책갈피를 둡니다", keys: "M")
+    static let addSubtitle = ShortcutGuideEntry(title: "재생 헤드에 자막 추가", summary: "재생 헤드부터 3초 동안 나오는 자막을 자막 트랙에 둡니다", keys: "T")
     static let preciseTrim = ShortcutGuideEntry(title: "정밀 트림", summary: "클립 끝을 끌 때 이동량을 줄여 프레임 단위로 맞춥니다", keys: "⌥ 누른 채 끌기")
     static let deselect = ShortcutGuideEntry(title: "선택 해제", summary: "끄는 중인 편집을 취소하거나, 고른 클립·원본 선택을 한 단계씩 풉니다", keys: "Esc")
     static let toggleFilmstrip = ShortcutGuideEntry(title: "필름스트립 보기", summary: "영상·이미지 클립 안에 프레임을 그립니다", keys: nil)
@@ -63,7 +64,7 @@ enum ShortcutGuide {
         ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline]),
         ("재생", [playPause, previousFrame, nextFrame]),
         ("편집", [undo, redo, renameAsset]),
-        ("타임라인", [deleteClips, rippleDeleteClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect, addMarker, preciseTrim]),
+        ("타임라인", [deleteClips, rippleDeleteClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect, addMarker, addSubtitle, preciseTrim]),
         ("도움말", [showHelp, showShortcuts]),
     ]
 }

@@ -12,10 +12,23 @@ struct InspectorView: View {
     var setClipSource: (Clip.ID, CMTime, CMTime) -> Void = { _, _, _ in }
     var setTransform: (Clip.ID, ClipTransform) -> Void = { _, _ in }
     var setClipAudio: (Clip.ID, Double, Bool) -> Void = { _, _, _ in }
+    /// 자막 트랙에서 고른 자막. 있으면 클립 대신 자막 속성을 보여준다.
+    var subtitle: Subtitle?
+    var updateSubtitle: (Subtitle.ID, String, SubtitleStyle) -> Void = { _, _, _ in }
+    var setSubtitleRange: (Subtitle.ID, CMTime, CMTime) -> Void = { _, _, _ in }
+    var deleteSubtitle: (Subtitle.ID) -> Void = { _ in }
     @State private var selectedTab: InspectorTab = .trim
 
     var body: some View {
-        if let clip {
+        if let subtitle {
+            SubtitleInspectorView(
+                subtitle: subtitle,
+                update: { text, style in updateSubtitle(subtitle.id, text, style) },
+                setRange: { start, end in setSubtitleRange(subtitle.id, start, end) },
+                delete: { deleteSubtitle(subtitle.id) }
+            )
+            .id(subtitle.id)
+        } else if let clip {
             VStack(alignment: .leading, spacing: 0) {
                 InspectorHeader(clip: clip, asset: asset)
                     .padding()
@@ -63,7 +76,7 @@ struct InspectorView: View {
                 ContentUnavailableView(
                     "선택한 클립 없음",
                     systemImage: "slider.horizontal.3",
-                    description: Text("타임라인에서 클립을 선택하세요")
+                    description: Text("타임라인에서 클립이나 자막을 선택하세요")
                 )
             }
         }

@@ -30,6 +30,8 @@ struct MainWindowView: View {
     /// 열린 프로젝트와 편집 동작. 이 View는 화면 상태만 갖고 편집은 모두 편집기 커맨드로 한다.
     let editor: ProjectEditor
     @State private var saveErrorMessage: String?
+    /// 자막 파일을 읽거나 쓰지 못했을 때의 안내.
+    @State private var subtitleFileMessage: String?
     @State private var isImporterPresented = false
     /// 진행 중인 내보내기. 끝나거나 취소되면 `nil`.
     @State private var export: ExportJob?
@@ -39,6 +41,8 @@ struct MainWindowView: View {
     /// 훑어보기(Quick Look) 창에 띄울 원본 파일.
     @State private var quickLookURL: URL?
     @State private var selectedClipIDs: Set<Clip.ID> = []
+    /// 자막 트랙에서 고른 자막. 클립 선택과 함께 있지 않는다.
+    @State private var selectedSubtitleID: Subtitle.ID?
     /// 타임라인에서 클립·원본을 끄는 중인지. Esc로 끌기를 취소할 때 쓴다.
     @State private var isTimelineDragging = false
     @State private var timelineDragCancelCount = 0
@@ -68,6 +72,14 @@ struct MainWindowView: View {
                 }
             }
         )
+        let isShowingSubtitleFileMessage = Binding<Bool>(
+            get: { subtitleFileMessage != nil },
+            set: {
+                if !$0 {
+                    subtitleFileMessage = nil
+                }
+            }
+        )
         let currentSequence = editor.currentSequence
         // 인스펙터는 클립 하나를 골랐을 때만 속성을 보여준다.
         let selectedClip = selectedClipIDs.count == 1 ? selectedClipIDs.first.flatMap { currentSequence.clip(id: $0) } : nil
@@ -91,6 +103,8 @@ struct MainWindowView: View {
             .focusedSceneValue(\.saveProject, saveAction)
             .focusedSceneValue(\.importMedia) { isImporterPresented = true }
             .focusedSceneValue(\.exportSequence, exportAction)
+            .focusedSceneValue(\.importSubtitles) { chooseSubtitleFile() }
+            .focusedSceneValue(\.exportSubtitles, exportSubtitlesAction)
             .focusedSceneValue(\.splitClips, splitAction)
             .focusedSceneValue(\.isTimelineVisible, $isTimelineVisible)
             .focusedSceneValue(\.isInspectorPresented, $isInspectorPresented)
@@ -110,6 +124,17 @@ struct MainWindowView: View {
                 playheadTime: $playheadTime
             ))
             .quickLookPreview($quickLookURL)
+            // 클립과 자막은 함께 고르지 않는다. 한쪽을 고르면 다른 쪽 선택을 푼다.
+            .onChange(of: selectedSubtitleID) {
+                if selectedSubtitleID != nil {
+                    selectedClipIDs = []
+                }
+            }
+            .onChange(of: selectedClipIDs) {
+                if !selectedClipIDs.isEmpty {
+                    selectedSubtitleID = nil
+                }
+            }
 
         withBehaviors
             .sheet(item: $export) { job in
@@ -142,6 +167,11 @@ struct MainWindowView: View {
                 Button("확인", role: .cancel) {}
             } message: {
                 Text(saveErrorMessage ?? "")
+            }
+            .alert("자막 파일", isPresented: isShowingSubtitleFileMessage) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text(subtitleFileMessage ?? "")
             }
         #if DEBUG
             .debugCommandValues(editor: editor)
@@ -205,6 +235,7 @@ struct MainWindowView: View {
                         allSequences: editor.project.sequences,
                         assets: editor.project.assets,
                         selectedClipIDs: $selectedClipIDs,
+                        selectedSubtitleID: $selectedSubtitleID,
                         playheadTime: $playheadTime,
                         scale: $timelineScale,
                         isDragging: $isTimelineDragging,
@@ -242,19 +273,25 @@ struct MainWindowView: View {
             switchSequence: { sequenceID in
                 editor.switchToSequence(sequenceID)
                 selectedClipIDs = []
+                selectedSubtitleID = nil
             },
             addSequence: {
                 editor.addSequence(named: "")
                 selectedClipIDs = []
+                selectedSubtitleID = nil
             },
             renameSequence: { sequenceID, name in editor.renameSequence(sequenceID, to: name) },
             deleteSequence: { sequenceID in
                 editor.deleteSequence(sequenceID)
                 selectedClipIDs = []
+                selectedSubtitleID = nil
             },
             addMarker: { editor.addMarker(at: playheadTime) },
             renameMarker: { markerID, name in editor.renameMarker(markerID, to: name) },
             deleteMarker: { markerID in editor.deleteMarker(markerID) },
+            addSubtitle: addSubtitleAtPlayhead,
+            setSubtitleRange: { subtitleID, start, end in editor.setSubtitleRange(subtitleID, start: start, end: end) },
+            deleteSubtitle: deleteSubtitle,
             setTrackAudio: { trackID, volume, isMuted in editor.setTrackAudio(volume: volume, isMuted: isMuted, for: trackID) },
             addTrack: { kind in editor.addTrack(kind: kind) },
             deleteTrack: { trackID in editor.deleteTrack(trackID) }
@@ -294,7 +331,11 @@ struct MainWindowView: View {
                 selectedClipCount: selectedClipIDs.count,
                 setClipSource: { clipID, start, end in editor.setClipSource(clipID, start: start, end: end) },
                 setTransform: { clipID, transform in editor.setTransform(transform, for: clipID) },
-                setClipAudio: { clipID, volume, isMuted in editor.setClipAudio(volume: volume, isMuted: isMuted, for: clipID) }
+                setClipAudio: { clipID, volume, isMuted in editor.setClipAudio(volume: volume, isMuted: isMuted, for: clipID) },
+                subtitle: currentSequence.subtitles.first { $0.id == selectedSubtitleID },
+                updateSubtitle: { subtitleID, text, style in editor.updateSubtitle(subtitleID, text: text, style: style) },
+                setSubtitleRange: { subtitleID, start, end in editor.setSubtitleRange(subtitleID, start: start, end: end) },
+                deleteSubtitle: deleteSubtitle
             )
             .inspectorColumnWidth(
                 min: MainWindowMetrics.inspectorMinWidth,
@@ -366,6 +407,41 @@ struct MainWindowView: View {
         export = job
     }
 
+    /// 파일 > 자막 내보내기. 자막이 없으면 `nil`이라 비활성화된다.
+    private var exportSubtitlesAction: (() -> Void)? {
+        editor.currentSequence.subtitles.isEmpty ? nil : { saveSubtitleFile() }
+    }
+
+    /// 파일 > 자막 가져오기. 고른 SRT 파일의 자막을 현재 시퀀스에 더한다.
+    private func chooseSubtitleFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "srt") ?? .plainText]
+        panel.message = "현재 시퀀스에 더할 SRT 자막 파일을 고르세요."
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            let text = (try? String(contentsOf: url, encoding: .utf8)) ?? (try? String(contentsOf: url, encoding: .utf16))
+            let count = text.map { editor.importSubtitles(fromSRT: $0) } ?? 0
+            if count == 0 {
+                subtitleFileMessage = "\(url.lastPathComponent)에서 자막을 읽지 못했습니다. UTF-8 SRT 파일인지 확인하세요."
+            }
+        }
+    }
+
+    /// 파일 > 자막 내보내기. 현재 시퀀스의 자막을 SRT 파일로 저장한다.
+    private func saveSubtitleFile() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "srt") ?? .plainText]
+        panel.nameFieldStringValue = "\(editor.project.name) - \(editor.currentSequence.name).srt"
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            do {
+                try editor.currentSubtitlesSRT.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                subtitleFileMessage = error.localizedDescription
+            }
+        }
+    }
+
     /// 원본을 훑어보기(Quick Look) 창으로 연다. 원본 전용 미리보기는 두지 않는다.
     private func quickLook(_ assetID: MediaAsset.ID) {
         guard let asset = editor.asset(id: assetID) else { return }
@@ -383,6 +459,10 @@ struct MainWindowView: View {
             default: previewPlayer.stepFrame(by: 1, in: timeline)
             }
         case .deleteSelection, .rippleDeleteSelection:
+            if let selectedSubtitleID {
+                deleteSubtitle(selectedSubtitleID)
+                return true
+            }
             guard !selectedClipIDs.isEmpty else { return false }
             timelineActions.deleteClips(selectedClipIDs, key == .rippleDeleteSelection)
         case .selectAll:
@@ -391,6 +471,8 @@ struct MainWindowView: View {
             return releaseOneLevel()
         case .addMarker:
             editor.addMarker(at: playheadTime)
+        case .addSubtitle:
+            addSubtitleAtPlayhead()
         }
         return true
     }
@@ -400,6 +482,8 @@ struct MainWindowView: View {
     private func releaseOneLevel() -> Bool {
         if isTimelineDragging {
             timelineDragCancelCount += 1
+        } else if selectedSubtitleID != nil {
+            selectedSubtitleID = nil
         } else if !selectedClipIDs.isEmpty {
             selectedClipIDs = []
         } else if selectedAssetID != nil {
@@ -408,6 +492,19 @@ struct MainWindowView: View {
             return false
         }
         return true
+    }
+
+    /// 재생 헤드에 자막을 두고 골라, 인스펙터에서 바로 글자를 입력하게 한다.
+    private func addSubtitleAtPlayhead() {
+        selectedSubtitleID = editor.addSubtitle(at: playheadTime)
+        isInspectorPresented = true
+    }
+
+    private func deleteSubtitle(_ subtitleID: Subtitle.ID) {
+        editor.deleteSubtitle(subtitleID)
+        if selectedSubtitleID == subtitleID {
+            selectedSubtitleID = nil
+        }
     }
 
     /// 편집 > 클립 분할(⌘B). 재생 헤드에서 나눌 클립이 없으면 `nil`이라 메뉴가 비활성화된다.

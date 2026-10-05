@@ -14,7 +14,7 @@ nonisolated struct SequenceComposition {
 }
 
 /// 시퀀스의 모든 영상 트랙(아래 트랙이 먼저, 위 트랙이 그 위에)과 이미지 클립을 클립마다의 위치·크기·불투명도로 겹쳐 그리고(#5 2단계, #9),
-/// 영상 클립의 소리와 오디오 트랙을 함께 넣는다. 그리기는 `LayerCompositor`가 한다.
+/// 영상 클립의 소리와 오디오 트랙을 함께 넣는다. 자막은 맨 위에 그린다(#4). 그리기는 `LayerCompositor`가 한다.
 nonisolated enum SequenceComposer {
     static let frameDuration = CMTime(value: 1, timescale: 30)
     /// 화면비 프리셋의 짧은 변(픽셀).
@@ -100,11 +100,20 @@ nonisolated enum SequenceComposer {
             }
         }
 
+        // 자막은 모든 트랙 위에 그린다.
+        for subtitle in sequence.subtitles {
+            placedLayers.append((subtitle.range, CompositionLayer(content: .subtitle(subtitle), transform: ClipTransform()), Int.max))
+        }
+
         // 아무것도 넣지 못한 트랙은 지운다.
         for track in composition.tracks where track.segments.isEmpty {
             composition.removeTrack(track)
         }
         let duration = sequence.duration
+        // 자막만 있거나 자막이 클립보다 늦게 끝나면 검은 바탕 영상을 늘여 길이를 채워, 합성기가 그 구간도 그리게 한다.
+        if !placedLayers.isEmpty, composition.tracks(withMediaType: .video).isEmpty || composition.duration < duration {
+            await addBlankBase(to: composition, duration: duration)
+        }
         let audioMix = makeAudioMix(composition: composition, volumes: volumes)
         guard !placedLayers.isEmpty else {
             return SequenceComposition(asset: composition, videoComposition: nil, audioMix: audioMix, duration: duration)
@@ -159,6 +168,20 @@ nonisolated enum SequenceComposer {
         let audioMix = AVMutableAudioMix()
         audioMix.inputParameters = parameters
         return audioMix
+    }
+
+    /// 시퀀스 처음부터 끝까지 덮는 바탕 영상 트랙. 층으로 그리지 않으므로 화면에는 보이지 않는다.
+    private static func addBlankBase(to composition: AVMutableComposition, duration: CMTime) async {
+        do {
+            let source = AVURLAsset(url: try await BlankVideo.url())
+            guard let sourceVideo = try await source.loadTracks(withMediaType: .video).first,
+                  let base = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
+            else { return }
+            try base.insertTimeRange(CMTimeRange(start: .zero, duration: BlankVideo.duration), of: sourceVideo, at: .zero)
+            base.scaleTimeRange(CMTimeRange(start: .zero, duration: BlankVideo.duration), toDuration: duration)
+        } catch {
+            Logger.playback.error("바탕 영상을 만들지 못함: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// 방향 정보를 반영해 바로 선 이미지로 불러온다. 읽지 못하면 `nil`.

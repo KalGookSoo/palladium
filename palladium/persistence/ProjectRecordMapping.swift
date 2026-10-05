@@ -93,6 +93,7 @@ private extension SequenceRecord {
                 timeTimescale: marker.time.timescale
             )
         }
+        record.subtitles = sequence.subtitles.enumerated().map { SubtitleRecord(subtitle: $1, sortIndex: $0) }
         return record
     }
 }
@@ -152,7 +153,8 @@ private extension SequenceRecord {
             tracks: tracks.sorted { $0.sortIndex < $1.sortIndex }.compactMap { $0.makeTrack() },
             markers: markers.sorted { $0.sortIndex < $1.sortIndex }.map {
                 Marker(id: $0.id, time: CMTime(value: $0.timeValue, timescale: $0.timeTimescale), name: $0.name)
-            }
+            },
+            subtitles: subtitles.sorted { $0.sortIndex < $1.sortIndex }.map { $0.makeSubtitle() }
         )
     }
 }

@@ -7,17 +7,16 @@ nonisolated struct EditSequence {
     var name: String
     var tracks: [Track]
     var markers: [Marker] = []
+    /// 결과물 시간에 붙는 자막(자막 트랙). 시작 시각 순으로 유지한다(#4).
+    var subtitles: [Subtitle] = []
 }
 
 // MARK: - Queries
 
 nonisolated extension EditSequence {
-    /// 가장 늦게 끝나는 클립의 끝 시각. 클립이 없으면 0이다.
+    /// 가장 늦게 끝나는 클립(또는 자막)의 끝 시각. 아무것도 없으면 0이다.
     var duration: CMTime {
-        tracks
-            .flatMap(\.clips)
-            .map(\.timelineRange.end)
-            .max() ?? .zero
+        (tracks.flatMap(\.clips).map(\.timelineRange.end) + subtitles.map(\.range.end)).max() ?? .zero
     }
 }
 

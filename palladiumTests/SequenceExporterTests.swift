@@ -41,6 +41,24 @@ struct SequenceExporterTests {
         let center = try await TestMedia.centerColor(of: generator.image(at: seconds(0.5)).image)
         #expect(center.red > 180 && center.blue < 80)
     }
+
+    @Test("자막만 있는 시퀀스도 자막 길이만큼 내보내고 자막이 화면에 박힌다")
+    func exportsSubtitleOnlySequence() async throws {
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let subtitleID = sequence.addSubtitle(at: .zero, text: "■")
+        sequence.updateSubtitle(subtitleID, text: "■", style: SubtitleStyle(fontSize: 120, position: .middle, color: .yellow, hasBackground: false))
+        let composition = try #require(await SequenceComposer.makeComposition(
+            sequence: sequence, assets: [], aspectRatio: .square1x1, resolveURL: \.sourceURL
+        ))
+        let output = TestMedia.temporaryURL(extension: "mp4")
+
+        try await SequenceExporter.export(composition, to: output) { _ in }
+
+        let exported = AVURLAsset(url: output)
+        #expect(try await abs(exported.load(.duration).seconds - 3) < 0.1)
+        let center = try await TestMedia.centerColor(of: AVAssetImageGenerator(asset: exported).image(at: seconds(1.5)).image)
+        #expect(center.red > 180 && center.green > 150 && center.blue < 90)
+    }
 }
 
 /// 내보내기 진행률 콜백(다른 스레드)에서 쓰는 값.

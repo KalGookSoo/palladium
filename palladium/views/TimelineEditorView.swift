@@ -6,6 +6,8 @@ import UniformTypeIdentifiers
 enum TimelineMetrics {
     static let rulerHeight = 24.0
     static let trackHeight = 44.0
+    /// 눈금자 아래 자막 트랙의 높이.
+    static let subtitleLaneHeight = 28.0
     static let clipVerticalInset = 4.0
     static let trackHeaderWidth = 80.0
     /// 시퀀스 끝 뒤에 남겨 두는 여백. 끝 근처 클립도 스크롤 없이 끝까지 보이게 한다.
@@ -32,6 +34,10 @@ struct TimelineActions {
     var addMarker: () -> Void = {}
     var renameMarker: (Marker.ID, String) -> Void = { _, _ in }
     var deleteMarker: (Marker.ID) -> Void = { _ in }
+    /// 재생 헤드에 자막을 둔다.
+    var addSubtitle: () -> Void = {}
+    var setSubtitleRange: (Subtitle.ID, CMTime, CMTime) -> Void = { _, _, _ in }
+    var deleteSubtitle: (Subtitle.ID) -> Void = { _ in }
     /// 트랙 전체 음량(0~1)과 음소거.
     var setTrackAudio: (Track.ID, Double, Bool) -> Void = { _, _, _ in }
     var addTrack: (TrackKind) -> Void = { _ in }
@@ -58,6 +64,7 @@ struct TimelineEditorView: View {
     var allSequences: [EditSequence] = []
     let assets: [MediaAsset]
     @Binding var selectedClipIDs: Set<Clip.ID>
+    @Binding var selectedSubtitleID: Subtitle.ID?
     @Binding var playheadTime: CMTime
     @Binding var scale: TimelineScale
     /// 끄는 중이면 `true`. 상위가 Esc로 끌기를 취소할지 정하는 데 쓴다.
@@ -121,7 +128,7 @@ struct TimelineEditorView: View {
 
             Divider()
 
-            if sequence.tracks.allSatisfy(\.clips.isEmpty), dragPreview == nil {
+            if sequence.tracks.allSatisfy(\.clips.isEmpty), sequence.subtitles.isEmpty, dragPreview == nil {
                 // 빈 타임라인은 "무엇을 하면 되는지"를 안내한다. 원본이 없으면 가져오기부터 안내한다.
                 Group {
                     if assets.isEmpty {
@@ -273,6 +280,13 @@ struct TimelineEditorView: View {
                         renameMarker: beginRenamingMarker,
                         deleteMarker: actions.deleteMarker
                     )
+                    SubtitleLaneView(
+                        sequence: sequence,
+                        scale: scale,
+                        playheadTime: playheadTime,
+                        selectedSubtitleID: $selectedSubtitleID,
+                        actions: actions
+                    )
                     ForEach(Array(shownSequence.tracks.enumerated()), id: \.element.id) { index, track in
                         trackRow(track, at: index)
                     }
@@ -399,7 +413,7 @@ struct TimelineEditorView: View {
     /// 놓을 트랙과 시각. 놓은 높이에서 가장 가까운 같은 종류의 트랙에 넣고, 새 트랙은 만들지 않는다(트랙 머리 우클릭으로 직접 만든다).
     /// 같은 종류의 트랙이 하나도 없을 때만 `nil`(새 트랙)이다. 행 위치는 미리보기가 아닌 원래 시퀀스 기준이라 미리보기가 위치 판단을 바꾸지 않는다.
     private func assetDropTarget(at location: CGPoint, asset: MediaAsset) -> (trackID: Track.ID?, time: CMTime) {
-        let rowIndex = Int(((location.y - TimelineMetrics.rulerHeight) / TimelineMetrics.trackHeight).rounded(.down))
+        let rowIndex = Int(((location.y - TimelineMetrics.rulerHeight - TimelineMetrics.subtitleLaneHeight) / TimelineMetrics.trackHeight).rounded(.down))
         let trackID = sequence.nearestTrackID(kind: asset.trackKind, toRow: rowIndex)
         return (trackID, snappedStart(scale.time(forX: location.x), duration: asset.placementDuration, excluding: nil))
     }
@@ -475,6 +489,15 @@ private struct TrackHeaderColumn: View {
         VStack(alignment: .leading, spacing: 0) {
             Color.clear
                 .frame(height: TimelineMetrics.rulerHeight)
+            Label("자막", systemImage: "captions.bubble")
+                .font(.caption)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: TimelineMetrics.subtitleLaneHeight)
+                .padding(.horizontal, 8)
+                .contentShape(Rectangle())
+                .contextMenu {
+                    Button(ShortcutGuide.addSubtitle.title, action: actions.addSubtitle)
+                }
             ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
                 // 같은 종류 트랙끼리 1부터 번호를 매긴다. 영상은 프리미어처럼 맨 아래(메인)가 1이고 위로 갈수록 커지며,
                 // 오디오는 위에서부터 1이다.
@@ -545,6 +568,7 @@ private struct TrackHeaderColumn: View {
         sequence: EditSequence(id: UUID(), name: "시퀀스 1", tracks: []),
         assets: SampleData.project.assets,
         selectedClipIDs: $selectedClipIDs,
+        selectedSubtitleID: .constant(nil),
         playheadTime: $playheadTime,
         scale: $scale,
         isDragging: .constant(false)
@@ -561,6 +585,7 @@ private struct TrackHeaderColumn: View {
         sequence: EditSequence(id: UUID(), name: "시퀀스 1", tracks: []),
         assets: [],
         selectedClipIDs: $selectedClipIDs,
+        selectedSubtitleID: .constant(nil),
         playheadTime: $playheadTime,
         scale: $scale,
         isDragging: .constant(false)
@@ -577,6 +602,7 @@ private struct TrackHeaderColumn: View {
         sequence: SampleData.mainSequence,
         assets: SampleData.project.assets,
         selectedClipIDs: $selectedClipIDs,
+        selectedSubtitleID: .constant(nil),
         playheadTime: $playheadTime,
         scale: $scale,
         isDragging: .constant(false)

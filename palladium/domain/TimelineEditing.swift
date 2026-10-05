@@ -140,6 +140,46 @@ nonisolated extension EditSequence {
         return track.id
     }
 
+    /// `time`에 기본 길이의 자막을 둔다. 글자가 비어 있으면 "자막".
+    @discardableResult
+    mutating func addSubtitle(at time: CMTime, text: String = "") -> Subtitle.ID {
+        let subtitle = Subtitle(
+            id: UUID(),
+            range: CMTimeRange(start: CMTimeMaximum(time, .zero), duration: Subtitle.defaultDuration),
+            text: text.isEmpty ? "자막" : text
+        )
+        subtitles.append(subtitle)
+        subtitles.sort { $0.range.start < $1.range.start }
+        return subtitle.id
+    }
+
+    /// 가져온 자막을 더한다(SRT 가져오기).
+    mutating func addSubtitles(_ newSubtitles: [Subtitle]) {
+        subtitles.append(contentsOf: newSubtitles)
+        subtitles.sort { $0.range.start < $1.range.start }
+    }
+
+    mutating func updateSubtitle(_ subtitleID: Subtitle.ID, text: String, style: SubtitleStyle) {
+        guard let index = subtitles.firstIndex(where: { $0.id == subtitleID }) else { return }
+        subtitles[index].text = text
+        var clampedStyle = style
+        clampedStyle.fontSize = min(max(style.fontSize, SubtitleStyle.fontSizeRange.lowerBound), SubtitleStyle.fontSizeRange.upperBound)
+        subtitles[index].style = clampedStyle
+    }
+
+    /// 시작이 0보다 앞서지 않고 최소 길이는 남도록 맞춘다.
+    mutating func setSubtitleRange(_ subtitleID: Subtitle.ID, start: CMTime, end: CMTime) {
+        guard let index = subtitles.firstIndex(where: { $0.id == subtitleID }) else { return }
+        let clampedStart = CMTimeMaximum(start, .zero)
+        let clampedEnd = CMTimeMaximum(end, clampedStart + Subtitle.minimumDuration)
+        subtitles[index].range = CMTimeRange(start: clampedStart, end: clampedEnd)
+        subtitles.sort { $0.range.start < $1.range.start }
+    }
+
+    mutating func removeSubtitle(_ subtitleID: Subtitle.ID) {
+        subtitles.removeAll { $0.id == subtitleID }
+    }
+
     /// `time`에 마커를 둔다. 이름이 비어 있으면 "마커 N"(N은 추가 후 개수). 마커는 시각 순으로 유지한다.
     @discardableResult
     mutating func addMarker(at time: CMTime, named name: String = "") -> Marker.ID {

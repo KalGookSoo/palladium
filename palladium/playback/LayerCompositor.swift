@@ -8,6 +8,8 @@ nonisolated struct CompositionLayer {
         case video(trackID: CMPersistentTrackID, naturalSize: CGSize, preferredTransform: CGAffineTransform)
         /// 이미지(정지 화면).
         case image(CIImage)
+        /// 자막(#4). 위치는 자막 스타일이 정하고 `transform`은 쓰지 않는다.
+        case subtitle(Subtitle)
     }
 
     let content: Content
@@ -41,6 +43,8 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
     let sourcePixelBufferAttributes: [String: any Sendable]? = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
     let requiredPixelBufferAttributesForRenderContext: [String: any Sendable] = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
     private let context = CIContext()
+    /// 그려 둔 자막 이미지. 같은 자막이 여러 프레임에 이어 나오므로 다시 그리지 않는다.
+    private let subtitleCache = NSCache<NSString, CIImage>()
 
     func renderContextChanged(_: AVVideoCompositionRenderContext) {}
 
@@ -55,7 +59,7 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
         let canvas = CGRect(origin: .zero, size: renderSize)
         var image = CIImage(color: .black).cropped(to: canvas)
         for layer in instruction.layers {
-            guard let layerImage = Self.image(for: layer, request: request, renderSize: renderSize) else { continue }
+            guard let layerImage = placedImage(for: layer, request: request, renderSize: renderSize) else { continue }
             image = layerImage.composited(over: image)
         }
         context.render(image.cropped(to: canvas), to: output)
@@ -67,12 +71,12 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
     // MARK: - Layers
 
     /// 층을 화면 좌표(Core Image는 왼쪽 아래 원점)에 놓은 이미지. 프레임을 얻지 못하면 `nil`.
-    private static func image(for layer: CompositionLayer, request: AVAsynchronousVideoCompositionRequest, renderSize: CGSize) -> CIImage? {
+    private func placedImage(for layer: CompositionLayer, request: AVAsynchronousVideoCompositionRequest, renderSize: CGSize) -> CIImage? {
         let placed: CIImage
         switch layer.content {
         case let .video(trackID, naturalSize, preferredTransform):
             guard let buffer = request.sourceFrame(byTrackID: trackID) else { return nil }
-            let transform = videoTransform(
+            let transform = Self.videoTransform(
                 naturalSize: naturalSize,
                 preferredTransform: preferredTransform,
                 clipTransform: layer.transform,
@@ -80,9 +84,21 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
             )
             placed = CIImage(cvPixelBuffer: buffer).transformed(by: transform)
         case let .image(source):
-            placed = source.transformed(by: imageTransform(imageSize: source.extent.size, clipTransform: layer.transform, renderSize: renderSize))
+            placed = source.transformed(by: Self.imageTransform(imageSize: source.extent.size, clipTransform: layer.transform, renderSize: renderSize))
+        case let .subtitle(subtitle):
+            return subtitleImage(subtitle, renderSize: renderSize)
         }
-        return applyingOpacity(layer.transform.opacity, to: placed)
+        return Self.applyingOpacity(layer.transform.opacity, to: placed)
+    }
+
+    private func subtitleImage(_ subtitle: Subtitle, renderSize: CGSize) -> CIImage? {
+        let key = "\(subtitle.id)|\(subtitle.text)|\(subtitle.style)|\(renderSize)" as NSString
+        if let cached = subtitleCache.object(forKey: key) {
+            return cached
+        }
+        guard let image = SubtitleRenderer.image(for: subtitle, renderSize: renderSize) else { return nil }
+        subtitleCache.setObject(image, forKey: key)
+        return image
     }
 
     /// 영상 프레임(회전 전 원본)을 화면 위 클립 사각형으로 옮기는 Core Image 좌표 변환.

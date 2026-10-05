@@ -120,6 +120,42 @@ final class ProjectEditor {
         }
     #endif
 
+    // MARK: - Subtitles
+
+    /// 현재 시퀀스의 `time`에 기본 길이(3초) 자막을 둔다.
+    @discardableResult
+    func addSubtitle(at time: CMTime) -> Subtitle.ID {
+        var subtitleID = UUID()
+        editCurrentSequence("자막 추가") { subtitleID = $0.addSubtitle(at: time) }
+        return subtitleID
+    }
+
+    func updateSubtitle(_ subtitleID: Subtitle.ID, text: String, style: SubtitleStyle) {
+        editCurrentSequence("자막 편집") { $0.updateSubtitle(subtitleID, text: text, style: style) }
+    }
+
+    func setSubtitleRange(_ subtitleID: Subtitle.ID, start: CMTime, end: CMTime) {
+        editCurrentSequence("자막 시간 조정") { $0.setSubtitleRange(subtitleID, start: start, end: end) }
+    }
+
+    func deleteSubtitle(_ subtitleID: Subtitle.ID) {
+        editCurrentSequence("자막 삭제") { $0.removeSubtitle(subtitleID) }
+    }
+
+    /// SRT 파일 내용을 읽어 현재 시퀀스에 더한다. 반환값은 더한 자막 개수다.
+    @discardableResult
+    func importSubtitles(fromSRT text: String) -> Int {
+        let subtitles = SubtitleFile.parseSRT(text)
+        guard !subtitles.isEmpty else { return 0 }
+        editCurrentSequence("자막 가져오기") { $0.addSubtitles(subtitles) }
+        return subtitles.count
+    }
+
+    /// 현재 시퀀스의 자막을 SRT 형식으로 만든다.
+    var currentSubtitlesSRT: String {
+        SubtitleFile.makeSRT(currentSequence.subtitles)
+    }
+
     /// 현재 시퀀스의 `time`에 마커를 둔다. 이름이 비어 있으면 "마커 N".
     @discardableResult
     func addMarker(at time: CMTime, named name: String = "") -> Marker.ID {

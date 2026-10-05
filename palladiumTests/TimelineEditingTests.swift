@@ -186,6 +186,50 @@ struct MarkerCommandTests {
     }
 }
 
+struct SubtitleTests {
+    private func seconds(_ value: Double) -> CMTime {
+        CMTime(seconds: value, preferredTimescale: standardTimescale)
+    }
+
+    @Test("자막은 기본 3초로 시각 순으로 쌓이고, 시간 조정은 0 이전·최소 길이 미만으로 줄지 않으며, 글자 크기는 범위로 맞춘다")
+    func subtitleCommands() throws {
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let later = sequence.addSubtitle(at: seconds(5), text: "둘째")
+        let earlier = sequence.addSubtitle(at: seconds(1))
+        #expect(sequence.subtitles.map(\.id) == [earlier, later])
+        #expect(sequence.subtitles.first?.text == "자막")
+        #expect(sequence.duration == seconds(8))
+
+        sequence.setSubtitleRange(later, start: seconds(-2), end: seconds(-1))
+        let moved = try #require(sequence.subtitles.first { $0.id == later })
+        #expect(moved.range.start == .zero)
+        #expect(moved.range.duration == Subtitle.minimumDuration)
+        #expect(sequence.subtitles.map(\.id) == [later, earlier])
+
+        sequence.updateSubtitle(earlier, text: "첫째\n둘째 줄", style: SubtitleStyle(fontSize: 500))
+        let edited = try #require(sequence.subtitles.first { $0.id == earlier })
+        #expect(edited.text == "첫째\n둘째 줄")
+        #expect(edited.style.fontSize == SubtitleStyle.fontSizeRange.upperBound)
+
+        sequence.removeSubtitle(later)
+        #expect(sequence.subtitles.map(\.id) == [earlier])
+    }
+
+    @Test("SRT를 읽고 쓰면 시간과 여러 줄 글자가 그대로이고, 형식이 틀린 항목은 건너뛴다")
+    func srtRoundTrip() throws {
+        let source = "\u{FEFF}1\r\n00:00:01,500 --> 00:00:03,000\r\n안녕하세요\r\n두 번째 줄\r\n\r\n2\r\n잘못된 시간\r\n무시\r\n\r\n3\r\n01:02:03.040 --> 01:02:05,000 X1:0\r\n끝\r\n"
+        let parsed = SubtitleFile.parseSRT(source)
+        #expect(parsed.map(\.text) == ["안녕하세요\n두 번째 줄", "끝"])
+        #expect(parsed.first?.range.start.seconds == 1.5)
+        #expect(parsed.first?.range.end.seconds == 3)
+        #expect(parsed.last?.range.start.seconds == 3723.04)
+
+        let written = SubtitleFile.makeSRT(parsed)
+        #expect(written.hasPrefix("1\n00:00:01,500 --> 00:00:03,000\n안녕하세요\n두 번째 줄\n\n2\n01:02:03,040 --> 01:02:05,000\n끝\n"))
+        #expect(SubtitleFile.parseSRT(written).map(\.range) == parsed.map(\.range))
+    }
+}
+
 struct TrimTests {
     private let assetID = UUID()
 

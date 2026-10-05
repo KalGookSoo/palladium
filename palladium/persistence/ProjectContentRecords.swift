@@ -1,3 +1,4 @@
+import CoreMedia
 import Foundation
 import SwiftData
 
@@ -71,6 +72,7 @@ final class SequenceRecord {
     var name: String
     @Relationship(deleteRule: .cascade, inverse: \TrackRecord.sequence) var tracks: [TrackRecord] = []
     @Relationship(deleteRule: .cascade, inverse: \MarkerRecord.sequence) var markers: [MarkerRecord] = []
+    @Relationship(deleteRule: .cascade, inverse: \SubtitleRecord.sequence) var subtitles: [SubtitleRecord] = []
     var project: ProjectRecord?
     var backup: ProjectBackupRecord?
 
@@ -162,5 +164,53 @@ final class MarkerRecord {
         self.name = name
         self.timeValue = timeValue
         self.timeTimescale = timeTimescale
+    }
+}
+
+/// 자막 하나(#4). 기존 저장소가 가벼운 마이그레이션으로 열리도록 모든 속성에 기본값을 둔다.
+@Model
+final class SubtitleRecord {
+    var id = UUID()
+    var sortIndex = 0
+    var text = ""
+    var startValue: Int64 = 0
+    var startTimescale: Int32 = 600
+    var durationValue: Int64 = 0
+    var durationTimescale: Int32 = 600
+    var fontSize = 54.0
+    var positionRawValue = "bottom"
+    var colorRawValue = "white"
+    var hasBackground = true
+    var sequence: SequenceRecord?
+
+    init(subtitle: Subtitle, sortIndex: Int) {
+        id = subtitle.id
+        self.sortIndex = sortIndex
+        text = subtitle.text
+        startValue = subtitle.range.start.value
+        startTimescale = subtitle.range.start.timescale
+        durationValue = subtitle.range.duration.value
+        durationTimescale = subtitle.range.duration.timescale
+        fontSize = subtitle.style.fontSize
+        positionRawValue = subtitle.style.position.rawValue
+        colorRawValue = subtitle.style.color.rawValue
+        hasBackground = subtitle.style.hasBackground
+    }
+
+    func makeSubtitle() -> Subtitle {
+        Subtitle(
+            id: id,
+            range: CMTimeRange(
+                start: CMTime(value: startValue, timescale: startTimescale),
+                duration: CMTime(value: durationValue, timescale: durationTimescale)
+            ),
+            text: text,
+            style: SubtitleStyle(
+                fontSize: fontSize,
+                position: SubtitlePosition(rawValue: positionRawValue) ?? .bottom,
+                color: SubtitleColor(rawValue: colorRawValue) ?? .white,
+                hasBackground: hasBackground
+            )
+        )
     }
 }
