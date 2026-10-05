@@ -5,6 +5,8 @@ struct MainWindowToolbar: ToolbarContent {
     @Binding var aspectRatio: AspectRatioPreset
     @Binding var isInspectorPresented: Bool
     let importMedia: () -> Void
+    /// 내보낼 클립이 없으면 `nil`이라 버튼이 비활성화된다.
+    let exportSequence: (() -> Void)?
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
@@ -26,9 +28,12 @@ struct MainWindowToolbar: ToolbarContent {
         }
 
         ToolbarItem(placement: .primaryAction) {
-            Button(action: requestExport) {
+            Button {
+                exportSequence?()
+            } label: {
                 Label("내보내기", systemImage: "square.and.arrow.up")
             }
+            .disabled(exportSequence == nil)
             .help(ShortcutGuide.export.helpText)
         }
 

@@ -1,8 +1,10 @@
+import AppKit
 import CoreMedia
 import OSLog
 import QuickLook
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// 사이드바와 인스펙터만 폭 범위를 가진다. 가운데 영역과 창에는 최소 폭을 두지 않는다 —
 /// 최소 폭끼리 동시에 만족될 수 없으면 분할 뷰 제약이 끝없이 다시 계산되다 앱이 중단되기 때문이다(#32).
@@ -29,6 +31,8 @@ struct MainWindowView: View {
     let editor: ProjectEditor
     @State private var saveErrorMessage: String?
     @State private var isImporterPresented = false
+    /// 진행 중인 내보내기. 끝나거나 취소되면 `nil`.
+    @State private var export: ExportJob?
     @State private var importReport: MediaImportReport?
     /// 프리미어 프로처럼 미디어 패널 선택, 미리보기에 연 원본, 타임라인 클립 선택은 서로 독립이다.
     @State private var selectedAssetID: MediaAsset.ID?
@@ -86,6 +90,7 @@ struct MainWindowView: View {
         let withCommands = window
             .focusedSceneValue(\.saveProject, saveAction)
             .focusedSceneValue(\.importMedia) { isImporterPresented = true }
+            .focusedSceneValue(\.exportSequence, exportAction)
             .focusedSceneValue(\.splitClips, splitAction)
             .focusedSceneValue(\.isTimelineVisible, $isTimelineVisible)
             .focusedSceneValue(\.isInspectorPresented, $isInspectorPresented)
@@ -107,6 +112,17 @@ struct MainWindowView: View {
             .quickLookPreview($quickLookURL)
 
         withBehaviors
+            .sheet(item: $export) { job in
+                ExportProgressView(job: job)
+            }
+            .onAppear {
+                // 새 편집 창은 환경설정의 기본 화면비로 시작한다.
+                if let stored = UserDefaults.standard.string(forKey: AppPreferences.defaultAspectRatioKey),
+                   let preset = AspectRatioPreset(rawValue: stored)
+                {
+                    aspectRatio = preset
+                }
+            }
             .frame(minHeight: 600)
             .navigationTitle(project.name)
             .background {
@@ -290,7 +306,8 @@ struct MainWindowView: View {
             MainWindowToolbar(
                 aspectRatio: $aspectRatio,
                 isInspectorPresented: $isInspectorPresented,
-                importMedia: { isImporterPresented = true }
+                importMedia: { isImporterPresented = true },
+                exportSequence: exportAction
             )
         }
     }
@@ -303,6 +320,50 @@ struct MainWindowView: View {
               asset.kind != .audio
         else { return nil }
         return (clip, asset)
+    }
+
+    /// 파일 > 내보내기(⌘E)·툴바 버튼. 클립이 없으면 `nil`이라 비활성화된다.
+    private var exportAction: (() -> Void)? {
+        editor.currentSequence.duration > .zero ? { chooseExportDestination() } : nil
+    }
+
+    /// 저장 위치를 고른 뒤 현재 시퀀스를 툴바의 화면비로 내보낸다.
+    private func chooseExportDestination() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.mpeg4Movie]
+        panel.nameFieldStringValue = "\(editor.project.name) - \(editor.currentSequence.name).mp4"
+        panel.message = "현재 시퀀스를 \(aspectRatio.widthRatio):\(aspectRatio.heightRatio) 화면비 MP4로 내보냅니다."
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            startExport(to: url)
+        }
+    }
+
+    private func startExport(to url: URL) {
+        let job = ExportJob(fileName: url.lastPathComponent)
+        let sequence = editor.currentSequence
+        let assets = editor.project.assets
+        let preset = aspectRatio
+        job.task = Task {
+            guard let composition = await SequenceComposer.makeComposition(
+                sequence: sequence, assets: assets, aspectRatio: preset, resolveURL: MediaFileAccess.resolvedURL
+            ) else {
+                job.finish(error: "내보낼 클립이 없습니다.")
+                return
+            }
+            do {
+                try await SequenceExporter.export(composition, to: url) { fraction in
+                    Task { @MainActor in job.progress = fraction }
+                }
+                job.finish(error: nil)
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            } catch is CancellationError {
+                export = nil
+            } catch {
+                job.finish(error: error.localizedDescription)
+            }
+        }
+        export = job
     }
 
     /// 원본을 훑어보기(Quick Look) 창으로 연다. 원본 전용 미리보기는 두지 않는다.

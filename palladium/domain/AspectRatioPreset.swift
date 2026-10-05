@@ -1,6 +1,7 @@
 import Foundation
 
-nonisolated enum AspectRatioPreset: CaseIterable {
+/// 결과물 화면비. 원시값은 환경설정의 기본 화면비를 저장하는 데 쓴다.
+nonisolated enum AspectRatioPreset: String, CaseIterable {
     case landscape16x9
     case portrait9x16
     case square1x1

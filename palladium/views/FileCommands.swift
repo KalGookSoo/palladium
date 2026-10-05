@@ -6,12 +6,15 @@ extension FocusedValues {
     @Entry var saveProject: (() -> Void)?
     /// 편집 창이 앞에 있을 때만 값이 있다.
     @Entry var importMedia: (() -> Void)?
+    /// 내보낼 클립이 있는 편집 창이 앞에 있을 때만 값이 있다.
+    @Entry var exportSequence: (() -> Void)?
 }
 
 struct FileCommands: Commands {
     @Environment(\.openWindow) private var openWindow
     @FocusedValue(\.saveProject) private var saveProject
     @FocusedValue(\.importMedia) private var importMedia
+    @FocusedValue(\.exportSequence) private var exportSequence
 
     var body: some Commands {
         // 기본 "새 윈도우"는 프로젝트 없이 편집 창을 열기 때문에, 프로젝트 목록(시작 창)을 여는 항목으로 바꾼다.
@@ -37,12 +40,11 @@ struct FileCommands: Commands {
             }
             .keyboardShortcut("i")
             .disabled(importMedia == nil)
-            Button("내보내기…", action: requestExport)
-                .keyboardShortcut("e")
+            Button("내보내기…") {
+                exportSequence?()
+            }
+            .keyboardShortcut("e")
+            .disabled(exportSequence == nil)
         }
     }
-}
-
-func requestExport() {
-    Logger.export.info("내보내기 요청: 아직 구현되지 않음")
 }

@@ -11,7 +11,7 @@ macOS App Sandbox 환경에서 사용자가 고른 영상/음악 파일을 읽�
 
 ## 검토 방향(초안, 아직 확정 아님)
 
-- App Sandbox 엔타이틀먼트: 가져오기는 읽기만 하므로 `com.apple.security.files.user-selected.read-only`(빌드 설정 `ENABLE_USER_SELECTED_FILES = readonly`)로 충분하다. 내보내기(#6)에서 쓰기 권한이 필요해지면 다시 검토한다.
+- App Sandbox 엔타이틀먼트: 내보내기(#6)에서 사용자가 저장 창으로 고른 위치에 파일을 써야 해서 `com.apple.security.files.user-selected.read-write`(빌드 설정 `ENABLE_USER_SELECTED_FILES = readwrite`)를 쓴다. 가져온 원본의 북마크는 그대로 읽기 전용으로 만든다.
 - 앱을 재실행해도 이전에 가져온 파일에 다시 접근하려면 **security-scoped bookmark** 저장이 필요하다(그냥 경로 문자열만 저장하면 재실행 후 접근 권한이 사라짐). 가져올 때 원본마다 읽기 전용 북마크를 만들어 `MediaAsset.bookmarkData`에 저장하고(#1), 원본을 열 때 `MediaFileAccess`가 북마크를 풀어 접근 권한을 얻는다. 한 번 얻은 권한은 앱이 켜져 있는 동안 유지한다.
 - 내보내기 위치도 사용자가 매번 선택하게 할지, 마지막 내보낸 폴더를 기억해둘지 결정 필요.
 
