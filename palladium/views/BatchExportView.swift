@@ -7,12 +7,15 @@ struct BatchExportView: View {
     /// 클립이 있는 시퀀스만 고를 수 있다.
     let sequences: [EditSequence]
     let initialAspectRatio: AspectRatioPreset
+    /// 시퀀스 원본 방향에 맞는 화면비. 고른 화면비와 다르면 그 시퀀스에 경고를 붙인다.
+    var suggestedAspectRatio: (EditSequence) async -> AspectRatioPreset? = { _ in nil }
     /// 고른 시퀀스·화면비·폴더로 내보내기를 시작하고 그 일을 돌려준다.
     let start: ([EditSequence.ID], AspectRatioPreset, URL) -> BatchExportJob
     @Environment(\.dismiss) private var dismiss
     @State private var selectedIDs: Set<EditSequence.ID> = []
     @State private var aspectRatio = AspectRatioPreset.landscape16x9
     @State private var job: BatchExportJob?
+    @State private var suggestions: [EditSequence.ID: AspectRatioPreset] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -29,6 +32,11 @@ struct BatchExportView: View {
         .onAppear {
             aspectRatio = initialAspectRatio
             selectedIDs = Set(sequences.filter { $0.duration > .zero }.map(\.id))
+        }
+        .task {
+            for sequence in sequences {
+                suggestions[sequence.id] = await suggestedAspectRatio(sequence)
+            }
         }
     }
 
@@ -52,6 +60,13 @@ struct BatchExportView: View {
                 )) {
                     HStack {
                         Text(sequence.name)
+                        if let suggested = suggestions[sequence.id], suggested != aspectRatio {
+                            Label("\(suggested.orientationTitle) — \(suggested.title) 권장", systemImage: "exclamationmark.triangle.fill")
+                                .labelStyle(.titleAndIcon)
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                                .help("고른 화면비와 원본 방향이 달라 빈 곳이 검게 채워지고 영상이 작아집니다")
+                        }
                         Spacer()
                         Text(Duration.seconds(sequence.duration.seconds).formatted(.time(pattern: .minuteSecond)))
                             .foregroundStyle(.secondary)

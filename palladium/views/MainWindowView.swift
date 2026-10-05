@@ -175,7 +175,12 @@ struct MainWindowView: View {
                 ExportProgressView(job: job)
             }
             .sheet(isPresented: $isBatchExportPresented) {
-                BatchExportView(sequences: editor.project.sequences, initialAspectRatio: aspectRatio, start: startBatchExport)
+                BatchExportView(
+                    sequences: editor.project.sequences,
+                    initialAspectRatio: aspectRatio,
+                    suggestedAspectRatio: suggestedAspectRatio(for:),
+                    start: startBatchExport
+                )
             }
             .onAppear {
                 // 새 편집 창은 환경설정의 기본 화면비로 시작한다.
@@ -306,8 +311,12 @@ struct MainWindowView: View {
     private var timelineActions: TimelineActions {
         TimelineActions(
             dropAsset: { assetID, trackID, time in
+                let hadPicture = editor.currentSequence.tracks.contains { $0.kind == .video && !$0.clips.isEmpty }
                 if let clipID = editor.placeAsset(assetID, onTrack: trackID, at: time) {
                     selectedClipIDs = [clipID]
+                    if !hadPicture {
+                        matchAspectRatio(toAsset: assetID)
+                    }
                 }
             },
             moveClip: { clipID, trackID, time in
@@ -439,6 +448,35 @@ struct MainWindowView: View {
         return (clip, asset)
     }
 
+    /// 시퀀스에 처음 영상·이미지를 놓으면 툴바 화면비를 그 원본 방향에 맞춘다(세로 영상이면 9:16).
+    private func matchAspectRatio(toAsset assetID: MediaAsset.ID) {
+        guard let asset = editor.asset(id: assetID), asset.kind != .audio else { return }
+        Task {
+            if let size = await ClipContentProvider.shared.contentSize(for: asset), let preset = AspectRatioPreset.closest(to: size) {
+                aspectRatio = preset
+            }
+        }
+    }
+
+    /// 시퀀스의 메인 영상 트랙(영상 1)에 놓인 영상·이미지 방향에 맞는 화면비. 길이로 가중한다. 영상·이미지가 없으면 `nil`.
+    private func suggestedAspectRatio(for sequence: EditSequence) async -> AspectRatioPreset? {
+        guard let mainTrack = sequence.tracks.last(where: { $0.kind == .video }) else { return nil }
+        var contents: [(size: CGSize, duration: Double)] = []
+        for clip in mainTrack.clips {
+            guard let asset = editor.asset(id: clip.assetID), asset.kind != .audio,
+                  let size = await ClipContentProvider.shared.contentSize(for: asset)
+            else { continue }
+            contents.append((size, clip.timelineDuration.seconds))
+        }
+        return AspectRatioPreset.suggested(for: contents)
+    }
+
+    /// 고른 화면비가 원본 방향과 다르면 내보내기 전에 알릴 문구.
+    static func aspectRatioWarning(chosen: AspectRatioPreset, suggested: AspectRatioPreset?) -> String? {
+        guard let suggested, suggested != chosen else { return nil }
+        return "⚠️ \(suggested.orientationTitle)을 \(chosen.title)로 내보내면 빈 곳이 검게 채워지고 영상이 작아집니다. 원본 그대로 내려면 툴바 화면비를 \(suggested.title)로 바꾸세요."
+    }
+
     /// 파일 > 내보내기(⌘E)·툴바 버튼. 클립이 없으면 `nil`이라 비활성화된다.
     private var exportAction: (() -> Void)? {
         editor.currentSequence.duration > .zero ? { chooseExportDestination() } : nil
@@ -446,10 +484,18 @@ struct MainWindowView: View {
 
     /// 저장 위치를 고른 뒤 현재 시퀀스를 툴바의 화면비로 내보낸다.
     private func chooseExportDestination() {
+        Task {
+            let warning = Self.aspectRatioWarning(chosen: aspectRatio, suggested: await suggestedAspectRatio(for: editor.currentSequence))
+            showExportPanel(warning: warning)
+        }
+    }
+
+    private func showExportPanel(warning: String?) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.mpeg4Movie]
         panel.nameFieldStringValue = "\(editor.project.name) - \(editor.currentSequence.name).mp4"
-        panel.message = "현재 시퀀스를 \(aspectRatio.widthRatio):\(aspectRatio.heightRatio) 화면비 MP4로 내보냅니다. 프레임레이트는 원본을 따릅니다."
+        let summary = "현재 시퀀스를 \(aspectRatio.title) 화면비 MP4로 내보냅니다. 프레임레이트는 원본을 따릅니다."
+        panel.message = warning.map { "\(summary)\n\($0)" } ?? summary
         let options = NSHostingView(rootView: Form { ExportOptionsView() }.padding(12).frame(width: 340))
         options.frame.size = options.fittingSize
         panel.accessoryView = options
