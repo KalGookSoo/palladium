@@ -54,7 +54,7 @@ final class PreviewPlayer {
         // 재생 길이를 시퀀스 길이로 맞춘다(뒤쪽 빈 시간·이미지 자리도 재생되게).
         item.forwardPlaybackEndTime = composition.duration
         player.replaceCurrentItem(with: item)
-        let timeline = PlaybackTimeline(duration: composition.duration, frameDuration: SequenceComposer.frameDuration)
+        let timeline = PlaybackTimeline(duration: composition.duration, frameDuration: composition.frameDuration)
         loadState = .ready(timeline)
         seek(to: timeline.clamped(resumeTime))
         if wasPlaying {

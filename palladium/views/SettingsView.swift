@@ -5,6 +5,8 @@ enum AppPreferences {
     static let backupIntervalSecondsKey = "backupIntervalSeconds"
     static let defaultAspectRatioKey = "defaultAspectRatio"
     static let proxyThresholdKey = "proxyThreshold"
+    static let exportCodecKey = "exportCodec"
+    static let exportResolutionKey = "exportResolution"
     static let timelineShowsFilmstripKey = "timelineShowsFilmstrip"
     static let timelineShowsWaveformKey = "timelineShowsWaveform"
 }
@@ -25,6 +27,15 @@ struct SettingsView: View {
                 }
             } footer: {
                 Text("편집 창을 열 때 툴바의 화면비가 이 값으로 시작합니다. 내보내기는 툴바에서 고른 화면비로 합니다.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                ExportOptionsView()
+            } header: {
+                Text("내보내기")
+            } footer: {
+                Text("MP4로 내보냅니다. 프레임레이트는 원본 영상을 따르고(최대 60fps), \"원본과 같게\"는 시퀀스에 쓰인 가장 큰 영상의 해상도(최대 4K)입니다. 내보낼 때 고른 값이 여기에 남습니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

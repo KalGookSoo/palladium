@@ -66,7 +66,8 @@ struct BatchExportView: View {
                     Text("\(preset.widthRatio):\(preset.heightRatio)").tag(preset)
                 }
             }
-            Text("고른 폴더에 시퀀스 이름으로 MP4 파일을 만듭니다. 같은 이름의 파일이 있으면 덮어쓰지 않고 번호를 붙입니다.")
+            ExportOptionsView()
+            Text("고른 폴더에 시퀀스 이름으로 MP4 파일을 만듭니다. 프레임레이트는 원본을 따르고, 같은 이름의 파일이 있으면 덮어쓰지 않고 번호를 붙입니다.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack {

@@ -11,33 +11,47 @@ nonisolated struct SequenceComposition {
     /// 클립·트랙 음량과 음소거(#44).
     let audioMix: AVAudioMix?
     let duration: CMTime
+    /// 원본 영상의 프레임레이트를 따른 프레임 간격(영상이 없으면 30fps).
+    var frameDuration = OutputFrameRate.defaultDuration
 }
 
 /// 시퀀스의 모든 영상 트랙(아래 트랙이 먼저, 위 트랙이 그 위에)과 이미지 클립을 클립마다의 위치·크기·불투명도로 겹쳐 그리고(#5 2단계, #9),
 /// 영상 클립의 소리와 오디오 트랙을 함께 넣는다. 자막은 맨 위에 그린다(#4). 그리기는 `LayerCompositor`가 한다.
 nonisolated enum SequenceComposer {
-    static let frameDuration = CMTime(value: 1, timescale: 30)
-    /// 화면비 프리셋의 짧은 변(픽셀).
+    /// 화면비 프리셋의 기본 짧은 변(픽셀). 미리보기는 이 크기로 그리고, 자막 글자 크기의 기준이다.
     static let renderShortSide = 1080.0
     /// 이미지 층을 불러올 때의 최대 긴 변(픽셀). 화면보다 크게 불러 와도 보이는 차이가 없어 메모리를 아낀다.
     static let maximumImagePixelSize = 2160
 
     // MARK: - Queries
 
-    static func renderSize(for preset: AspectRatioPreset) -> CGSize {
+    /// 화면비 프리셋과 짧은 변으로 정한 출력 크기. 인코더가 받도록 가로·세로를 짝수로 맞춘다.
+    static func renderSize(for preset: AspectRatioPreset, shortSide: Double = renderShortSide) -> CGSize {
         let width = Double(preset.widthRatio)
         let height = Double(preset.heightRatio)
-        let scale = renderShortSide / min(width, height)
-        return CGSize(width: (width * scale).rounded(), height: (height * scale).rounded())
+        let scale = shortSide / min(width, height)
+        let even = { (value: Double) in (value / 2).rounded() * 2 }
+        return CGSize(width: even(width * scale), height: even(height * scale))
+    }
+
+    /// 해상도 설정에 따른 짧은 변. 원본을 따르면 시퀀스에 쓰인 가장 큰 영상의 짧은 변(최대 4K)이고, 영상이 없으면 1080이다.
+    static func shortSide(for resolution: ExportResolution, sourceShortSides: [Double]) -> Double {
+        if let fixed = resolution.fixedShortSide {
+            return fixed
+        }
+        guard let largest = sourceShortSides.max() else { return renderShortSide }
+        return min(largest, ExportResolution.maximumShortSide)
     }
 
     // MARK: - Composition
 
     /// 클립이 하나도 없으면 `nil`. 원본을 읽지 못한 클립은 건너뛰고(그 자리는 비어 있음) 나머지로 합성한다.
+    /// 프레임레이트는 원본 영상 중 가장 높은 값을 따른다. `resolution`의 기본(1080p)은 미리보기용이고, 내보내기는 고른 값을 넘긴다.
     static func makeComposition(
         sequence: EditSequence,
         assets: [MediaAsset],
         aspectRatio: AspectRatioPreset,
+        resolution: ExportResolution = .hd1080,
         resolveURL: (MediaAsset) -> URL
     ) async -> SequenceComposition? {
         guard sequence.duration > .zero else { return nil }
@@ -47,6 +61,9 @@ nonisolated enum SequenceComposer {
         var images: [MediaAsset.ID: CIImage] = [:]
         // 합성 오디오 트랙마다의 음량 변화(클립 음량·크로스페이드).
         var ramps: [VolumeRamp] = []
+        // 출력 프레임레이트·해상도를 정할 원본 영상 정보.
+        var sourceFrameRates: [Float] = []
+        var sourceShortSides: [Double] = []
 
         for (trackIndex, track) in sequence.tracks.enumerated() where track.kind == .video {
             // 트랙 배열은 화면 위쪽부터라, 앞에 있을수록 위에 그린다.
@@ -75,7 +92,10 @@ nonisolated enum SequenceComposer {
                 do {
                     if let sourceVideo = try await source.loadTracks(withMediaType: .video).first, let videoTrack {
                         try await insert(clip, of: sourceVideo, into: videoTrack, lead: edges.videoLead, tail: edges.videoTail, freezesMissingFrames: true)
-                        let (naturalSize, preferredTransform) = try await sourceVideo.load(.naturalSize, .preferredTransform)
+                        let (naturalSize, preferredTransform, frameRate) = try await sourceVideo.load(.naturalSize, .preferredTransform, .nominalFrameRate)
+                        let displayed = CGRect(origin: .zero, size: naturalSize).applying(preferredTransform).size
+                        sourceShortSides.append(min(abs(displayed.width), abs(displayed.height)))
+                        sourceFrameRates.append(frameRate)
                         let content = CompositionLayer.Content.video(trackID: videoTrack.trackID, naturalSize: naturalSize, preferredTransform: preferredTransform)
                         placedLayers.append((layerRange, CompositionLayer(content: content, transform: clip.transform, fade: fade), order))
                     }
@@ -123,16 +143,19 @@ nonisolated enum SequenceComposer {
             await addBlankBase(to: composition, duration: duration)
         }
         let audioMix = makeAudioMix(composition: composition, ramps: ramps)
+        let frameDuration = OutputFrameRate.frameDuration(forSourceFrameRates: sourceFrameRates)
         guard !placedLayers.isEmpty else {
-            return SequenceComposition(asset: composition, videoComposition: nil, audioMix: audioMix, duration: duration)
+            return SequenceComposition(asset: composition, videoComposition: nil, audioMix: audioMix, duration: duration, frameDuration: frameDuration)
         }
+        let size = renderSize(for: aspectRatio, shortSide: shortSide(for: resolution, sourceShortSides: sourceShortSides))
         return SequenceComposition(
             asset: composition,
             videoComposition: makeVideoComposition(
-                layers: placedLayers, masks: sequence.masks, duration: duration, renderSize: renderSize(for: aspectRatio)
+                layers: placedLayers, masks: sequence.masks, duration: duration, renderSize: size, frameDuration: frameDuration
             ),
             audioMix: audioMix,
-            duration: duration
+            duration: duration,
+            frameDuration: frameDuration
         )
     }
 
@@ -141,7 +164,8 @@ nonisolated enum SequenceComposer {
         layers: [(range: CMTimeRange, layer: CompositionLayer, order: Int)],
         masks: [Mask],
         duration: CMTime,
-        renderSize: CGSize
+        renderSize: CGSize,
+        frameDuration: CMTime
     ) -> AVVideoComposition {
         let boundaries = Set([CMTime.zero, duration] + layers.flatMap { [$0.range.start, $0.range.end] } + masks.flatMap { [$0.range.start, $0.range.end] })
             .filter { $0 >= .zero && $0 <= duration }
@@ -198,6 +222,9 @@ nonisolated enum SequenceComposer {
         let sourceRange = CMTimeRange(start: clip.sourceRange.start - handleBefore, end: clip.sourceRange.end + handleAfter)
         let missingBefore = lead - handleBefore
         let missingAfter = tail - handleAfter
+        // 멈춰 쓸 프레임 하나의 길이는 원본의 프레임 간격이다.
+        let sourceFrame = try await source.load(.minFrameDuration)
+        let frameDuration = sourceFrame.isNumeric && sourceFrame > .zero ? sourceFrame : OutputFrameRate.defaultDuration
 
         if freezesMissingFrames, missingBefore > .zero {
             let frame = CMTimeRange(start: sourceRange.start, duration: frameDuration)

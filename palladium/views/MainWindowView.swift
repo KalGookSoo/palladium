@@ -449,7 +449,10 @@ struct MainWindowView: View {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.mpeg4Movie]
         panel.nameFieldStringValue = "\(editor.project.name) - \(editor.currentSequence.name).mp4"
-        panel.message = "현재 시퀀스를 \(aspectRatio.widthRatio):\(aspectRatio.heightRatio) 화면비 MP4로 내보냅니다."
+        panel.message = "현재 시퀀스를 \(aspectRatio.widthRatio):\(aspectRatio.heightRatio) 화면비 MP4로 내보냅니다. 프레임레이트는 원본을 따릅니다."
+        let options = NSHostingView(rootView: Form { ExportOptionsView() }.padding(12).frame(width: 340))
+        options.frame.size = options.fittingSize
+        panel.accessoryView = options
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             startExport(to: url)
@@ -461,15 +464,16 @@ struct MainWindowView: View {
         let sequence = editor.currentSequence
         let assets = editor.project.assets
         let preset = aspectRatio
+        let options = ExportOptionsView.current
         job.task = Task {
             guard let composition = await SequenceComposer.makeComposition(
-                sequence: sequence, assets: assets, aspectRatio: preset, resolveURL: MediaFileAccess.resolvedURL
+                sequence: sequence, assets: assets, aspectRatio: preset, resolution: options.resolution, resolveURL: MediaFileAccess.resolvedURL
             ) else {
                 job.finish(error: "내보낼 클립이 없습니다.")
                 return
             }
             do {
-                try await SequenceExporter.export(composition, to: url) { fraction in
+                try await SequenceExporter.export(composition, to: url, codec: options.codec) { fraction in
                     Task { @MainActor in job.progress = fraction }
                 }
                 job.finish(error: nil)
@@ -495,14 +499,15 @@ struct MainWindowView: View {
         let destinations = BatchExportJob.destinations(for: names, in: folder) { FileManager.default.fileExists(atPath: $0.path) }
         let job = BatchExportJob(items: zip(sequences, destinations).map { BatchExportJob.Item(sequenceID: $0.id, destination: $1) })
         let assets = editor.project.assets
+        let options = ExportOptionsView.current
         job.task = Task {
             await job.run { item, progress in
                 guard let sequence = sequences.first(where: { $0.id == item.sequenceID }),
                       let composition = await SequenceComposer.makeComposition(
-                          sequence: sequence, assets: assets, aspectRatio: preset, resolveURL: MediaFileAccess.resolvedURL
+                          sequence: sequence, assets: assets, aspectRatio: preset, resolution: options.resolution, resolveURL: MediaFileAccess.resolvedURL
                       )
                 else { throw SequenceExporter.ExportError.noPicture }
-                try await SequenceExporter.export(composition, to: item.destination, progress: progress)
+                try await SequenceExporter.export(composition, to: item.destination, codec: options.codec, progress: progress)
             }
         }
         return job
@@ -513,12 +518,13 @@ struct MainWindowView: View {
         playheadTime < editor.currentSequence.duration ? { chooseStillFrameDestination() } : nil
     }
 
-    /// 재생 헤드의 프레임을 툴바 화면비 크기의 PNG로 저장한다. 미리보기에 보이던 프레임과 같다.
+    /// 재생 헤드의 프레임을 툴바 화면비와 내보내기 해상도의 PNG로 저장한다. 미리보기에 보이던 프레임과 같다.
     private func chooseStillFrameDestination() {
         let time = playheadTime
         let sequence = editor.currentSequence
         let assets = editor.project.assets
         let preset = aspectRatio
+        let resolution = ExportOptionsView.current.resolution
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
         let timeText = Duration.seconds(time.seconds).formatted(.time(pattern: .minuteSecond)).replacingOccurrences(of: ":", with: ".")
@@ -528,7 +534,7 @@ struct MainWindowView: View {
             Task {
                 do {
                     guard let composition = await SequenceComposer.makeComposition(
-                        sequence: sequence, assets: assets, aspectRatio: preset, resolveURL: MediaFileAccess.resolvedURL
+                        sequence: sequence, assets: assets, aspectRatio: preset, resolution: resolution, resolveURL: MediaFileAccess.resolvedURL
                     ) else { throw SequenceExporter.ExportError.noPicture }
                     try await SequenceExporter.exportStillFrame(composition, at: time, to: url)
                     NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -732,6 +738,8 @@ struct MainWindowView: View {
 
 /// 시퀀스를 합성해 미리보기에 불러오고, 재생 헤드와 미리보기 위치를 서로 맞춘다.
 private struct SequencePlayback: ViewModifier {
+    /// 재생 헤드와 미리보기 위치가 이만큼(60fps 반 프레임)보다 어긋날 때만 서로 맞춘다.
+    private static let playheadTolerance = 1.0 / 120
     let sequence: EditSequence
     let assets: [MediaAsset]
     let aspectRatio: AspectRatioPreset
@@ -756,13 +764,13 @@ private struct SequencePlayback: ViewModifier {
             }
             // 재생 중에는 재생 헤드가 미리보기를 따라가고, 재생 헤드를 옮기면(눈금자·마커) 미리보기가 그 위치로 간다.
             .onChange(of: previewPlayer.currentTime) { _, time in
-                if abs((time - playheadTime).seconds) > SequenceComposer.frameDuration.seconds / 2 {
+                if abs((time - playheadTime).seconds) > Self.playheadTolerance {
                     playheadTime = time
                 }
             }
             .onChange(of: playheadTime) { _, time in
                 guard case let .ready(timeline) = previewPlayer.loadState,
-                      abs((time - previewPlayer.currentTime).seconds) > SequenceComposer.frameDuration.seconds / 2
+                      abs((time - previewPlayer.currentTime).seconds) > Self.playheadTolerance
                 else { return }
                 previewPlayer.seek(to: time, in: timeline)
             }

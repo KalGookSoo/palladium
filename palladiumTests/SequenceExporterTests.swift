@@ -101,6 +101,56 @@ struct SequenceExporterTests {
         #expect(abs(saved.red - preview.red) <= 2 && abs(saved.blue - preview.blue) <= 2)
     }
 
+    /// 60fps 640×360 영상 하나를 놓은 시퀀스의 합성.
+    private func sixtyFPSComposition(resolution: ExportResolution) async throws -> SequenceComposition {
+        let url = try await TestMedia.makeVideo(red: 255, green: 0, blue: 0, seconds: 1, width: 640, height: 360, fps: 60)
+        let asset = MediaAsset(id: UUID(), name: "60fps.mov", sourceURL: url, kind: .video, duration: seconds(1))
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let trackID = sequence.addTrack(kind: .video)
+        try sequence.place(#require(asset.makeClip(at: .zero)), onTrack: trackID)
+        return try #require(await SequenceComposer.makeComposition(
+            sequence: sequence, assets: [asset], aspectRatio: .landscape16x9, resolution: resolution, resolveURL: \.sourceURL
+        ))
+    }
+
+    @Test("60fps 원본은 60fps로 내보내 프레임이 줄지 않고, '원본과 같게'는 원본 해상도로 내보낸다")
+    func exportKeepsSourceFrameRateAndSize() async throws {
+        let composition = try await sixtyFPSComposition(resolution: .source)
+        #expect(composition.frameDuration == CMTime(value: 1, timescale: 60))
+        let output = TestMedia.temporaryURL(extension: "mp4")
+
+        try await SequenceExporter.export(composition, to: output) { _ in }
+
+        let exported = AVURLAsset(url: output)
+        let track = try #require(try await exported.loadTracks(withMediaType: .video).first)
+        let (frameRate, size) = try await track.load(.nominalFrameRate, .naturalSize)
+        #expect(abs(frameRate - 60) < 1)
+        #expect(size == CGSize(width: 640, height: 360))
+        let reader = try AVAssetReader(asset: exported)
+        let readerOutput = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+        reader.add(readerOutput)
+        reader.startReading()
+        var frameCount = 0
+        while let sample = readerOutput.copyNextSampleBuffer() {
+            frameCount += CMSampleBufferGetNumSamples(sample)
+        }
+        #expect(abs(frameCount - 60) <= 1)
+    }
+
+    @Test("HEVC를 고르면 HEVC로 인코딩하고, 해상도를 고르면 그 크기로 내보낸다")
+    func exportUsesChosenCodecAndResolution() async throws {
+        let composition = try await sixtyFPSComposition(resolution: .hd720)
+        let output = TestMedia.temporaryURL(extension: "mp4")
+
+        try await SequenceExporter.export(composition, to: output, codec: .hevc) { _ in }
+
+        let track = try #require(try await AVURLAsset(url: output).loadTracks(withMediaType: .video).first)
+        let (size, descriptions) = try await track.load(.naturalSize, .formatDescriptions)
+        #expect(size == CGSize(width: 1280, height: 720))
+        let codecType = try #require(descriptions.first).mediaSubType.rawValue
+        #expect(codecType == kCMVideoCodecType_HEVC)
+    }
+
     @Test("자막만 있는 시퀀스도 자막 길이만큼 내보내고 자막이 화면에 박힌다")
     func exportsSubtitleOnlySequence() async throws {
         var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])

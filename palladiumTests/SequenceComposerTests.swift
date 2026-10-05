@@ -17,6 +17,26 @@ struct SequenceComposerTests {
         #expect(SequenceComposer.renderSize(for: .square1x1) == CGSize(width: 1080, height: 1080))
     }
 
+    @Test("출력 프레임 간격은 원본 중 가장 높은 프레임레이트에 가까운 표준값이고, 60fps를 넘으면 60fps, 영상이 없으면 30fps다")
+    func outputFrameRates() {
+        #expect(OutputFrameRate.frameDuration(forSourceFrameRates: [59.94]) == CMTime(value: 1001, timescale: 60000))
+        #expect(OutputFrameRate.frameDuration(forSourceFrameRates: [29.97, 60]) == CMTime(value: 1, timescale: 60))
+        #expect(OutputFrameRate.frameDuration(forSourceFrameRates: [23.98]) == CMTime(value: 1001, timescale: 24000))
+        #expect(OutputFrameRate.frameDuration(forSourceFrameRates: [25]) == CMTime(value: 1, timescale: 25))
+        #expect(OutputFrameRate.frameDuration(forSourceFrameRates: [240]) == CMTime(value: 1, timescale: 60))
+        #expect(OutputFrameRate.frameDuration(forSourceFrameRates: []) == CMTime(value: 1, timescale: 30))
+    }
+
+    @Test("해상도는 고른 짧은 변이고, '원본과 같게'는 가장 큰 원본(최대 4K)을 따르며, 크기는 짝수로 맞춘다")
+    func outputResolutions() {
+        #expect(SequenceComposer.shortSide(for: .hd720, sourceShortSides: [2160]) == 720)
+        #expect(SequenceComposer.shortSide(for: .source, sourceShortSides: [720, 2160]) == 2160)
+        #expect(SequenceComposer.shortSide(for: .source, sourceShortSides: [4320]) == 2160)
+        #expect(SequenceComposer.shortSide(for: .source, sourceShortSides: []) == 1080)
+        #expect(SequenceComposer.renderSize(for: .landscape16x9, shortSide: 2160) == CGSize(width: 3840, height: 2160))
+        #expect(SequenceComposer.renderSize(for: .portrait9x16, shortSide: 1081) == CGSize(width: 1082, height: 1922))
+    }
+
     @Test("기본 트랜스폼은 세로 영상을 가로 화면 가운데에 높이를 맞춰 넣고, 배율·위치를 바꾸면 그만큼 옮긴다")
     func transformFrames() {
         let render = CGSize(width: 1920, height: 1080)

@@ -27,7 +27,7 @@ nonisolated enum SequenceExporter {
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
         // 끝 시각에는 프레임이 없으므로 마지막 프레임으로 맞춘다.
-        let lastFrame = CMTimeMaximum(composition.duration - SequenceComposer.frameDuration, .zero)
+        let lastFrame = CMTimeMaximum(composition.duration - composition.frameDuration, .zero)
         let image = try await generator.image(at: CMTimeMinimum(CMTimeMaximum(time, .zero), lastFrame)).image
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else {
             throw ExportError.cannotWriteImage
@@ -38,12 +38,15 @@ nonisolated enum SequenceExporter {
     }
 
     /// `progress`는 0~1로 여러 번 불린다. 같은 경로에 파일이 있으면 덮어쓴다. 실패하거나 취소되면 만들던 파일을 지운다.
+    /// 해상도·프레임레이트는 합성(`composition`)이 정하고, 여기서는 코덱만 고른다.
     static func export(
         _ composition: SequenceComposition,
         to url: URL,
+        codec: ExportCodec = .defaultValue,
         progress: @escaping @Sendable (Double) -> Void
     ) async throws {
-        guard let session = AVAssetExportSession(asset: composition.asset, presetName: AVAssetExportPresetHighestQuality) else {
+        let preset = codec == .hevc ? AVAssetExportPresetHEVCHighestQuality : AVAssetExportPresetHighestQuality
+        guard let session = AVAssetExportSession(asset: composition.asset, presetName: preset) else {
             throw ExportError.cannotCreateSession
         }
         session.videoComposition = composition.videoComposition
