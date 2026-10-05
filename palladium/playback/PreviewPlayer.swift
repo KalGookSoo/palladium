@@ -21,7 +21,6 @@ final class PreviewPlayer {
     private(set) var isMuted = false
 
     @ObservationIgnored private var timeObserver: Any?
-    @ObservationIgnored private var requestedURL: URL?
 
     init() {
         let interval = CMTime(value: 1, timescale: 30)
@@ -35,44 +34,34 @@ final class PreviewPlayer {
 
     // MARK: - Commands
 
-    /// 로드 중에 다른 원본이 선택되면 호출한 Task가 취소되므로, 취소된 결과는 반영하지 않는다.
-    /// 화면이 다시 만들어지며 같은 원본을 또 요청해도 다시 로드하지 않는다.
-    func load(url: URL?) async {
-        guard url != requestedURL else { return }
-        requestedURL = url
-
-        player.pause()
-        player.replaceCurrentItem(with: nil)
-        currentTime = .zero
-
-        guard let url else {
+    /// 시퀀스 합성을 불러온다. 편집으로 다시 합성해도 보던 위치를 이어 간다(시퀀스가 짧아졌으면 끝으로).
+    /// `nil`이면(클립이 없으면) 비운다.
+    func loadSequence(_ composition: SequenceComposition?) {
+        guard let composition else {
+            player.pause()
+            player.replaceCurrentItem(with: nil)
+            currentTime = .zero
             loadState = .empty
             return
         }
-        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
-            Logger.playback.error("재생할 파일이 없음: \(url.lastPathComponent, privacy: .public)")
-            loadState = .unavailable
-            return
+        let wasPlaying = player.rate != 0
+        let resumeTime = CMTimeMinimum(currentTime, composition.duration)
+        let item = AVPlayerItem(asset: composition.asset)
+        item.videoComposition = composition.videoComposition
+        // 재생 길이를 시퀀스 길이로 맞춘다(뒤쪽 빈 시간·이미지 자리도 재생되게).
+        item.forwardPlaybackEndTime = composition.duration
+        player.replaceCurrentItem(with: item)
+        let timeline = PlaybackTimeline(duration: composition.duration, frameDuration: SequenceComposer.frameDuration)
+        loadState = .ready(timeline)
+        seek(to: timeline.clamped(resumeTime))
+        if wasPlaying {
+            player.play()
         }
+    }
 
-        loadState = .loading
-        let asset = AVURLAsset(url: url)
-        do {
-            let (duration, isPlayable) = try await asset.load(.duration, .isPlayable)
-            let frameDuration = try await Self.frameDuration(of: asset)
-            guard !Task.isCancelled else { return }
-            guard isPlayable else {
-                loadState = .unavailable
-                return
-            }
-            player.replaceCurrentItem(with: AVPlayerItem(asset: asset))
-            loadState = .ready(PlaybackTimeline(duration: duration, frameDuration: frameDuration))
-            Logger.playback.info("미리보기 로드: \(url.lastPathComponent, privacy: .public)")
-        } catch {
-            guard !Task.isCancelled else { return }
-            Logger.playback.error("미리보기 로드 실패: \(error.localizedDescription, privacy: .public)")
-            loadState = .unavailable
-        }
+    /// 재생 헤드를 옮겼을 때 미리보기도 그 위치를 보여준다.
+    func seek(to time: CMTime, in timeline: PlaybackTimeline) {
+        seek(to: timeline.clamped(time))
     }
 
     func togglePlayPause() {
@@ -113,11 +102,5 @@ final class PreviewPlayer {
     private func seek(to time: CMTime) {
         currentTime = time
         player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
-    }
-
-    private static func frameDuration(of asset: AVURLAsset) async throws -> CMTime? {
-        guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else { return nil }
-        let minFrameDuration = try await videoTrack.load(.minFrameDuration)
-        return minFrameDuration.isNumeric && minFrameDuration > .zero ? minFrameDuration : nil
     }
 }

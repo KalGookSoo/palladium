@@ -8,7 +8,7 @@ nonisolated enum AspectRatioPreset: CaseIterable {
 
 // MARK: - Queries
 
-extension AspectRatioPreset {
+nonisolated extension AspectRatioPreset {
     var widthRatio: Int {
         switch self {
         case .landscape16x9: 16

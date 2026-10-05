@@ -11,7 +11,7 @@ nonisolated struct EditSequence {
 
 // MARK: - Queries
 
-extension EditSequence {
+nonisolated extension EditSequence {
     /// 가장 늦게 끝나는 클립의 끝 시각. 클립이 없으면 0이다.
     var duration: CMTime {
         tracks

@@ -1,5 +1,6 @@
 import CoreMedia
 import OSLog
+import QuickLook
 import SwiftData
 import SwiftUI
 
@@ -31,7 +32,8 @@ struct MainWindowView: View {
     @State private var importReport: MediaImportReport?
     /// 프리미어 프로처럼 미디어 패널 선택, 미리보기에 연 원본, 타임라인 클립 선택은 서로 독립이다.
     @State private var selectedAssetID: MediaAsset.ID?
-    @State private var openedAssetID: MediaAsset.ID?
+    /// 훑어보기(Quick Look) 창에 띄울 원본 파일.
+    @State private var quickLookURL: URL?
     @State private var selectedClipIDs: Set<Clip.ID> = []
     /// 타임라인에서 클립·원본을 끄는 중인지. Esc로 끌기를 취소할 때 쓴다.
     @State private var isTimelineDragging = false
@@ -62,102 +64,71 @@ struct MainWindowView: View {
                 }
             }
         )
-        let openedAsset = project.assets.first { $0.id == openedAssetID }
         let currentSequence = editor.currentSequence
         // 인스펙터는 클립 하나를 골랐을 때만 속성을 보여준다.
         let selectedClip = selectedClipIDs.count == 1 ? selectedClipIDs.first.flatMap { currentSequence.clip(id: $0) } : nil
         let selectedClipAsset = project.assets.first { $0.id == selectedClip?.assetID }
 
-        NavigationSplitView {
-            MediaPanelView(
-                editor: editor,
-                selectedAssetID: $selectedAssetID,
-                openAsset: { assetID in openedAssetID = assetID },
-                importFiles: importMedia(from:)
-            )
-            // 놓을 곳을 창 전체로 잡으면 분할 뷰 경계를 덮어 크기 조절 커서가 나타나지 않으므로,
-            // Finder에서 끌어온 파일은 미디어 패널과 미리보기에 놓을 때만 가져온다.
-            .dropDestination(for: URL.self) { urls, _ in
-                importMedia(from: urls)
-                return true
+        // 식이 길면 타입 검사가 끝나지 않으므로 단계별로 나눠 쌓는다.
+        let window = splitView(currentSequence: currentSequence, selectedClip: selectedClip, selectedClipAsset: selectedClipAsset)
+            .fileImporter(
+                isPresented: $isImporterPresented,
+                allowedContentTypes: MediaImporter.allowedContentTypes,
+                allowsMultipleSelection: true
+            ) { result in
+                switch result {
+                case let .success(urls):
+                    importMedia(from: urls)
+                case let .failure(error):
+                    Logger.mediaImport.error("파일 선택 실패: \(error.localizedDescription, privacy: .public)")
+                }
             }
-            .navigationSplitViewColumnWidth(
-                min: MainWindowMetrics.sidebarMinWidth,
-                ideal: MainWindowMetrics.sidebarIdealWidth,
-                max: MainWindowMetrics.sidebarMaxWidth
-            )
-        } detail: {
-            editorArea(openedAsset: openedAsset, currentSequence: currentSequence)
-                // 가운데 영역은 0까지 줄어들 수 있게 해 양쪽 패널 폭을 먼저 지키고, 넘치는 내용은 잘라낸다.
-                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-        }
-        .inspector(isPresented: $isInspectorPresented) {
-            InspectorView(clip: selectedClip, asset: selectedClipAsset, selectedClipCount: selectedClipIDs.count)
-                .inspectorColumnWidth(
-                    min: MainWindowMetrics.inspectorMinWidth,
-                    ideal: MainWindowMetrics.inspectorIdealWidth,
-                    max: MainWindowMetrics.inspectorMaxWidth
+        let withCommands = window
+            .focusedSceneValue(\.saveProject, saveAction)
+            .focusedSceneValue(\.importMedia) { isImporterPresented = true }
+            .focusedSceneValue(\.splitClips, splitAction)
+            .focusedSceneValue(\.isTimelineVisible, $isTimelineVisible)
+            .focusedSceneValue(\.isInspectorPresented, $isInspectorPresented)
+            .focusedSceneValue(\.timelineScale, $timelineScale)
+        let withBehaviors = withCommands
+            .task { await writeBackupsPeriodically() }
+            .modifier(EditorKeyHandling(handle: handleEditorKey))
+            // 편집기 커맨드의 실행 취소를 창의 실행 취소 관리자(편집 > 실행 취소 ⌘Z)에 남긴다.
+            .onChange(of: undoManager, initial: true) { _, undoManager in
+                editor.undoManager = undoManager
+            }
+            .modifier(SequencePlayback(
+                sequence: currentSequence,
+                assets: project.assets,
+                aspectRatio: aspectRatio,
+                previewPlayer: previewPlayer,
+                playheadTime: $playheadTime
+            ))
+            .quickLookPreview($quickLookURL)
+
+        withBehaviors
+            .frame(minHeight: 600)
+            .navigationTitle(project.name)
+            .background {
+                UnsavedChangesGuard(
+                    hasUnsavedChanges: hasUnsavedChanges,
+                    projectName: project.name,
+                    save: saveProject,
+                    discardChanges: editor.discardBackup
                 )
-        }
-        .toolbar {
-            MainWindowToolbar(
-                aspectRatio: $aspectRatio,
-                isInspectorPresented: $isInspectorPresented,
-                importMedia: { isImporterPresented = true }
-            )
-        }
-        .fileImporter(
-            isPresented: $isImporterPresented,
-            allowedContentTypes: MediaImporter.allowedContentTypes,
-            allowsMultipleSelection: true
-        ) { result in
-            switch result {
-            case let .success(urls):
-                importMedia(from: urls)
-            case let .failure(error):
-                Logger.mediaImport.error("파일 선택 실패: \(error.localizedDescription, privacy: .public)")
             }
-        }
-        .focusedSceneValue(\.saveProject, saveAction)
-        .focusedSceneValue(\.importMedia) { isImporterPresented = true }
-        .focusedSceneValue(\.splitClips, splitAction)
-        .focusedSceneValue(\.isTimelineVisible, $isTimelineVisible)
-        .focusedSceneValue(\.isInspectorPresented, $isInspectorPresented)
-        .focusedSceneValue(\.timelineScale, $timelineScale)
-        .task { await writeBackupsPeriodically() }
-        .modifier(EditorKeyHandling(handle: handleEditorKey))
-        // 편집기 커맨드의 실행 취소를 창의 실행 취소 관리자(편집 > 실행 취소 ⌘Z)에 남긴다.
-        .onChange(of: undoManager, initial: true) { _, undoManager in
-            editor.undoManager = undoManager
-        }
-        .task(id: openedAssetID) {
-            // 이미지는 플레이어로 열지 않는다. 앞서 열려 있던 영상은 멈추고 비운다.
-            let playableAsset = openedAsset.flatMap { $0.kind == .image ? nil : $0 }
-            await previewPlayer.load(url: playableAsset.map(MediaFileAccess.resolvedURL))
-        }
-        .frame(minHeight: 600)
-        .navigationTitle(project.name)
-        .background {
-            UnsavedChangesGuard(
-                hasUnsavedChanges: hasUnsavedChanges,
-                projectName: project.name,
-                save: saveProject,
-                discardChanges: editor.discardBackup
-            )
-        }
-        .alert(importReport?.summary?.title ?? "", isPresented: isShowingImportReport) {
-            Button("확인", role: .cancel) {}
-        } message: {
-            Text(importReport?.summary?.message ?? "")
-        }
-        .alert("저장하지 못했습니다", isPresented: isShowingSaveError) {
-            Button("확인", role: .cancel) {}
-        } message: {
-            Text(saveErrorMessage ?? "")
-        }
+            .alert(importReport?.summary?.title ?? "", isPresented: isShowingImportReport) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text(importReport?.summary?.message ?? "")
+            }
+            .alert("저장하지 못했습니다", isPresented: isShowingSaveError) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text(saveErrorMessage ?? "")
+            }
         #if DEBUG
-        .debugCommandValues(editor: editor)
+            .debugCommandValues(editor: editor)
         #endif
     }
 
@@ -177,12 +148,12 @@ struct MainWindowView: View {
     /// 미리보기 아래에 타임라인을 둔다. `VSplitView`는 미리보기에 연 원본이 바뀌면 내용 크기에 맞춰 경계를 다시 나눠
     /// 사용자가 맞춘 높이가 풀리므로(#51), 타임라인 높이를 직접 들고 경계를 끌 때만 바꾼다.
     /// 창 높이가 바뀌면 미리보기가 늘거나 줄고, 미리보기가 최소 높이보다 작아지면 타임라인을 줄여 보여준다.
-    private func editorArea(openedAsset: MediaAsset?, currentSequence: EditSequence) -> some View {
+    private func editorArea(currentSequence: EditSequence) -> some View {
         GeometryReader { geometry in
             let maxTimelineHeight = max(MainWindowMetrics.timelineMinHeight, geometry.size.height - MainWindowMetrics.previewMinHeight)
 
             VStack(spacing: 0) {
-                PreviewPlayerView(asset: openedAsset, previewPlayer: previewPlayer, hasProjectAssets: !editor.project.assets.isEmpty)
+                PreviewPlayerView(previewPlayer: previewPlayer, hasProjectAssets: !editor.project.assets.isEmpty)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .dropDestination(for: URL.self) { urls, _ in
                         importMedia(from: urls)
@@ -243,7 +214,7 @@ struct MainWindowView: View {
             splitClips: { clipIDs in
                 editor.splitClips(clipIDs, at: playheadTime)
             },
-            openAsset: { assetID in openedAssetID = assetID },
+            openAsset: quickLook,
             revealAsset: { assetID in selectedAssetID = assetID },
             switchSequence: { sequenceID in
                 editor.switchToSequence(sequenceID)
@@ -264,6 +235,55 @@ struct MainWindowView: View {
             addTrack: { kind in editor.addTrack(kind: kind) },
             deleteTrack: { trackID in editor.deleteTrack(trackID) }
         )
+    }
+
+    /// 미디어 패널 · 가운데(미리보기 + 타임라인) · 인스펙터와 툴바. 본문 식이 길어 타입 검사가 느려지지 않도록 나눈다.
+    private func splitView(currentSequence: EditSequence, selectedClip: Clip?, selectedClipAsset: MediaAsset?) -> some View {
+        NavigationSplitView {
+            MediaPanelView(
+                editor: editor,
+                selectedAssetID: $selectedAssetID,
+                openAsset: quickLook,
+                importFiles: importMedia(from:)
+            )
+            // 놓을 곳을 창 전체로 잡으면 분할 뷰 경계를 덮어 크기 조절 커서가 나타나지 않으므로,
+            // Finder에서 끌어온 파일은 미디어 패널과 미리보기에 놓을 때만 가져온다.
+            .dropDestination(for: URL.self) { urls, _ in
+                importMedia(from: urls)
+                return true
+            }
+            .navigationSplitViewColumnWidth(
+                min: MainWindowMetrics.sidebarMinWidth,
+                ideal: MainWindowMetrics.sidebarIdealWidth,
+                max: MainWindowMetrics.sidebarMaxWidth
+            )
+        } detail: {
+            editorArea(currentSequence: currentSequence)
+                // 가운데 영역은 0까지 줄어들 수 있게 해 양쪽 패널 폭을 먼저 지키고, 넘치는 내용은 잘라낸다.
+                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+        }
+        .inspector(isPresented: $isInspectorPresented) {
+            InspectorView(clip: selectedClip, asset: selectedClipAsset, selectedClipCount: selectedClipIDs.count)
+                .inspectorColumnWidth(
+                    min: MainWindowMetrics.inspectorMinWidth,
+                    ideal: MainWindowMetrics.inspectorIdealWidth,
+                    max: MainWindowMetrics.inspectorMaxWidth
+                )
+        }
+        .toolbar {
+            MainWindowToolbar(
+                aspectRatio: $aspectRatio,
+                isInspectorPresented: $isInspectorPresented,
+                importMedia: { isImporterPresented = true }
+            )
+        }
+    }
+
+    /// 원본을 훑어보기(Quick Look) 창으로 연다. 원본 전용 미리보기는 두지 않는다.
+    private func quickLook(_ assetID: MediaAsset.ID) {
+        guard let asset = editor.asset(id: assetID) else { return }
+        quickLookURL = MediaFileAccess.resolvedURL(for: asset)
     }
 
     /// 처리하지 않는 키(미리보기에 원본이 없을 때의 재생 키, 고른 클립이 없을 때의 삭제)는 그대로 넘긴다.
@@ -339,6 +359,51 @@ struct MainWindowView: View {
             }
         }
     }
+}
+
+/// 시퀀스를 합성해 미리보기에 불러오고, 재생 헤드와 미리보기 위치를 서로 맞춘다.
+private struct SequencePlayback: ViewModifier {
+    let sequence: EditSequence
+    let assets: [MediaAsset]
+    let aspectRatio: AspectRatioPreset
+    let previewPlayer: PreviewPlayer
+    @Binding var playheadTime: CMTime
+
+    func body(content: Content) -> some View {
+        content
+            // 시퀀스·원본·화면비가 바뀌면 다시 합성한다. 연달아 바뀔 때 매번 합성하지 않도록 잠깐 기다린다.
+            .task(id: CompositionKey(sequence: sequence, assets: assets, aspectRatio: aspectRatio)) {
+                try? await Task.sleep(for: .milliseconds(150))
+                guard !Task.isCancelled else { return }
+                let composition = await SequenceComposer.makeComposition(
+                    sequence: sequence,
+                    assets: assets,
+                    aspectRatio: aspectRatio,
+                    resolveURL: MediaFileAccess.resolvedURL
+                )
+                guard !Task.isCancelled else { return }
+                previewPlayer.loadSequence(composition)
+            }
+            // 재생 중에는 재생 헤드가 미리보기를 따라가고, 재생 헤드를 옮기면(눈금자·마커) 미리보기가 그 위치로 간다.
+            .onChange(of: previewPlayer.currentTime) { _, time in
+                if abs((time - playheadTime).seconds) > SequenceComposer.frameDuration.seconds / 2 {
+                    playheadTime = time
+                }
+            }
+            .onChange(of: playheadTime) { _, time in
+                guard case let .ready(timeline) = previewPlayer.loadState,
+                      abs((time - previewPlayer.currentTime).seconds) > SequenceComposer.frameDuration.seconds / 2
+                else { return }
+                previewPlayer.seek(to: time, in: timeline)
+            }
+    }
+}
+
+/// 다시 합성할지 정하는 값. 이 중 하나라도 바뀌면 시퀀스를 다시 합성한다.
+private struct CompositionKey: Equatable {
+    let sequence: EditSequence
+    let assets: [MediaAsset]
+    let aspectRatio: AspectRatioPreset
 }
 
 /// 미리보기와 타임라인 사이의 경계. 위아래로 끌어 타임라인 높이를 바꾼다.

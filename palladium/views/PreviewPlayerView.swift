@@ -1,68 +1,30 @@
 import OSLog
 import SwiftUI
 
+/// 시퀀스(결과물)를 재생한다. 원본 전용 미리보기는 두지 않고, 원본 확인은 훑어보기(Quick Look) 창으로 한다(#5).
 /// 타임라인을 숨기거나 보일 때도 재생이 끊기지 않도록 플레이어와 로드 명령은 상위(`MainWindowView`)가 소유한다.
 struct PreviewPlayerView: View {
-    let asset: MediaAsset?
     let previewPlayer: PreviewPlayer
-    /// 프로젝트에 원본이 하나도 없으면 더블클릭할 대상이 없으므로 가져오기부터 안내한다.
+    /// 프로젝트에 원본이 하나도 없으면 가져오기부터 안내한다.
     let hasProjectAssets: Bool
 
     var body: some View {
-        // 이미지는 재생할 것이 없어 플레이어 대신 정지 이미지로 보여준다.
-        if let asset, asset.kind == .image {
-            StillImagePreview(asset: asset)
-        } else {
-            playerContent
-        }
-    }
-
-    @ViewBuilder
-    private var playerContent: some View {
         switch previewPlayer.loadState {
         case .empty:
             ContentUnavailableView(
-                "열린 원본 없음",
+                "시퀀스가 비어 있음",
                 systemImage: "play.rectangle",
-                description: Text(hasProjectAssets ? "미디어 패널에서 원본을 더블클릭하세요" : "⌘I로 미디어를 가져오세요")
+                description: Text(hasProjectAssets ? "미디어 패널에서 원본을 타임라인으로 끌어다 놓으세요" : "⌘I로 미디어를 가져오세요")
             )
         case .loading:
             ProgressView()
         case .unavailable:
-            ContentUnavailableView(
-                "재생할 수 없음",
-                systemImage: "exclamationmark.triangle",
-                description: Text(asset?.name ?? "")
-            )
+            ContentUnavailableView("재생할 수 없음", systemImage: "exclamationmark.triangle")
         case let .ready(timeline):
             VStack(spacing: 0) {
                 PlayerSurfaceView(player: previewPlayer.player)
                 PlaybackControls(previewPlayer: previewPlayer, timeline: timeline)
             }
-        }
-    }
-}
-
-/// 재생 컨트롤 없이 이미지를 영상처럼 검은 바탕 가운데에 맞춰 보여준다.
-private struct StillImagePreview: View {
-    let asset: MediaAsset
-    @State private var image: NSImage?
-    @State private var isUnavailable = false
-
-    var body: some View {
-        ZStack {
-            Color.black
-            if let image {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFit()
-            } else if isUnavailable {
-                ContentUnavailableView("이미지를 열 수 없음", systemImage: "exclamationmark.triangle", description: Text(asset.name))
-            }
-        }
-        .task(id: asset.id) {
-            image = NSImage(contentsOf: MediaFileAccess.resolvedURL(for: asset))
-            isUnavailable = image == nil
         }
     }
 }
@@ -169,6 +131,5 @@ private func requestNarrationRecording() {
 
 #Preview {
     @Previewable @State var previewPlayer = PreviewPlayer()
-    PreviewPlayerView(asset: SampleData.introVideo, previewPlayer: previewPlayer, hasProjectAssets: true)
-        .task { await previewPlayer.load(url: SampleData.introVideo.sourceURL) }
+    PreviewPlayerView(previewPlayer: previewPlayer, hasProjectAssets: true)
 }

@@ -17,7 +17,7 @@ nonisolated struct TimelineScale {
 
 // MARK: - Queries
 
-extension TimelineScale {
+nonisolated extension TimelineScale {
     func x(for time: CMTime) -> Double {
         time.seconds * pointsPerSecond
     }

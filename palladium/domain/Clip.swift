@@ -21,7 +21,7 @@ nonisolated struct Clip {
 
 // MARK: - Queries
 
-extension Clip {
+nonisolated extension Clip {
     var timelineRange: CMTimeRange {
         CMTimeRange(start: timelineStart, duration: sourceRange.duration)
     }

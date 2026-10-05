@@ -103,7 +103,7 @@ struct TrackRowView: View {
             .keyboardShortcut("b", modifiers: .command)
             .disabled(!canSplit)
         Divider()
-        Button("미리보기에서 원본 열기") { actions.openAsset(clip.assetID) }
+        Button("원본 훑어보기") { actions.openAsset(clip.assetID) }
         Button("미디어 패널에서 원본 보기") { actions.revealAsset(clip.assetID) }
     }
 }

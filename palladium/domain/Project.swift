@@ -19,7 +19,7 @@ nonisolated struct Project {
 
 // MARK: - Factories
 
-extension Project {
+nonisolated extension Project {
     static let untitledName = "제목 없는 프로젝트"
 
     /// 이름이 비어 있거나 공백뿐이면 `untitledName`을 쓴다.
@@ -40,7 +40,7 @@ extension Project {
 
 // MARK: - Queries
 
-extension Project {
+nonisolated extension Project {
     /// 프로젝트에 없는 원본을 가리키는 ID는 건너뛴다.
     func assets(in folder: MediaFolder) -> [MediaAsset] {
         folder.assetIDs.compactMap { assetID in

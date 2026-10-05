@@ -10,7 +10,7 @@ nonisolated struct PlaybackTimeline {
 
 // MARK: - Queries
 
-extension PlaybackTimeline {
+nonisolated extension PlaybackTimeline {
     var canStepFrames: Bool {
         frameDuration != nil
     }

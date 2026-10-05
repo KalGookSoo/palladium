@@ -20,6 +20,7 @@ struct TimelineActions {
     var deleteClips: (Set<Clip.ID>, Bool) -> Void = { _, _ in }
     /// 재생 헤드에서 나눈다. 비어 있으면 재생 헤드에 걸친 모든 클립을 나눈다.
     var splitClips: (Set<Clip.ID>) -> Void = { _ in }
+    /// 원본을 훑어보기(Quick Look) 창으로 연다.
     var openAsset: (MediaAsset.ID) -> Void = { _ in }
     var revealAsset: (MediaAsset.ID) -> Void = { _ in }
     var switchSequence: (EditSequence.ID) -> Void = { _ in }
