@@ -17,14 +17,22 @@ struct SequenceComposerTests {
         #expect(SequenceComposer.renderSize(for: .square1x1) == CGSize(width: 1080, height: 1080))
     }
 
-    @Test("출력 프레임 간격은 원본 중 가장 높은 프레임레이트에 가까운 표준값이고, 60fps를 넘으면 60fps, 영상이 없으면 30fps다")
+    @Test("출력 프레임 간격은 원본보다 낮지 않은 가장 가까운 정수 프레임레이트이고, 23.976 계열은 원본 기록 간격이 정확히 그 값일 때만 쓴다")
     func outputFrameRates() {
-        #expect(OutputFrameRate.frameDuration(forSourceFrameRates: [59.94]) == CMTime(value: 1001, timescale: 60000))
-        #expect(OutputFrameRate.frameDuration(forSourceFrameRates: [29.97, 60]) == CMTime(value: 1, timescale: 60))
-        #expect(OutputFrameRate.frameDuration(forSourceFrameRates: [23.98]) == CMTime(value: 1001, timescale: 24000))
-        #expect(OutputFrameRate.frameDuration(forSourceFrameRates: [25]) == CMTime(value: 1, timescale: 25))
-        #expect(OutputFrameRate.frameDuration(forSourceFrameRates: [240]) == CMTime(value: 1, timescale: 60))
-        #expect(OutputFrameRate.frameDuration(forSourceFrameRates: []) == CMTime(value: 1, timescale: 30))
+        func timing(_ rate: Float, _ minimum: CMTime = .invalid) -> SourceFrameTiming {
+            SourceFrameTiming(nominalFrameRate: rate, minFrameDuration: minimum)
+        }
+        // 아이폰처럼 평균이 59.95인 영상은 60fps다(59.94로 내리면 프레임이 준다).
+        #expect(OutputFrameRate.frameDuration(for: timing(59.95, CMTime(value: 10, timescale: 600))) == CMTime(value: 1, timescale: 60))
+        #expect(OutputFrameRate.frameDuration(for: timing(59.94, CMTime(value: 1001, timescale: 60000))) == CMTime(value: 1001, timescale: 60000))
+        #expect(OutputFrameRate.frameDuration(for: timing(29.97, CMTime(value: 20, timescale: 600))) == CMTime(value: 1, timescale: 30))
+        #expect(OutputFrameRate.frameDuration(for: timing(23.976, CMTime(value: 1001, timescale: 24000))) == CMTime(value: 1001, timescale: 24000))
+        #expect(OutputFrameRate.frameDuration(for: timing(25)) == CMTime(value: 1, timescale: 25))
+        #expect(OutputFrameRate.frameDuration(for: timing(40)) == CMTime(value: 1, timescale: 50))
+        #expect(OutputFrameRate.frameDuration(for: timing(240)) == CMTime(value: 1, timescale: 60))
+        #expect(OutputFrameRate.frameDuration(for: timing(0, CMTime(value: 1, timescale: 60))) == CMTime(value: 1, timescale: 60))
+        #expect(OutputFrameRate.frameDuration(forSources: [timing(30), timing(59.95)]) == CMTime(value: 1, timescale: 60))
+        #expect(OutputFrameRate.frameDuration(forSources: []) == CMTime(value: 1, timescale: 30))
     }
 
     @Test("해상도는 고른 짧은 변이고, '원본과 같게'는 가장 큰 원본(최대 4K)을 따르며, 크기는 짝수로 맞춘다")

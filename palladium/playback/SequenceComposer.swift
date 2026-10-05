@@ -62,7 +62,7 @@ nonisolated enum SequenceComposer {
         // 합성 오디오 트랙마다의 음량 변화(클립 음량·크로스페이드).
         var ramps: [VolumeRamp] = []
         // 출력 프레임레이트·해상도를 정할 원본 영상 정보.
-        var sourceFrameRates: [Float] = []
+        var sourceFrameTimings: [SourceFrameTiming] = []
         var sourceShortSides: [Double] = []
 
         for (trackIndex, track) in sequence.tracks.enumerated() where track.kind == .video {
@@ -92,10 +92,12 @@ nonisolated enum SequenceComposer {
                 do {
                     if let sourceVideo = try await source.loadTracks(withMediaType: .video).first, let videoTrack {
                         try await insert(clip, of: sourceVideo, into: videoTrack, lead: edges.videoLead, tail: edges.videoTail, freezesMissingFrames: true)
-                        let (naturalSize, preferredTransform, frameRate) = try await sourceVideo.load(.naturalSize, .preferredTransform, .nominalFrameRate)
+                        let (naturalSize, preferredTransform, frameRate, minFrameDuration) = try await sourceVideo.load(
+                            .naturalSize, .preferredTransform, .nominalFrameRate, .minFrameDuration
+                        )
                         let displayed = CGRect(origin: .zero, size: naturalSize).applying(preferredTransform).size
                         sourceShortSides.append(min(abs(displayed.width), abs(displayed.height)))
-                        sourceFrameRates.append(frameRate)
+                        sourceFrameTimings.append(SourceFrameTiming(nominalFrameRate: frameRate, minFrameDuration: minFrameDuration))
                         let content = CompositionLayer.Content.video(trackID: videoTrack.trackID, naturalSize: naturalSize, preferredTransform: preferredTransform)
                         placedLayers.append((layerRange, CompositionLayer(content: content, transform: clip.transform, fade: fade), order))
                     }
@@ -143,7 +145,7 @@ nonisolated enum SequenceComposer {
             await addBlankBase(to: composition, duration: duration)
         }
         let audioMix = makeAudioMix(composition: composition, ramps: ramps)
-        let frameDuration = OutputFrameRate.frameDuration(forSourceFrameRates: sourceFrameRates)
+        let frameDuration = OutputFrameRate.frameDuration(forSources: sourceFrameTimings)
         guard !placedLayers.isEmpty else {
             return SequenceComposition(asset: composition, videoComposition: nil, audioMix: audioMix, duration: duration, frameDuration: frameDuration)
         }

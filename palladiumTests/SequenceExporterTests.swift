@@ -137,6 +137,28 @@ struct SequenceExporterTests {
         #expect(abs(frameCount - 60) <= 1)
     }
 
+    @Test("프레임 간격이 흔들리는 아이폰식 영상(평균 59.95fps)은 59.94가 아니라 60fps로 내보내 프레임이 줄지 않는다")
+    func exportRoundsJitteredFrameRateUp() async throws {
+        let url = try await TestMedia.makeVideo(red: 0, green: 0, blue: 255, seconds: 2, width: 640, height: 360, fps: 59.95)
+        let asset = MediaAsset(id: UUID(), name: "iphone.mov", sourceURL: url, kind: .video, duration: seconds(2))
+        let sourceTrack = try #require(try await AVURLAsset(url: url).loadTracks(withMediaType: .video).first)
+        let sourceRate = try await sourceTrack.load(.nominalFrameRate)
+        #expect(sourceRate > 59.9 && sourceRate < 60)
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let trackID = sequence.addTrack(kind: .video)
+        try sequence.place(#require(asset.makeClip(at: .zero)), onTrack: trackID)
+        let composition = try #require(await SequenceComposer.makeComposition(
+            sequence: sequence, assets: [asset], aspectRatio: .landscape16x9, resolution: .source, resolveURL: \.sourceURL
+        ))
+        #expect(composition.frameDuration == CMTime(value: 1, timescale: 60))
+        let output = TestMedia.temporaryURL(extension: "mp4")
+
+        try await SequenceExporter.export(composition, to: output) { _ in }
+
+        let track = try #require(try await AVURLAsset(url: output).loadTracks(withMediaType: .video).first)
+        #expect(try await abs(track.load(.nominalFrameRate) - 60) < 0.01)
+    }
+
     @Test("HEVC를 고르면 HEVC로 인코딩하고, 해상도를 고르면 그 크기로 내보낸다")
     func exportUsesChosenCodecAndResolution() async throws {
         let composition = try await sixtyFPSComposition(resolution: .hd720)

@@ -9,8 +9,9 @@ enum TestMedia {
         FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).\(pathExtension)")
     }
 
-    /// 한 가지 색으로 칠한 무음 영상(기본 30fps).
-    static func makeVideo(red: UInt8, green: UInt8, blue: UInt8, seconds: Double, width: Int = 64, height: Int = 36, fps: Int = 30) async throws -> URL {
+    /// 한 가지 색으로 칠한 무음 영상(기본 30fps). 시각은 1/600초 단위로 반올림해, 59.95처럼 정수가 아닌 값을 주면
+    /// 아이폰 영상처럼 프레임 간격이 1/60초와 11/600초로 흔들린다.
+    static func makeVideo(red: UInt8, green: UInt8, blue: UInt8, seconds: Double, width: Int = 64, height: Int = 36, fps: Double = 30) async throws -> URL {
         let url = temporaryURL(extension: "mov")
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
@@ -27,7 +28,7 @@ enum TestMedia {
         writer.startWriting()
         writer.startSession(atSourceTime: .zero)
 
-        let frameCount = Int(seconds * Double(fps))
+        let frameCount = Int(seconds * fps)
         for frame in 0 ..< frameCount {
             while !input.isReadyForMoreMediaData {
                 try await Task.sleep(for: .milliseconds(5))
@@ -48,7 +49,7 @@ enum TestMedia {
                 }
             }
             CVPixelBufferUnlockBaseAddress(buffer, [])
-            adaptor.append(buffer, withPresentationTime: CMTime(value: CMTimeValue(frame), timescale: CMTimeScale(fps)))
+            adaptor.append(buffer, withPresentationTime: CMTime(value: CMTimeValue((Double(frame) * 600 / fps).rounded()), timescale: 600))
         }
         input.markAsFinished()
         await writer.finishWriting()
