@@ -1,7 +1,7 @@
 import CoreMedia
 import Foundation
 
-/// 다듬기 시트(#81)에서 원본 구간을 고르는 규칙. 원본 범위(0~`sourceDuration`) 안에 두고 최소 길이(한 프레임)를 남긴다.
+/// 트림 시트(#81)에서 원본 구간을 고르는 규칙. 원본 범위(0~`sourceDuration`) 안에 두고 최소 길이(한 프레임)를 남긴다.
 nonisolated enum TrimRange {
     /// ↑/↓ 한 번에 옮기는 시간.
     static let smallStep = CMTime(value: 60, timescale: standardTimescale)

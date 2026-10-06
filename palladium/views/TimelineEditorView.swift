@@ -37,7 +37,7 @@ struct TimelineActions {
     var copyClips: (Set<Clip.ID>) -> Void = { _ in }
     var cutClips: (Set<Clip.ID>) -> Void = { _ in }
     var duplicateClips: (Set<Clip.ID>) -> Void = { _ in }
-    /// 클립 하나를 다듬기 시트로 연다(#81).
+    /// 클립 하나를 트림 시트로 연다(#81).
     var openTrimSheet: (Clip.ID) -> Void = { _ in }
     /// 붙여넣을 것이 없으면 `nil`이라 메뉴를 비활성화한다.
     var paste: (() -> Void)?

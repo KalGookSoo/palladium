@@ -3,7 +3,7 @@ import Observation
 import OSLog
 
 /// 고해상도 영상의 프록시(1080p 이하 대체 파일)를 만들고 찾는다(#43). 프록시는 프로젝트에 저장하지 않는 앱 캐시라
-/// 앱 컨테이너 Application Support/Proxies/<원본 캐시 키(mediaKey)>.mov에 두고(다듬어 만든 항목은 처음 원본 것을 같이 쓴다), 파일이 있으면 미리보기가 원본 대신 쓴다.
+/// 앱 컨테이너 Application Support/Proxies/<원본 캐시 키(mediaKey)>.mov에 두고(파생 항목은 처음 원본 것을 같이 쓴다), 파일이 있으면 미리보기가 원본 대신 쓴다.
 /// 내보내기는 항상 원본으로 한다.
 @Observable
 final class ProxyGenerator {

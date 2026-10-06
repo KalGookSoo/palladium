@@ -14,7 +14,7 @@ struct MediaPanelView: View {
     var importFiles: ([URL]) -> Void = { _ in }
     /// 목록에 포커스가 있는지. 편집 창이 ⌫를 타임라인 클립 삭제로 가로채지 않게 알린다.
     var isListFocused: Binding<Bool> = .constant(false)
-    /// 원본을 다듬기 시트로 연다(#81).
+    /// 항목을 트림 시트로 연다(#81).
     var openTrimSheet: (MediaAsset.ID) -> Void = { _ in }
     @State private var filter = MediaFilter()
     @FocusState private var listHasFocus: Bool
@@ -90,8 +90,13 @@ struct MediaPanelView: View {
                 assetMenu(for: assetIDs)
             }
         } primaryAction: { assetIDs in
+            // 두 번 누르면 영상·오디오는 트림 시트를, 이미지는 훑어보기(Quick Look)를 연다(#81).
             if let assetID = assetIDs.first {
-                openAsset(assetID)
+                if editor.asset(id: assetID)?.isTrimmable == true {
+                    openTrimSheet(assetID)
+                } else {
+                    openAsset(assetID)
+                }
             }
         }
         .searchable(text: $filter.query, placement: .sidebar, prompt: "이름·태그 검색")
@@ -290,9 +295,8 @@ struct MediaPanelView: View {
         if assetIDs.count == 1, let assetID = assetIDs.first, let asset = editor.asset(id: assetID), asset.isTrimmable {
             Button(ShortcutGuide.trimSheet.title) { openTrimSheet(assetID) }
                 .keyboardShortcut("t", modifiers: .command)
-            if asset.usedRange != nil {
-                Button("다듬은 구간 지우기") { editor.clearUsedRange(for: assetID) }
-            }
+            // 두 번 누르기가 트림 시트를 열므로 원본 파일 전체는 여기서 훑어본다.
+            Button("훑어보기") { openAsset(assetID) }
             Divider()
         }
         if assetIDs.count == 1, let assetID = assetIDs.first {
@@ -393,7 +397,7 @@ private struct MediaAssetRow<Name: View>: View {
 
     var body: some View {
         // 이미지는 길이가 없어(타임라인에 놓을 기본 길이만 있음) 길이 대신 종류를 보여준다.
-        // 다듬은 원본(#81)은 사용 구간 길이를 보여준다.
+        // 파생 항목(#81)은 쓰는 구간 길이를 보여준다.
         let durationText = asset.kind == .image
             ? "이미지"
             : Duration.seconds((asset.usedRange?.duration ?? asset.duration).seconds).formatted(.time(pattern: .minuteSecond))
@@ -424,15 +428,15 @@ private struct MediaAssetRow<Name: View>: View {
                     }
                     .controlSize(.mini)
                 }
-                // 다듬은 원본(#81)과 프록시 표시는 한 줄에 둔다.
+                // 파생 항목(#81)과 프록시 표시는 한 줄에 둔다.
                 HStack(spacing: 4) {
-                    if asset.usedRange != nil {
-                        Text("다듬음")
+                    if asset.isDerived {
+                        Text("파생")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 4)
                             .background(.yellow.opacity(0.3), in: Capsule())
-                            .help("타임라인에 놓으면 다듬은 구간만 들어갑니다. 원본 파일은 그대로입니다")
+                            .help("원본에서 트림한 항목입니다. 타임라인에 놓으면 이 구간만 들어가고, 원본 항목·파일은 그대로입니다")
                     }
                     if ProxyGenerator.shared.progress[asset.mediaKey] == nil, ProxyGenerator.shared.hasProxy(asset) {
                         Text("프록시")
@@ -449,8 +453,11 @@ private struct MediaAssetRow<Name: View>: View {
     }
 
     /// 태그가 있으면 길이 뒤에 붙인다. 예: "0:10 · 인터뷰, B컷"
+    /// 파생 항목은 길이 뒤에 쓰는 구간을, 태그가 있으면 그 뒤에 붙인다. 예: "0:05 · 0:02.0–0:07.0 · 인터뷰"
     private func detailText(durationText: String) -> String {
-        asset.tags.isEmpty ? durationText : "\(durationText) · \(asset.tags.joined(separator: ", "))"
+        let label = TimelineScale(pointsPerSecond: 40)
+        let rangeText = asset.usedRange.map { "\(label.timeLabel(for: $0.start))–\(label.timeLabel(for: $0.end))" }
+        return ([durationText, rangeText] + [asset.tags.isEmpty ? nil : asset.tags.joined(separator: ", ")]).compactMap(\.self).joined(separator: " · ")
     }
 }
 

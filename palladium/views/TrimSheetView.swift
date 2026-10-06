@@ -3,7 +3,7 @@ import CoreMedia
 import Observation
 import SwiftUI
 
-/// 다듬기 시트를 열 대상(#81). 미디어 패널에서 열면 원본 항목, 타임라인에서 열면 클립 하나를 바꾼다.
+/// 트림 시트를 열 대상(#81). 미디어 패널에서 열면 항목(원본은 바꾸지 않고 파생 항목을 만든다), 타임라인에서 열면 클립 하나를 바꾼다.
 struct TrimTarget: Identifiable {
     enum Kind: Equatable {
         case asset(MediaAsset.ID)
@@ -14,9 +14,9 @@ struct TrimTarget: Identifiable {
     let kind: Kind
 }
 
-/// QuickTime의 다듬기처럼 영상·오디오 하나를 원본 전체와 함께 보며 구간을 고르고 나눈다(#81).
+/// QuickTime의 다듬기처럼 영상·오디오 하나를 원본 전체와 함께 보며 구간을 고르고 자른다(트림, #81).
 /// 미리보기의 굳은 결정("시퀀스만 재생")의 예외로, 이 시트에서만 원본 구간을 재생한다. 원본 파일은 바꾸지 않는다.
-/// 고르는 동안은 시트 안에서만 바뀌고, "다듬기"(원본은 "이 원본에 적용"·"새 원본으로 추가")나 "여기서 분할"을 눌러야 프로젝트가 바뀐다.
+/// 고르는 동안은 시트 안에서만 바뀌고, "적용"·"새 항목으로 저장"이나 "자르기"를 눌러야 프로젝트가 바뀐다. 원본 항목은 "적용"할 수 없다.
 struct TrimSheetView: View {
     let editor: ProjectEditor
     @State private var kind: TrimTarget.Kind
@@ -38,7 +38,7 @@ struct TrimSheetView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let asset {
-                Text("다듬기 — \(title(for: asset))")
+                Text("트림 — \(title(for: asset))")
                     .font(.headline)
                     .lineLimit(1)
                 picture(for: asset)
@@ -62,7 +62,7 @@ struct TrimSheetView: View {
                 timeSummary
                 actions(for: asset)
             } else {
-                ContentUnavailableView("다듬을 대상이 없습니다", systemImage: "scissors", description: Text("원본이나 클립이 지워졌습니다"))
+                ContentUnavailableView("트림할 대상이 없습니다", systemImage: "scissors", description: Text("원본이나 클립이 지워졌습니다"))
                 Button("닫기") { dismiss() }
             }
         }
@@ -116,27 +116,31 @@ struct TrimSheetView: View {
     private func actions(for asset: MediaAsset) -> some View {
         let playhead = player?.currentTime ?? range.start
         HStack {
-            Button("여기서 분할") { split(at: playhead) }
+            Button("자르기") { split(at: playhead) }
                 .disabled(!TrimRange.canSplit(range, at: playhead))
-                .help("재생 위치에서 둘로 나눕니다. 옮겨 둔 손잡이 구간도 함께 반영합니다")
+                .help("재생 위치에서 둘로 자릅니다. 옮겨 둔 손잡이 구간도 함께 반영합니다")
             Spacer()
             Button("취소", role: .cancel) { dismiss() }
                 .keyboardShortcut(.cancelAction)
             switch kind {
             case .asset:
-                Button("새 원본으로 추가") {
-                    editor.addTrimmedAsset(from: asset.id, start: range.start, end: range.end)
-                    dismiss()
+                // 원본 항목은 바꾸지 않는다. 파생 항목만 자기 구간을 "적용"으로 바꿀 수 있다.
+                if asset.isDerived {
+                    Button("새 항목으로 저장") { saveAsNewItem(asset) }
+                        .help("이 구간으로 파생 항목을 하나 더 미디어 패널에 추가합니다(파일은 복사하지 않음)")
+                    Button("적용") {
+                        editor.setUsedRange(start: range.start, end: range.end, for: asset.id)
+                        dismiss()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .help("이 파생 항목이 쓰는 구간을 바꿉니다")
+                } else {
+                    Button("새 항목으로 저장") { saveAsNewItem(asset) }
+                        .keyboardShortcut(.defaultAction)
+                        .help("이 구간으로 파생 항목을 미디어 패널에 추가합니다. 원본 항목·파일은 그대로입니다")
                 }
-                .help("같은 파일을 가리키는 새 항목을 이 구간으로 미디어 패널에 추가합니다(파일은 복사하지 않음)")
-                Button("이 원본에 적용") {
-                    editor.setUsedRange(start: range.start, end: range.end, for: asset.id)
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .help("타임라인에 놓으면 이 구간만 들어갑니다. 원본 파일은 그대로입니다")
             case let .clip(clipID):
-                Button("다듬기") {
+                Button("적용") {
                     editor.commitClipTrim(clipID, start: range.start, end: range.end)
                     dismiss()
                 }
@@ -199,7 +203,13 @@ struct TrimSheetView: View {
         }
     }
 
-    /// 옮겨 둔 구간을 함께 반영해 재생 위치에서 나누고, 앞 조각을 계속 다듬는다.
+    private func saveAsNewItem(_ asset: MediaAsset) {
+        editor.addTrimmedAsset(from: asset.id, start: range.start, end: range.end)
+        dismiss()
+    }
+
+    /// 옮겨 둔 구간을 함께 반영해 재생 위치에서 자르고, 앞 조각을 계속 트림한다.
+    /// 재생 위치는 앞 조각 가운데로 옮겨 바로 다시 자를 수 있게 한다(앞 조각의 끝에 붙어 있으면 자르기가 꺼진다).
     private func split(at time: CMTime) {
         player?.pause()
         switch kind {
@@ -211,6 +221,7 @@ struct TrimSheetView: View {
         }
         if let current = Self.currentRange(of: kind, in: editor) {
             range = current
+            player?.seek(to: current.start + CMTimeMultiplyByRatio(current.duration, multiplier: 1, divisor: 2))
         }
     }
 }
@@ -308,7 +319,7 @@ private struct TrimBarView: View {
 
 // MARK: - Player
 
-/// 다듬기 시트에서 원본을 재생하는 플레이어. 시퀀스 미리보기(`PreviewPlayer`)와 따로 둔다.
+/// 트림 시트에서 원본을 재생하는 플레이어. 시퀀스 미리보기(`PreviewPlayer`)와 따로 둔다.
 @Observable
 final class TrimPlayer {
     let player = AVPlayer()

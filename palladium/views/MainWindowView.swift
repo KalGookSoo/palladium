@@ -48,7 +48,7 @@ struct MainWindowView: View {
     @State private var selectedSubtitleID: Subtitle.ID?
     /// 마스크 레인에서 고른 마스크(#59). 클립·자막 선택과 함께 있지 않는다.
     @State private var selectedMaskID: Mask.ID?
-    /// 열린 다듬기 시트(#81).
+    /// 열린 트림 시트(#81).
     @State private var trimTarget: TrimTarget?
     /// `true`면 인스펙터 이름 칸에 포커스를 준다(F2·우클릭 > 이름 변경, #78). 인스펙터가 포커스를 준 뒤 되돌린다.
     @State private var isClipNameFocusRequested = false
@@ -848,7 +848,7 @@ struct MainWindowView: View {
         isClipNameFocusRequested = true
     }
 
-    /// 편집 > 다듬기…(⌘T, #81). 미디어 패널에 포커스가 있으면 고른 원본을, 아니면 고른 클립 하나를 연다. 이미지는 열지 않는다.
+    /// 편집 > 트림…(⌘T, #81). 미디어 패널에 포커스가 있으면 고른 항목을, 아니면 고른 클립 하나를 연다. 이미지는 열지 않는다.
     private var trimSheetAction: (() -> Void)? {
         if isMediaPanelFocused, let selectedAssetID, editor.asset(id: selectedAssetID)?.isTrimmable == true {
             return { trimTarget = TrimTarget(kind: .asset(selectedAssetID)) }

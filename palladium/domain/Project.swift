@@ -118,29 +118,48 @@ nonisolated extension Project {
         folders[folderIndex].assetIDs.insert(contentsOf: movingIDs, at: insertIndex)
     }
 
-    /// 원본 사용 구간을 바꾼다(#81). 원본 범위 안으로 맞추고, 원본 전체가 되면 구간을 없앤다. `nil`이면 지운다. 이미지는 바꾸지 않는다.
-    mutating func setUsedRange(_ range: CMTimeRange?, for assetID: MediaAsset.ID) {
-        guard let index = assets.firstIndex(where: { $0.id == assetID }), assets[index].isTrimmable else { return }
+    /// 파생 항목이 쓰는 구간을 바꾼다(#81, 트림 시트의 "적용"). 원본 범위 안으로 맞추고, 원본 전체가 되면 구간을 없앤다.
+    /// 원본 항목(파생이 아닌 항목)은 바꾸지 않는다.
+    mutating func setUsedRange(_ range: CMTimeRange, for assetID: MediaAsset.ID) {
+        guard let index = assets.firstIndex(where: { $0.id == assetID }), assets[index].isDerived, assets[index].isTrimmable else { return }
         let duration = assets[index].duration
-        assets[index].usedRange = range.flatMap { range in
-            let clamped = TrimRange.clamped(start: range.start, end: range.end, sourceDuration: duration)
-            return clamped.start == .zero && clamped.end == duration ? nil : clamped
-        }
+        let clamped = TrimRange.clamped(start: range.start, end: range.end, sourceDuration: duration)
+        assets[index].usedRange = clamped.start == .zero && clamped.end == duration ? nil : clamped
     }
 
-    /// 같은 파일을 가리키는 새 원본 항목을 `afterAssetID` 바로 뒤(같은 폴더)에 구간과 함께 추가한다(#81).
+    /// 파생 항목 이름: 처음 원본 이름에 구간을 붙인다(예: "윈드밀1 (0:02.0–0:07.0).mov"). 같은 이름이 있으면 파일 저장처럼 " (1)"·" (2)"…를 붙인다.
+    /// 파생 항목에서 또 만들어도 처음 원본 이름을 기준으로 해 이름이 겹겹이 쌓이지 않는다.
+    func derivedAssetName(from source: MediaAsset, range: CMTimeRange) -> String {
+        let rootName = assets.first { $0.id == source.mediaKey }?.name ?? source.name
+        let stem = (rootName as NSString).deletingPathExtension
+        let pathExtension = (rootName as NSString).pathExtension
+        let suffix = pathExtension.isEmpty ? "" : ".\(pathExtension)"
+        let label = TimelineScale(pointsPerSecond: 40)
+        let base = "\(stem) (\(label.timeLabel(for: range.start))–\(label.timeLabel(for: range.end)))"
+        let names = Set(assets.map(\.name))
+        var candidate = base + suffix
+        var number = 1
+        while names.contains(candidate) {
+            candidate = "\(base) (\(number))\(suffix)"
+            number += 1
+        }
+        return candidate
+    }
+
+    /// 같은 파일을 가리키는 파생 항목을 `afterAssetID` 바로 뒤(같은 폴더)에 구간과 함께 추가한다(#81). 이름은 `derivedAssetName` 규칙이다.
     /// 파일을 복사하지 않고, 썸네일·파형·프록시는 처음 원본 것을 같이 쓴다. 원본이 없거나 이미지면 `nil`.
-    mutating func addDerivedAsset(from assetID: MediaAsset.ID, named name: String, usedRange: CMTimeRange, after afterAssetID: MediaAsset.ID) -> MediaAsset.ID? {
+    mutating func addDerivedAsset(from assetID: MediaAsset.ID, usedRange: CMTimeRange, after afterAssetID: MediaAsset.ID) -> MediaAsset.ID? {
         guard let source = assets.first(where: { $0.id == assetID }), source.isTrimmable,
               let assetIndex = assets.firstIndex(where: { $0.id == afterAssetID })
         else { return nil }
+        let range = TrimRange.clamped(start: usedRange.start, end: usedRange.end, sourceDuration: source.duration)
         var derived = MediaAsset(
-            id: UUID(), name: name, sourceURL: source.sourceURL, kind: source.kind, duration: source.duration,
-            bookmarkData: source.bookmarkData, colorLabel: source.colorLabel, tags: source.tags
+            id: UUID(), name: derivedAssetName(from: source, range: range), sourceURL: source.sourceURL, kind: source.kind,
+            duration: source.duration, bookmarkData: source.bookmarkData, colorLabel: source.colorLabel, tags: source.tags
         )
         derived.sourceAssetID = source.mediaKey
         assets.insert(derived, at: assetIndex + 1)
-        setUsedRange(usedRange, for: derived.id)
+        setUsedRange(range, for: derived.id)
         if let folderIndex = folders.firstIndex(where: { $0.assetIDs.contains(afterAssetID) }),
            let position = folders[folderIndex].assetIDs.firstIndex(of: afterAssetID)
         {
