@@ -3,13 +3,13 @@ import Observation
 import OSLog
 
 /// 고해상도 영상의 프록시(1080p 이하 대체 파일)를 만들고 찾는다(#43). 프록시는 프로젝트에 저장하지 않는 앱 캐시라
-/// 앱 컨테이너 Application Support/Proxies/<원본 ID>.mov에 두고, 파일이 있으면 미리보기가 원본 대신 쓴다.
+/// 앱 컨테이너 Application Support/Proxies/<원본 캐시 키(mediaKey)>.mov에 두고(다듬어 만든 항목은 처음 원본 것을 같이 쓴다), 파일이 있으면 미리보기가 원본 대신 쓴다.
 /// 내보내기는 항상 원본으로 한다.
 @Observable
 final class ProxyGenerator {
     static let shared = ProxyGenerator()
 
-    /// 만드는 중인 원본과 진행률(0~1).
+    /// 만드는 중인 원본(캐시 키 `mediaKey`)과 진행률(0~1).
     private(set) var progress: [MediaAsset.ID: Double] = [:]
     /// 프록시가 생기거나 없어질 때마다 올라간다. 미리보기가 다시 합성할 때를 아는 데 쓴다.
     private(set) var revision = 0
@@ -25,7 +25,7 @@ final class ProxyGenerator {
 
     /// 다 만든 프록시 파일. 없으면 `nil`.
     nonisolated static func proxyURL(for asset: MediaAsset) -> URL? {
-        guard asset.kind == .video, let url = proxyFolder()?.appending(path: "\(asset.id.uuidString).mov"),
+        guard asset.kind == .video, let url = proxyFolder()?.appending(path: "\(asset.mediaKey.uuidString).mov"),
               FileManager.default.fileExists(atPath: url.path)
         else { return nil }
         return url
@@ -58,19 +58,19 @@ final class ProxyGenerator {
 
     /// 해상도와 상관없이 프록시를 만든다(미디어 패널 우클릭). 이미 있거나 만드는 중이면 그대로 둔다.
     func generate(for asset: MediaAsset) {
-        guard asset.kind == .video, tasks[asset.id] == nil, Self.proxyURL(for: asset) == nil,
+        guard asset.kind == .video, tasks[asset.mediaKey] == nil, Self.proxyURL(for: asset) == nil,
               let folder = Self.proxyFolder()
         else { return }
-        let destination = folder.appending(path: "\(asset.id.uuidString).mov")
+        let destination = folder.appending(path: "\(asset.mediaKey.uuidString).mov")
         let source = MediaFileAccess.resolvedURL(for: asset)
-        progress[asset.id] = 0
-        tasks[asset.id] = Task {
+        progress[asset.mediaKey] = 0
+        tasks[asset.mediaKey] = Task {
             do {
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 try await Self.makeProxy(from: source, to: destination) { fraction in
                     Task { @MainActor in
-                        if self.progress[asset.id] != nil {
-                            self.progress[asset.id] = fraction
+                        if self.progress[asset.mediaKey] != nil {
+                            self.progress[asset.mediaKey] = fraction
                         }
                     }
                 }
@@ -78,14 +78,14 @@ final class ProxyGenerator {
             } catch {
                 Logger.mediaImport.error("프록시 생성 실패: \(asset.name, privacy: .public), \(error.localizedDescription, privacy: .public)")
             }
-            progress[asset.id] = nil
-            tasks[asset.id] = nil
+            progress[asset.mediaKey] = nil
+            tasks[asset.mediaKey] = nil
         }
     }
 
     /// 프록시를 지운다(만드는 중이면 멈춘다). 미리보기는 다시 원본을 쓴다.
     func removeProxy(for asset: MediaAsset) {
-        tasks[asset.id]?.cancel()
+        tasks[asset.mediaKey]?.cancel()
         if let url = Self.proxyURL(for: asset) {
             try? FileManager.default.removeItem(at: url)
             revision += 1

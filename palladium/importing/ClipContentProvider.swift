@@ -14,7 +14,7 @@ final class ClipContentProvider {
 
     /// 원본이 화면에 보이는 크기(영상은 회전 반영, 이미지는 픽셀 크기). 소리만 있거나 읽지 못하면 `nil`.
     func contentSize(for asset: MediaAsset) async -> CGSize? {
-        if let cached = sizeCache[asset.id] {
+        if let cached = sizeCache[asset.mediaKey] {
             return cached
         }
         let url = MediaFileAccess.resolvedURL(for: asset)
@@ -40,7 +40,7 @@ final class ClipContentProvider {
         case .audio:
             size = nil
         }
-        sizeCache[asset.id] = size
+        sizeCache[asset.mediaKey] = size
         return size
     }
 
@@ -62,7 +62,7 @@ final class ClipContentProvider {
         var images: [CGImage?] = []
         for time in times {
             // 30분의 1초 단위로 묶어 줌을 조금 바꿔도 다시 만들지 않는다.
-            let key = "\(asset.id)-\(Int(time.seconds * 30))"
+            let key = "\(asset.mediaKey)-\(Int(time.seconds * 30))"
             if let cached = frameCache[key] {
                 images.append(cached)
                 continue
@@ -76,12 +76,12 @@ final class ClipContentProvider {
 
     /// 원본 전체의 파형(초당 `ClipContentLayout.peaksPerSecond`개, 0~1). 오디오가 없거나 읽지 못하면 빈 배열.
     func peaks(for asset: MediaAsset) async -> [Float] {
-        if let cached = peakCache[asset.id] {
+        if let cached = peakCache[asset.mediaKey] {
             return cached
         }
         let url = MediaFileAccess.resolvedURL(for: asset)
         let peaks = await Task.detached(priority: .utility) { Self.readPeaks(from: url) }.value
-        peakCache[asset.id] = peaks
+        peakCache[asset.mediaKey] = peaks
         return peaks
     }
 

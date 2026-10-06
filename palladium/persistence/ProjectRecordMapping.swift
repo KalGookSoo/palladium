@@ -27,6 +27,7 @@ extension ProjectContentRecords {
                 colorLabelRawValue: asset.colorLabel?.rawValue,
                 tags: asset.tags
             )
+            .withTrim(of: asset)
         }
         folders = project.folders.enumerated().map { index, folder in
             MediaFolderRecord(id: folder.id, sortIndex: index, name: folder.name, assetIDs: folder.assetIDs)
@@ -129,6 +130,15 @@ extension ProjectRecord {
 }
 
 private extension MediaAssetRecord {
+    func withTrim(of asset: MediaAsset) -> MediaAssetRecord {
+        usedStartValue = asset.usedRange?.start.value
+        usedStartTimescale = asset.usedRange?.start.timescale ?? standardTimescale
+        usedDurationValue = asset.usedRange?.duration.value ?? 0
+        usedDurationTimescale = asset.usedRange?.duration.timescale ?? standardTimescale
+        sourceAssetID = asset.sourceAssetID
+        return self
+    }
+
     func makeAsset() -> MediaAsset? {
         let storedKind = kindRawValue
         guard let kind = MediaKind(rawValue: storedKind) else {
@@ -144,8 +154,22 @@ private extension MediaAssetRecord {
             bookmarkData: bookmarkData,
             // 알 수 없는 색 값은 레이블 없음으로 연다.
             colorLabel: colorLabelRawValue.flatMap(ColorLabel.init(rawValue:)),
-            tags: tags
+            tags: tags,
+            usedRange: usedRange,
+            sourceAssetID: sourceAssetID
         )
+    }
+
+    /// 저장된 사용 구간. 길이가 0 이하이거나 원본 범위를 벗어나면 구간 없음(원본 전체)으로 연다.
+    var usedRange: CMTimeRange? {
+        guard let usedStartValue else { return nil }
+        let range = CMTimeRange(
+            start: CMTime(value: usedStartValue, timescale: usedStartTimescale),
+            duration: CMTime(value: usedDurationValue, timescale: usedDurationTimescale)
+        )
+        let duration = CMTime(value: durationValue, timescale: durationTimescale)
+        guard range.start >= .zero, range.duration > .zero, range.end <= duration else { return nil }
+        return range
     }
 }
 

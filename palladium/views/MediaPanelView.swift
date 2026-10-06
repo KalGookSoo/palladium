@@ -14,6 +14,8 @@ struct MediaPanelView: View {
     var importFiles: ([URL]) -> Void = { _ in }
     /// 목록에 포커스가 있는지. 편집 창이 ⌫를 타임라인 클립 삭제로 가로채지 않게 알린다.
     var isListFocused: Binding<Bool> = .constant(false)
+    /// 원본을 다듬기 시트로 연다(#81).
+    var openTrimSheet: (MediaAsset.ID) -> Void = { _ in }
     @State private var filter = MediaFilter()
     @FocusState private var listHasFocus: Bool
     /// 클립이 쓰고 있어 확인을 기다리는 삭제(#60).
@@ -285,6 +287,14 @@ struct MediaPanelView: View {
             }
         }
         // 이름과 태그는 원본마다 다르므로 하나를 골랐을 때만 편집한다.
+        if assetIDs.count == 1, let assetID = assetIDs.first, let asset = editor.asset(id: assetID), asset.isTrimmable {
+            Button(ShortcutGuide.trimSheet.title) { openTrimSheet(assetID) }
+                .keyboardShortcut("t", modifiers: .command)
+            if asset.usedRange != nil {
+                Button("다듬은 구간 지우기") { editor.clearUsedRange(for: assetID) }
+            }
+            Divider()
+        }
         if assetIDs.count == 1, let assetID = assetIDs.first {
             Button("이름 변경") {
                 beginRenaming(assetID)
@@ -302,7 +312,7 @@ struct MediaPanelView: View {
             Button("프록시 만들기") { videos.forEach(ProxyGenerator.shared.generate(for:)) }
                 .disabled(videos.allSatisfy { ProxyGenerator.shared.hasProxy($0) })
             Button("프록시 삭제") { videos.forEach(ProxyGenerator.shared.removeProxy(for:)) }
-                .disabled(!videos.contains { ProxyGenerator.shared.hasProxy($0) || ProxyGenerator.shared.progress[$0.id] != nil })
+                .disabled(!videos.contains { ProxyGenerator.shared.hasProxy($0) || ProxyGenerator.shared.progress[$0.mediaKey] != nil })
             Divider()
         }
         Divider()
@@ -383,9 +393,10 @@ private struct MediaAssetRow<Name: View>: View {
 
     var body: some View {
         // 이미지는 길이가 없어(타임라인에 놓을 기본 길이만 있음) 길이 대신 종류를 보여준다.
+        // 다듬은 원본(#81)은 사용 구간 길이를 보여준다.
         let durationText = asset.kind == .image
             ? "이미지"
-            : Duration.seconds(asset.duration.seconds).formatted(.time(pattern: .minuteSecond))
+            : Duration.seconds((asset.usedRange?.duration ?? asset.duration).seconds).formatted(.time(pattern: .minuteSecond))
 
         HStack {
             MediaThumbnailView(asset: asset)
@@ -405,20 +416,32 @@ private struct MediaAssetRow<Name: View>: View {
                     .monospacedDigit()
                     .lineLimit(1)
                 // 프록시를 만드는 중이면 진행률을, 다 만들었으면 표시를 보여준다(#43).
-                if let fraction = ProxyGenerator.shared.progress[asset.id] {
+                if let fraction = ProxyGenerator.shared.progress[asset.mediaKey] {
                     ProgressView(value: fraction) {
                         Text("프록시 만드는 중")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
                     .controlSize(.mini)
-                } else if ProxyGenerator.shared.hasProxy(asset) {
-                    Text("프록시")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 4)
-                        .background(.quaternary, in: Capsule())
-                        .help("미리보기는 1080p 대체 파일로 재생하고, 내보내기는 원본으로 합니다")
+                }
+                // 다듬은 원본(#81)과 프록시 표시는 한 줄에 둔다.
+                HStack(spacing: 4) {
+                    if asset.usedRange != nil {
+                        Text("다듬음")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                            .background(.yellow.opacity(0.3), in: Capsule())
+                            .help("타임라인에 놓으면 다듬은 구간만 들어갑니다. 원본 파일은 그대로입니다")
+                    }
+                    if ProxyGenerator.shared.progress[asset.mediaKey] == nil, ProxyGenerator.shared.hasProxy(asset) {
+                        Text("프록시")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                            .background(.quaternary, in: Capsule())
+                            .help("미리보기는 1080p 대체 파일로 재생하고, 내보내기는 원본으로 합니다")
+                    }
                 }
             }
         }

@@ -48,6 +48,8 @@ struct MainWindowView: View {
     @State private var selectedSubtitleID: Subtitle.ID?
     /// 마스크 레인에서 고른 마스크(#59). 클립·자막 선택과 함께 있지 않는다.
     @State private var selectedMaskID: Mask.ID?
+    /// 열린 다듬기 시트(#81).
+    @State private var trimTarget: TrimTarget?
     /// `true`면 인스펙터 이름 칸에 포커스를 준다(F2·우클릭 > 이름 변경, #78). 인스펙터가 포커스를 준 뒤 되돌린다.
     @State private var isClipNameFocusRequested = false
     /// 타임라인에서 클립·원본을 끄는 중인지. Esc로 끌기를 취소할 때 쓴다.
@@ -136,6 +138,7 @@ struct MainWindowView: View {
             .focusedSceneValue(\.importSubtitles) { chooseSubtitleFile() }
             .focusedSceneValue(\.exportSubtitles, exportSubtitlesAction)
             .focusedSceneValue(\.splitClips, splitAction)
+            .focusedSceneValue(\.openTrimSheet, trimSheetAction)
             .focusedSceneValue(\.duplicateClips, selectedClipIDs.isEmpty ? nil : { timelineActions.duplicateClips(selectedClipIDs) })
             .focusedSceneValue(\.renameSelectedClip, selectedClip.map { clip in { beginRenamingClip(clip.id) } })
             .focusedSceneValue(\.isTimelineVisible, $isTimelineVisible)
@@ -179,6 +182,9 @@ struct MainWindowView: View {
         withBehaviors
             .sheet(item: $export) { job in
                 ExportProgressView(job: job)
+            }
+            .sheet(item: $trimTarget) { target in
+                TrimSheetView(editor: editor, target: target)
             }
             .sheet(isPresented: $isBatchExportPresented) {
                 BatchExportView(
@@ -353,6 +359,7 @@ struct MainWindowView: View {
                     selectedClipIDs = duplicated
                 }
             },
+            openTrimSheet: { clipID in trimTarget = TrimTarget(kind: .clip(clipID)) },
             paste: paste,
             openAsset: quickLook,
             revealAsset: { assetID in selectedAssetID = assetID },
@@ -402,7 +409,8 @@ struct MainWindowView: View {
                 selectedAssetID: $selectedAssetID,
                 openAsset: quickLook,
                 importFiles: importMedia(from:),
-                isListFocused: $isMediaPanelFocused
+                isListFocused: $isMediaPanelFocused,
+                openTrimSheet: { assetID in trimTarget = TrimTarget(kind: .asset(assetID)) }
             )
             // 놓을 곳을 창 전체로 잡으면 분할 뷰 경계를 덮어 크기 조절 커서가 나타나지 않으므로,
             // Finder에서 끌어온 파일은 미디어 패널과 미리보기에 놓을 때만 가져온다.
@@ -838,6 +846,17 @@ struct MainWindowView: View {
         selectedMaskID = nil
         isInspectorPresented = true
         isClipNameFocusRequested = true
+    }
+
+    /// 편집 > 다듬기…(⌘T, #81). 미디어 패널에 포커스가 있으면 고른 원본을, 아니면 고른 클립 하나를 연다. 이미지는 열지 않는다.
+    private var trimSheetAction: (() -> Void)? {
+        if isMediaPanelFocused, let selectedAssetID, editor.asset(id: selectedAssetID)?.isTrimmable == true {
+            return { trimTarget = TrimTarget(kind: .asset(selectedAssetID)) }
+        }
+        guard selectedClipIDs.count == 1, let clipID = selectedClipIDs.first,
+              let clip = editor.currentSequence.clip(id: clipID), editor.asset(id: clip.assetID)?.isTrimmable == true
+        else { return nil }
+        return { trimTarget = TrimTarget(kind: .clip(clipID)) }
     }
 
     /// 편집 > 클립 분할(⌘B). 재생 헤드에서 나눌 클립이 없으면 `nil`이라 메뉴가 비활성화된다.

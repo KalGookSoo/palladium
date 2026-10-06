@@ -1,3 +1,4 @@
+import CoreMedia
 import Foundation
 
 nonisolated struct Project {
@@ -115,6 +116,37 @@ nonisolated extension Project {
         guard let folderID, let folderIndex = folders.firstIndex(where: { $0.id == folderID }) else { return }
         let insertIndex = beforeAssetID.flatMap { folders[folderIndex].assetIDs.firstIndex(of: $0) } ?? folders[folderIndex].assetIDs.endIndex
         folders[folderIndex].assetIDs.insert(contentsOf: movingIDs, at: insertIndex)
+    }
+
+    /// 원본 사용 구간을 바꾼다(#81). 원본 범위 안으로 맞추고, 원본 전체가 되면 구간을 없앤다. `nil`이면 지운다. 이미지는 바꾸지 않는다.
+    mutating func setUsedRange(_ range: CMTimeRange?, for assetID: MediaAsset.ID) {
+        guard let index = assets.firstIndex(where: { $0.id == assetID }), assets[index].isTrimmable else { return }
+        let duration = assets[index].duration
+        assets[index].usedRange = range.flatMap { range in
+            let clamped = TrimRange.clamped(start: range.start, end: range.end, sourceDuration: duration)
+            return clamped.start == .zero && clamped.end == duration ? nil : clamped
+        }
+    }
+
+    /// 같은 파일을 가리키는 새 원본 항목을 `afterAssetID` 바로 뒤(같은 폴더)에 구간과 함께 추가한다(#81).
+    /// 파일을 복사하지 않고, 썸네일·파형·프록시는 처음 원본 것을 같이 쓴다. 원본이 없거나 이미지면 `nil`.
+    mutating func addDerivedAsset(from assetID: MediaAsset.ID, named name: String, usedRange: CMTimeRange, after afterAssetID: MediaAsset.ID) -> MediaAsset.ID? {
+        guard let source = assets.first(where: { $0.id == assetID }), source.isTrimmable,
+              let assetIndex = assets.firstIndex(where: { $0.id == afterAssetID })
+        else { return nil }
+        var derived = MediaAsset(
+            id: UUID(), name: name, sourceURL: source.sourceURL, kind: source.kind, duration: source.duration,
+            bookmarkData: source.bookmarkData, colorLabel: source.colorLabel, tags: source.tags
+        )
+        derived.sourceAssetID = source.mediaKey
+        assets.insert(derived, at: assetIndex + 1)
+        setUsedRange(usedRange, for: derived.id)
+        if let folderIndex = folders.firstIndex(where: { $0.assetIDs.contains(afterAssetID) }),
+           let position = folders[folderIndex].assetIDs.firstIndex(of: afterAssetID)
+        {
+            folders[folderIndex].assetIDs.insert(derived.id, at: position + 1)
+        }
+        return derived.id
     }
 
     /// 원본을 프로젝트에서 뺀다(#60). 폴더에서도 빼고, 그 원본을 쓰는 모든 시퀀스의 클립도 함께 지운다.

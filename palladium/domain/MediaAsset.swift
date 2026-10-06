@@ -13,6 +13,10 @@ nonisolated struct MediaAsset {
     var colorLabel: ColorLabel? = nil
     /// "인터뷰", "B컷"처럼 자유롭게 붙이는 분류어. 검색에 쓰인다.
     var tags: [String] = []
+    /// 다듬기 시트에서 고른 사용 구간(#81). 타임라인에 놓으면 이 구간만 클립이 된다. `nil`이면 원본 전체다. 원본 파일은 바꾸지 않는다.
+    var usedRange: CMTimeRange? = nil
+    /// "새 원본으로 추가"로 만든 항목이면 처음 원본의 `mediaKey`. 썸네일·파형·프록시를 같은 파일끼리 같이 쓰는 데 쓴다.
+    var sourceAssetID: UUID? = nil
 }
 
 nonisolated enum MediaKind: String {
@@ -37,6 +41,16 @@ nonisolated enum ColorLabel: String, CaseIterable {
 nonisolated extension MediaAsset {
     /// 이미지는 길이가 없어 타임라인에 처음 놓을 때 이 길이로 놓는다.
     static let stillImageDuration = CMTime(value: 5, timescale: 1)
+
+    /// 썸네일·파형·프록시 캐시 키. 같은 파일을 가리키는 다듬은 항목은 처음 원본과 같은 키를 써 다시 만들지 않는다.
+    var mediaKey: UUID {
+        sourceAssetID ?? id
+    }
+
+    /// 다듬기 시트를 열 수 있는지. 이미지는 길이만 있어 다듬지 않는다.
+    var isTrimmable: Bool {
+        kind != .image
+    }
 
     /// 같은 파일을 가리키는지 판단한다. 같은 파일을 두 번 가져오지 않기 위해 쓴다.
     func refers(to url: URL) -> Bool {

@@ -17,8 +17,15 @@ final class MediaAssetRecord {
     var durationTimescale: Int32
     var bookmarkData: Data?
     var colorLabelRawValue: String?
-    // 기본값이 있어야 이 속성이 생기기 전에 저장한 레코드도 열린다.
+    /// 기본값이 있어야 이 속성이 생기기 전에 저장한 레코드도 열린다.
     var tags: [String] = []
+    /// 다듬기 시트의 사용 구간(#81). 시작 값이 `nil`이면 구간이 없다(원본 전체).
+    var usedStartValue: Int64?
+    var usedStartTimescale: Int32 = 600
+    var usedDurationValue: Int64 = 0
+    var usedDurationTimescale: Int32 = 600
+    /// "새 원본으로 추가"로 만든 항목이면 처음 원본의 캐시 키.
+    var sourceAssetID: UUID?
     var project: ProjectRecord?
     var backup: ProjectBackupRecord?
 

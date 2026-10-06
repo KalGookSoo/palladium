@@ -20,7 +20,7 @@ final class MediaThumbnailProvider {
 
     /// 만들 수 없으면(오디오, 파일 없음, 읽기 실패) `nil`.
     func thumbnail(for asset: MediaAsset) async -> CGImage? {
-        if let cached = cache[asset.id] {
+        if let cached = cache[asset.mediaKey] {
             return cached
         }
         let url = MediaFileAccess.resolvedURL(for: asset)
@@ -29,7 +29,7 @@ final class MediaThumbnailProvider {
         case .image: Self.imageThumbnail(at: url)
         case .audio: nil
         }
-        cache[asset.id] = image
+        cache[asset.mediaKey] = image
         return image
     }
 

@@ -81,6 +81,65 @@ final class ProjectEditor {
         updateAssets(assetIDs, actionName: "색상 레이블") { $0.colorLabel = colorLabel }
     }
 
+    // MARK: 다듬기 시트(#81) — 원본 파일은 바꾸지 않는다
+
+    /// 원본 항목에 사용 구간을 적용한다("이 원본에 적용"). 원본 범위로 맞추고, 원본 전체면 구간을 없앤다.
+    func setUsedRange(start: CMTime, end: CMTime, for assetID: MediaAsset.ID) {
+        perform("다듬기") { $0.setUsedRange(CMTimeRange(start: start, end: end), for: assetID) }
+    }
+
+    func clearUsedRange(for assetID: MediaAsset.ID) {
+        perform("다듬은 구간 지우기") { $0.setUsedRange(nil, for: assetID) }
+    }
+
+    /// 같은 파일을 가리키는 새 원본 항목을 구간과 함께 원본 바로 뒤에 추가한다("새 원본으로 추가"). 새 항목 ID.
+    @discardableResult
+    func addTrimmedAsset(from assetID: MediaAsset.ID, start: CMTime, end: CMTime) -> MediaAsset.ID? {
+        guard let name = asset(id: assetID)?.name else { return nil }
+        var newID: MediaAsset.ID?
+        perform("새 원본으로 추가") { newID = $0.addDerivedAsset(from: assetID, named: "\(name) – 다듬음", usedRange: CMTimeRange(start: start, end: end), after: assetID) }
+        return newID
+    }
+
+    /// 원본을 `start`~`end` 구간으로 보고 `time`(원본 시각)에서 나눠, 앞·뒤 구간을 각각 새 원본 항목으로 원본 뒤에 추가한다.
+    /// 원본 항목은 그대로다. 나눌 수 없으면(구간 밖) `nil`.
+    func splitAsset(_ assetID: MediaAsset.ID, start: CMTime, end: CMTime, at time: CMTime) -> (front: MediaAsset.ID, back: MediaAsset.ID)? {
+        guard let source = asset(id: assetID), source.isTrimmable else { return nil }
+        let range = TrimRange.clamped(start: start, end: end, sourceDuration: source.duration)
+        guard TrimRange.canSplit(range, at: time) else { return nil }
+        var pieces: (front: MediaAsset.ID, back: MediaAsset.ID)?
+        perform("분할") { project in
+            guard let front = project.addDerivedAsset(from: assetID, named: "\(source.name) – 1", usedRange: CMTimeRange(start: range.start, end: time), after: assetID),
+                  let back = project.addDerivedAsset(from: assetID, named: "\(source.name) – 2", usedRange: CMTimeRange(start: time, end: range.end), after: front)
+            else { return }
+            pieces = (front, back)
+        }
+        return pieces
+    }
+
+    /// 타임라인 클립을 원본 `start`~`end` 구간으로 다듬는다(리플, 뒤 클립이 따라온다). 원본 항목의 구간은 바꾸지 않는다.
+    func commitClipTrim(_ clipID: Clip.ID, start: CMTime, end: CMTime) {
+        guard let clip = currentSequence.clip(id: clipID) else { return }
+        let range = clip.clampedSourceRange(start: start, end: end, sourceDuration: asset(id: clip.assetID)?.trimmableDuration)
+        editCurrentSequence("다듬기") { $0.setSourceRange(range, forClip: clipID) }
+    }
+
+    /// 타임라인 클립을 원본 `start`~`end` 구간으로 다듬고 `time`(원본 시각)에서 나눈다. 한 번의 편집이다.
+    /// 앞 조각은 원래 ID를 지킨다. 나눌 수 없으면(구간 밖) 바꾸지 않고 `false`.
+    @discardableResult
+    func splitClip(_ clipID: Clip.ID, start: CMTime, end: CMTime, at time: CMTime) -> Bool {
+        guard let clip = currentSequence.clip(id: clipID) else { return false }
+        let range = clip.clampedSourceRange(start: start, end: end, sourceDuration: asset(id: clip.assetID)?.trimmableDuration)
+        guard TrimRange.canSplit(range, at: time) else { return false }
+        editCurrentSequence("분할") { sequence in
+            sequence.setSourceRange(range, forClip: clipID)
+            guard let trimmed = sequence.clip(id: clipID) else { return }
+            let splitTime = trimmed.timelineStart + trimmed.timelineTime(forSource: time - range.start)
+            sequence.split(at: splitTime, clipIDs: [clipID])
+        }
+        return true
+    }
+
     /// 쉼표로 나눈 태그 목록으로 바꾼다.
     func setTags(from text: String, for assetID: MediaAsset.ID) {
         updateAssets([assetID], actionName: "태그 편집") { $0.setTags(from: text) }

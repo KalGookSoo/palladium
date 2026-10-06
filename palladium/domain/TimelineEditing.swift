@@ -381,9 +381,9 @@ nonisolated extension MediaAsset {
         kind == .audio ? .audio : .video
     }
 
-    /// 타임라인에 처음 놓을 때의 길이. 이미지는 길이가 없어 정해진 길이를 쓴다.
+    /// 타임라인에 처음 놓을 때의 길이. 다듬은 원본은 사용 구간 길이, 이미지는 길이가 없어 정해진 길이를 쓴다.
     var placementDuration: CMTime {
-        kind == .image ? Self.stillImageDuration : duration
+        usedRange?.duration ?? (kind == .image ? Self.stillImageDuration : duration)
     }
 
     /// 클립이 원본에서 쓸 수 있는 길이. 이미지는 길이 제한이 없어 `nil`.
@@ -391,8 +391,9 @@ nonisolated extension MediaAsset {
         kind == .image ? nil : duration
     }
 
-    /// 이 원본 전체를 `time`에 놓는 새 클립. 길이가 0이면 `nil`.
+    /// 이 원본(다듬었으면 사용 구간)을 `time`에 놓는 새 클립. 길이가 0이면 `nil`.
     func makeClip(at time: CMTime) -> Clip? {
-        Clip(assetID: id, sourceRange: CMTimeRange(start: .zero, duration: placementDuration), timelineStart: CMTimeMaximum(time, .zero))
+        // 다듬은 원본(#81)은 사용 구간만 놓는다.
+        Clip(assetID: id, sourceRange: usedRange ?? CMTimeRange(start: .zero, duration: placementDuration), timelineStart: CMTimeMaximum(time, .zero))
     }
 }
