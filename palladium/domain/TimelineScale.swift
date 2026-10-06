@@ -52,6 +52,18 @@ nonisolated extension TimelineScale {
         pointsPerSecond > Self.minimumPointsPerSecond
     }
 
+    /// 재생 헤드·커서 위치 시각(분:초.소수, #79). 확대했을 때(초당 100pt 이상)만 소수 둘째 자리까지 보인다.
+    /// 반올림하면 59.99초가 1:00.0처럼 실제보다 늦게 보이므로 버린다.
+    func timeLabel(for time: CMTime) -> String {
+        let fractionDigits = pointsPerSecond >= 100 ? 2 : 1
+        let unitsPerSecond = fractionDigits == 2 ? 100 : 10
+        let totalUnits = Int((max(time.seconds, 0) * Double(unitsPerSecond) + 1e-6).rounded(.down))
+        let fraction = totalUnits % unitsPerSecond
+        let totalSeconds = totalUnits / unitsPerSecond
+        let fractionText = String(fraction).leftPadded(to: fractionDigits)
+        return "\(totalSeconds / 60):\(String(totalSeconds % 60).leftPadded(to: 2)).\(fractionText)"
+    }
+
     /// 눈금 사이가 너무 좁아 글자가 겹치지 않도록, 눈금 간격이 최소 60포인트가 되는 가장 작은 단위(초)를 고른다.
     var labelIntervalSeconds: Double {
         let candidates = [1.0, 2, 5, 10, 15, 30, 60, 120, 300, 600]
@@ -60,3 +72,9 @@ nonisolated extension TimelineScale {
 }
 
 nonisolated extension TimelineScale: Equatable {}
+
+private nonisolated extension String {
+    func leftPadded(to length: Int) -> String {
+        String(repeating: "0", count: max(length - count, 0)) + self
+    }
+}

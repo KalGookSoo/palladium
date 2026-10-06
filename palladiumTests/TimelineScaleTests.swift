@@ -48,6 +48,19 @@ struct TimelineScaleTests {
         #expect(TimelineScale(pointsPerSecond: 40).labelIntervalSeconds == 2)
         #expect(TimelineScale(pointsPerSecond: 5).labelIntervalSeconds == 15)
     }
+
+    @Test("커서·재생 헤드 시각은 분:초.소수로 보이고, 확대했을 때(초당 100pt 이상)만 소수 둘째 자리까지 보이며, 올림하지 않는다")
+    func timeLabelFormat() {
+        let zoomedIn = TimelineScale(pointsPerSecond: 160)
+        let normal = TimelineScale(pointsPerSecond: 40)
+        #expect(zoomedIn.timeLabel(for: seconds(3.25)) == "0:03.25")
+        #expect(normal.timeLabel(for: seconds(3.25)) == "0:03.2")
+        #expect(normal.timeLabel(for: seconds(62.5)) == "1:02.5")
+        #expect(normal.timeLabel(for: .zero) == "0:00.0")
+        // 59.99초를 1:00.0으로 올려 보이지 않는다.
+        #expect(normal.timeLabel(for: seconds(59.99)) == "0:59.9")
+        #expect(zoomedIn.timeLabel(for: seconds(605.5)) == "10:05.50")
+    }
 }
 
 // MARK: - Helpers

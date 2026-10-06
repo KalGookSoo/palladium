@@ -4,7 +4,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum TimelineMetrics {
-    static let rulerHeight = 24.0
+    /// 위 줄 시간 글자, 아래 줄 눈금·재생 헤드 머리(#79).
+    static let rulerHeight = 30.0
     static let trackHeight = 44.0
     /// 눈금자 아래 자막·마스크 레인의 높이.
     static let rangeLaneHeight = 28.0
