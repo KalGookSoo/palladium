@@ -17,6 +17,8 @@ struct TrackRowView: View {
     let placeholder: Clip?
     /// 끄는 중이라 원래 자리에 보이지 않게 남겨 둔 클립(끌기 제스처를 이어 가기 위함).
     var hiddenClipID: Clip.ID?
+    /// 트림 중이면 클립 안 내용을 다시 불러오지 않는다(#80).
+    var freezesContent = false
     /// 끄는 동안과 놓았을 때 끈 거리와 함께 부른다. 시각·트랙 계산은 상위가 한다.
     let dragChanged: (Clip, CGSize) -> Void
     let dragEnded: (Clip, CGSize) -> Void
@@ -88,7 +90,7 @@ struct TrackRowView: View {
             colorLabel: clip.colorLabel,
             hasEffect: !clip.colorAdjustment.isDefault
         ) {
-            ClipContentView(asset: asset, clip: clip, width: width, showsFilmstrip: showsFilmstrip, showsWaveform: showsWaveform)
+            ClipContentView(asset: asset, clip: clip, width: width, showsFilmstrip: showsFilmstrip, showsWaveform: showsWaveform, isFrozen: freezesContent)
         }
         .help("원본: \(assetName)")
         .frame(width: max(width - 2, 1), height: clipHeight)

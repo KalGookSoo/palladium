@@ -131,6 +131,18 @@ nonisolated extension Clip {
         }
     }
 
+    /// 트림을 끄는 동안 보여줄 클립(#80). 원본 구간을 `sourceRange`로 바꾸되, 잡은 끝만 움직이고 반대쪽 끝은 제자리에 둔다.
+    /// 끄는 동안 마우스와 손잡이가 어긋나지 않게 하기 위함이다. 손을 떼면 리플(`setSourceRange`)로 반영한다.
+    func trimDisplay(edge: ClipEdge, sourceRange newRange: CMTimeRange) -> Clip {
+        var shown = self
+        let end = timelineRange.end
+        shown.sourceRange = newRange
+        if edge == .start {
+            shown.timelineStart = end - shown.timelineDuration
+        }
+        return shown
+    }
+
     func canSplit(at time: CMTime, clipIDs: Set<Clip.ID>?) -> Bool {
         (clipIDs?.contains(id) ?? true) && timelineStart < time && time < timelineRange.end
     }

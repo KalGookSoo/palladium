@@ -40,6 +40,24 @@ struct ClipTests {
         let clip = try #require(Clip(assetID: UUID(), sourceRange: range(start: 3, duration: 5), timelineStart: seconds(10)))
         #expect(clip.timelineRange == range(start: 10, duration: 5))
     }
+
+    @Test("트림을 끄는 동안 보이는 클립은 잡은 끝만 움직이고 반대쪽 끝은 그대로다(속도를 바꾼 클립도)")
+    func trimDisplayKeepsOppositeEdge() throws {
+        let clip = try #require(Clip(assetID: UUID(), sourceRange: range(start: 2, duration: 10), timelineStart: seconds(10)))
+
+        let startCut = clip.trimDisplay(edge: .start, sourceRange: range(start: 4, duration: 8))
+        #expect(startCut.timelineRange == range(start: 12, duration: 8))
+        let startExtended = clip.trimDisplay(edge: .start, sourceRange: range(start: 0, duration: 12))
+        #expect(startExtended.timelineRange == range(start: 8, duration: 12))
+        let endCut = clip.trimDisplay(edge: .end, sourceRange: range(start: 2, duration: 7))
+        #expect(endCut.timelineRange == range(start: 10, duration: 7))
+        #expect(endCut.id == clip.id && endCut.sourceRange == range(start: 2, duration: 7))
+
+        var fast = clip
+        fast.speed = 2
+        // 원본 10초 → 타임라인 5초(10~15초). 앞을 2초(원본) 자르면 타임라인 1초가 줄어 11~15초.
+        #expect(fast.trimDisplay(edge: .start, sourceRange: range(start: 4, duration: 8)).timelineRange == range(start: 11, duration: 4))
+    }
 }
 
 // MARK: - Helpers

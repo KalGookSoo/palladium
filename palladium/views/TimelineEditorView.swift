@@ -74,6 +74,8 @@ private struct DragPreview {
     let time: CMTime
     /// 옮기기·놓기는 들어갈 자리를 점선으로 보여주고, 트림은 클립 자체를 바뀐 길이로 그린다.
     var showsPlaceholder = true
+    /// 트림·롤 중이면 클립 안 내용(필름스트립·파형)을 다시 불러오지 않는다(#80). 손을 떼면 한 번 다시 만든다.
+    var freezesContent = false
 }
 
 /// SwiftUI의 `TimelineView`(일정 주기로 다시 그리는 View)와 이름이 겹치지 않도록 `TimelineEditorView`로 짓는다.
@@ -385,6 +387,7 @@ struct TimelineEditorView: View {
             ghost: ghost,
             placeholder: placeholder,
             hiddenClipID: hiddenClipID,
+            freezesContent: dragPreview?.freezesContent == true,
             dragChanged: { clip, translation in previewClipMove(clip, by: translation) },
             dragEnded: { clip, translation in endClipMove(clip, by: translation) },
             trimChanged: { clip, edge, distance in previewTrim(clip, edge: edge, by: distance) },
@@ -504,15 +507,16 @@ struct TimelineEditorView: View {
         if NSEvent.modifierFlags.contains(.command) {
             var preview = sequence
             preview.roll(clip.id, edge: edge, by: dragDelta(distance), sourceDuration: sourceDuration(of:))
-            dragPreview = DragPreview(sequence: preview, placeholderID: clip.id, trackID: trackID, time: dragDelta(distance), showsPlaceholder: false)
+            dragPreview = DragPreview(sequence: preview, placeholderID: clip.id, trackID: trackID, time: dragDelta(distance), showsPlaceholder: false, freezesContent: true)
             return
         }
         let sourceDuration = assets.first { $0.id == clip.assetID }?.trimmableDuration
         let range = clip.trimmedSourceRange(edge: edge, by: trimDelta(clip, edge: edge, distance: distance), sourceDuration: sourceDuration)
         guard dragPreview?.time != range.duration || dragPreview?.sequence.clip(id: clip.id)?.sourceRange != range else { return }
+        // 끄는 동안은 잡은 끝만 마우스를 따라가고 나머지와 뒤 클립은 제자리에 둔다. 리플은 손을 뗄 때 반영한다(#80).
         var preview = sequence
-        preview.setSourceRange(range, forClip: clip.id)
-        dragPreview = DragPreview(sequence: preview, placeholderID: clip.id, trackID: trackID, time: range.duration, showsPlaceholder: false)
+        preview.updateClips([clip.id]) { $0 = $0.trimDisplay(edge: edge, sourceRange: range) }
+        dragPreview = DragPreview(sequence: preview, placeholderID: clip.id, trackID: trackID, time: range.duration, showsPlaceholder: false, freezesContent: true)
     }
 
     private func endTrim(_ clip: Clip, edge: ClipEdge, by distance: Double) {
