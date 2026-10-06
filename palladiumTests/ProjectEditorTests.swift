@@ -15,6 +15,8 @@ struct ProjectEditorTests {
             for: ProjectRecord.self, ProjectBackupRecord.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
+        // 저장소는 직접 저장한다. 자동 저장 타이머가 테스트가 끝나 사라진 컨테이너에 불리면 앱이 멈추므로 끈다.
+        container.mainContext.autosaveEnabled = false
         var clock = Date(timeIntervalSince1970: 0)
         repository = SwiftDataProjectRepository(modelContext: container.mainContext) {
             clock = clock.addingTimeInterval(60)
@@ -224,6 +226,42 @@ struct ProjectEditorTests {
         #expect(editor.project == before)
         undoManager.redo()
         #expect(editor.project == after)
+    }
+
+    @Test("원본을 지우면 폴더와 모든 시퀀스의 그 원본 클립도 지우고, 다른 클립은 제자리에 두며, 실행 취소 한 번으로 모두 돌아온다")
+    func deleteAssetsRemovesClipsEverywhere() throws {
+        let editor = try makeEditorWithSampleContent()
+        let introID = SampleData.introVideo.id
+        // 두 번째 시퀀스에도 같은 원본을 놓는다.
+        editor.addSequence(named: "하이라이트")
+        editor.placeAsset(introID, onTrack: nil, at: .zero)
+        editor.switchToSequence(editor.project.sequences[0].id)
+        // 실행 취소 관리자는 준비가 끝난 뒤 붙인다(묶음 밖에서 실행 취소를 남기면 예외가 나 테스트가 멈춘다).
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+        editor.undoManager = undoManager
+        let bRollClip = try #require(editor.currentSequence.tracks.flatMap(\.clips).first { $0.assetID == SampleData.bRollVideo.id })
+        let before = editor.project
+
+        let usage = editor.clipUsage(of: [introID])
+        #expect(usage.clipCount == 2)
+        #expect(usage.sequenceNames == ["통합본", "하이라이트"])
+        #expect(editor.clipUsage(of: [SampleData.backgroundMusic.id]).sequenceNames == ["통합본"])
+
+        undoManager.beginUndoGrouping()
+        editor.deleteAssets([introID])
+        undoManager.endUndoGrouping()
+
+        #expect(editor.asset(id: introID) == nil)
+        #expect(editor.project.folders.allSatisfy { !$0.assetIDs.contains(introID) })
+        #expect(editor.project.sequences.allSatisfy { sequence in !sequence.tracks.flatMap(\.clips).contains { $0.assetID == introID } })
+        // 지운 자리는 빈 틈으로 남고 뒤 클립은 움직이지 않는다.
+        #expect(editor.currentSequence.clip(id: bRollClip.id) == bRollClip)
+        #expect(editor.clipUsage(of: [introID]).clipCount == 0)
+        #expect(undoManager.undoActionName == "원본 삭제")
+
+        undoManager.undo()
+        #expect(editor.project == before)
     }
 
     @Test("클립 이동·삭제·자르기는 현재 시퀀스를 바꾸고 각각 실행 취소 이름을 남긴다")

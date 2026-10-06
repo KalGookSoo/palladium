@@ -117,6 +117,33 @@ nonisolated extension Project {
         folders[folderIndex].assetIDs.insert(contentsOf: movingIDs, at: insertIndex)
     }
 
+    /// 원본을 프로젝트에서 뺀다(#60). 폴더에서도 빼고, 그 원본을 쓰는 모든 시퀀스의 클립도 함께 지운다.
+    /// 지운 클립 자리는 빈 틈으로 둔다(뒤 클립·자막·마스크와 시간이 어긋나지 않게). 디스크의 파일은 건드리지 않는다.
+    mutating func deleteAssets(_ assetIDs: Set<MediaAsset.ID>) {
+        assets.removeAll { assetIDs.contains($0.id) }
+        for index in folders.indices {
+            folders[index].assetIDs.removeAll { assetIDs.contains($0) }
+        }
+        for index in sequences.indices {
+            let clipIDs = sequences[index].tracks.flatMap(\.clips).filter { assetIDs.contains($0.assetID) }.map(\.id)
+            sequences[index].removeClips(Set(clipIDs), ripple: false)
+        }
+    }
+
+    /// 원본을 쓰는 클립 수와 그 클립이 있는 시퀀스 이름(프로젝트 순서). 지우기 전 확인 창에 쓴다.
+    func clipUsage(of assetIDs: Set<MediaAsset.ID>) -> (clipCount: Int, sequenceNames: [String]) {
+        var clipCount = 0
+        var sequenceNames: [String] = []
+        for sequence in sequences {
+            let count = sequence.tracks.flatMap(\.clips).filter { assetIDs.contains($0.assetID) }.count
+            if count > 0 {
+                clipCount += count
+                sequenceNames.append(sequence.name)
+            }
+        }
+        return (clipCount, sequenceNames)
+    }
+
     /// 시퀀스가 최소 하나는 있어야 하므로 마지막 남은 시퀀스는 지우지 않는다. 원본은 그대로 남는다.
     mutating func deleteSequence(_ sequenceID: EditSequence.ID) {
         guard sequences.count > 1 else { return }

@@ -13,6 +13,8 @@ struct SwiftDataProjectRepositoryTests {
             for: ProjectRecord.self, ProjectBackupRecord.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
+        // 저장소는 직접 저장한다. 자동 저장 타이머가 테스트가 끝나 사라진 컨테이너에 불리면 앱이 멈추므로 끈다.
+        container.mainContext.autosaveEnabled = false
     }
 
     @Test("저장된 프로젝트가 없으면 목록이 비어 있다")

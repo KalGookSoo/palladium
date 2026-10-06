@@ -57,6 +57,7 @@ enum ShortcutGuide {
     static let toggleClipSelection = ShortcutGuideEntry(title: "선택에 더하기/빼기", summary: "클립을 하나씩 더 고르거나 뺍니다", keys: "⌘ 클릭")
     static let extendClipSelection = ShortcutGuideEntry(title: "범위 선택", summary: "같은 트랙에서 고른 클립까지 사이를 모두 고릅니다", keys: "⇧ 클릭")
     static let renameAsset = ShortcutGuideEntry(title: "원본 이름 변경", summary: "미디어 패널에서 고른 원본의 이름을 바꿉니다", keys: "F2")
+    static let deleteAsset = ShortcutGuideEntry(title: "원본 삭제", summary: "미디어 패널에서 고른 원본을 프로젝트에서 뺍니다(쓰는 클립도 함께, 원본 파일은 남음)", keys: "⌫ (미디어 패널)")
     static let filterMedia = ShortcutGuideEntry(title: "필터", summary: "색상 레이블로 원본을 거릅니다", keys: nil)
 
     static let showShortcuts = ShortcutGuideEntry(title: "단축키 목록", summary: "도움말 창에서 모든 단축키를 봅니다", keys: "⌘/")
@@ -67,7 +68,7 @@ enum ShortcutGuide {
         ("파일", [openProjectList, newProject, save, close, importMedia, export, batchExport]),
         ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline]),
         ("재생", [playPause, previousFrame, nextFrame, narration]),
-        ("편집", [undo, redo, renameAsset]),
+        ("편집", [undo, redo, renameAsset, deleteAsset]),
         ("타임라인", [deleteClips, rippleDeleteClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect, addMarker, addSubtitle, preciseTrim, rollTrim, slipTrim, slideTrim]),
         ("도움말", [showHelp, showShortcuts]),
     ]

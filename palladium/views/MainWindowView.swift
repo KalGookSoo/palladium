@@ -42,6 +42,8 @@ struct MainWindowView: View {
     /// 훑어보기(Quick Look) 창에 띄울 원본 파일.
     @State private var quickLookURL: URL?
     @State private var selectedClipIDs: Set<Clip.ID> = []
+    /// 미디어 패널 목록에 포커스가 있으면 ⌫는 원본 삭제(#60)라 타임라인 삭제로 가로채지 않는다.
+    @State private var isMediaPanelFocused = false
     /// 자막 트랙에서 고른 자막. 클립 선택과 함께 있지 않는다.
     @State private var selectedSubtitleID: Subtitle.ID?
     /// 마스크 레인에서 고른 마스크(#59). 클립·자막 선택과 함께 있지 않는다.
@@ -380,7 +382,8 @@ struct MainWindowView: View {
                 editor: editor,
                 selectedAssetID: $selectedAssetID,
                 openAsset: quickLook,
-                importFiles: importMedia(from:)
+                importFiles: importMedia(from:),
+                isListFocused: $isMediaPanelFocused
             )
             // 놓을 곳을 창 전체로 잡으면 분할 뷰 경계를 덮어 크기 조절 커서가 나타나지 않으므로,
             // Finder에서 끌어온 파일은 미디어 패널과 미리보기에 놓을 때만 가져온다.
@@ -643,6 +646,7 @@ struct MainWindowView: View {
             default: previewPlayer.stepFrame(by: 1, in: timeline)
             }
         case .deleteSelection, .rippleDeleteSelection:
+            guard !isMediaPanelFocused else { return false }
             if let selectedSubtitleID {
                 deleteSubtitle(selectedSubtitleID)
                 return true

@@ -58,6 +58,17 @@ final class ProjectEditor {
         return report
     }
 
+    /// 원본을 프로젝트에서 빼고, 그 원본을 쓰는 모든 시퀀스의 클립도 함께 지운다(#60). 실행 취소 한 번으로 모두 되돌린다.
+    /// 디스크의 원본 파일은 지우지 않는다.
+    func deleteAssets(_ assetIDs: Set<MediaAsset.ID>) {
+        perform("원본 삭제") { $0.deleteAssets(assetIDs) }
+    }
+
+    /// 원본을 쓰는 클립 수와 시퀀스 이름. 지우기 전 확인 창에 쓴다.
+    func clipUsage(of assetIDs: Set<MediaAsset.ID>) -> (clipCount: Int, sequenceNames: [String]) {
+        project.clipUsage(of: assetIDs)
+    }
+
     /// 프로젝트 안에서 쓰는 원본 이름만 바꾼다(원본 파일 이름은 그대로). 비어 있으면 바꾸지 않는다.
     func renameAsset(_ assetID: MediaAsset.ID, to newName: String) {
         updateAssets([assetID], actionName: "이름 변경") { $0.rename(to: newName) }

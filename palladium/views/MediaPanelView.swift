@@ -12,7 +12,12 @@ struct MediaPanelView: View {
     let openAsset: (MediaAsset.ID) -> Void
     /// 행·폴더 머리는 원본 ID를 받으려고 문자열 놓기를 받는데, Finder에서 끈 파일도 문자열(파일 URL)로 들어오므로 가져오기로 넘긴다.
     var importFiles: ([URL]) -> Void = { _ in }
+    /// 목록에 포커스가 있는지. 편집 창이 ⌫를 타임라인 클립 삭제로 가로채지 않게 알린다.
+    var isListFocused: Binding<Bool> = .constant(false)
     @State private var filter = MediaFilter()
+    @FocusState private var listHasFocus: Bool
+    /// 클립이 쓰고 있어 확인을 기다리는 삭제(#60).
+    @State private var pendingDeletion: Set<MediaAsset.ID>?
     /// 태그를 편집 중인 원본. 편집 창이 닫히면 `nil`.
     @State private var tagEditingAssetID: MediaAsset.ID?
     @State private var tagText = ""
@@ -123,6 +128,73 @@ struct MediaPanelView: View {
             Button("취소", role: .cancel) {}
         }
         .focusedSceneValue(\.renameSelectedAsset, selectedAssetID.map { assetID in { beginRenaming(assetID) } })
+        .focused($listHasFocus)
+        .onChange(of: listHasFocus, initial: true) {
+            isListFocused.wrappedValue = listHasFocus
+        }
+        // 목록에 포커스가 있을 때 ⌫(편집 > 삭제)로 고른 원본을 지운다. 이름을 바꾸는 중에는 글자를 지운다.
+        .onDeleteCommand {
+            if let selectedAssetID, renamingAssetID == nil {
+                requestDeletion([selectedAssetID])
+            }
+        }
+        .confirmationDialog(
+            deletionTitle,
+            isPresented: Binding(
+                get: { pendingDeletion != nil },
+                set: {
+                    if !$0 {
+                        pendingDeletion = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("삭제", role: .destructive) {
+                if let pendingDeletion {
+                    delete(pendingDeletion)
+                }
+            }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text(deletionMessage)
+        }
+    }
+
+    // MARK: - Deletion
+
+    /// 타임라인에서 쓰이지 않으면 바로 지우고, 쓰이면 함께 지워질 클립을 알리고 확인을 받는다.
+    private func requestDeletion(_ assetIDs: Set<MediaAsset.ID>) {
+        if editor.clipUsage(of: assetIDs).clipCount == 0 {
+            delete(assetIDs)
+        } else {
+            pendingDeletion = assetIDs
+        }
+    }
+
+    /// 원본과 그 클립을 지운다(실행 취소 가능). 디스크의 원본 파일은 두고, 앱 캐시인 프록시만 지운다.
+    private func delete(_ assetIDs: Set<MediaAsset.ID>) {
+        for asset in editor.project.assets where assetIDs.contains(asset.id) {
+            ProxyGenerator.shared.removeProxy(for: asset)
+        }
+        editor.deleteAssets(assetIDs)
+        if let selectedAssetID, assetIDs.contains(selectedAssetID) {
+            self.selectedAssetID = nil
+        }
+        pendingDeletion = nil
+    }
+
+    private var deletionTitle: String {
+        guard let pendingDeletion else { return "" }
+        let names = editor.project.assets.filter { pendingDeletion.contains($0.id) }.map(\.name)
+        return names.count == 1 ? "\"\(names[0])\" 원본을 삭제하시겠습니까?" : "원본 \(names.count)개를 삭제하시겠습니까?"
+    }
+
+    private var deletionMessage: String {
+        guard let pendingDeletion else { return "" }
+        let usage = editor.clipUsage(of: pendingDeletion)
+        let sequences = usage.sequenceNames.map { "\"\($0)\"" }.joined(separator: ", ")
+        return "이 원본을 쓰는 클립 \(usage.clipCount)개(시퀀스 \(sequences))도 함께 지워집니다. 클립이 있던 자리는 빈 채로 남습니다. 원본 파일은 디스크에 그대로 남고, 실행 취소(⌘Z)로 되돌릴 수 있습니다."
     }
 
     /// 타임라인에 놓으면 클립이 되고, 다른 원본 위에 놓으면 그 원본이 있는 폴더의 그 자리로 옮긴다. 원본 ID만 문자열로 보낸다.
@@ -233,6 +305,11 @@ struct MediaPanelView: View {
                 .disabled(!videos.contains { ProxyGenerator.shared.hasProxy($0) || ProxyGenerator.shared.progress[$0.id] != nil })
             Divider()
         }
+        Divider()
+        // 메뉴 오른쪽에 단축키를 보여준다. 실제 ⌫는 목록에 포커스가 있을 때 처리한다.
+        Button("삭제…", role: .destructive) { requestDeletion(assetIDs) }
+            .keyboardShortcut(.delete, modifiers: [])
+        Divider()
         Menu("폴더로 이동") {
             Button("분류 안 됨") { editor.moveAssets(Array(assetIDs), toFolder: nil) }
             Divider()
