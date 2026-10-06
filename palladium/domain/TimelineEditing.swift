@@ -18,10 +18,12 @@ nonisolated extension Clip {
             timelineStart: clippedStart
         )
         portion?.speed = speed
-        // 나눈 조각도 같은 위치·크기·불투명도·음량을 가진다.
+        // 나눈 조각도 같은 위치·크기·불투명도·음량·별칭·색상 레이블을 가진다.
         portion?.transform = transform
         portion?.volume = volume
         portion?.isMuted = isMuted
+        portion?.name = name
+        portion?.colorLabel = colorLabel
         // 앞 클립과의 전환은 원래 시작을 가진 조각에만 남는다.
         if clippedStart == timelineStart {
             portion?.transitionIn = transitionIn
@@ -205,6 +207,15 @@ nonisolated extension EditSequence {
             track.clips[other].timelineStart = track.clips[other].timelineStart + change
         }
         tracks[trackIndex] = track
+    }
+
+    /// 고른 클립 모두를 같은 방식으로 바꾼다(별칭·색상 레이블처럼 위치·길이와 상관없는 속성용).
+    mutating func updateClips(_ clipIDs: Set<Clip.ID>, _ change: (inout Clip) -> Void) {
+        for trackIndex in tracks.indices {
+            for clipIndex in tracks[trackIndex].clips.indices where clipIDs.contains(tracks[trackIndex].clips[clipIndex].id) {
+                change(&tracks[trackIndex].clips[clipIndex])
+            }
+        }
     }
 
     /// `range` 동안 비어 있는 첫 오디오 트랙. 녹음한 내레이션을 다른 클립을 밀지 않고 놓을 곳이다(#10).

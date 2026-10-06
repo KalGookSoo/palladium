@@ -20,6 +20,10 @@ nonisolated struct Clip {
     var audioCrossfadeIn: CMTime?
     /// 재생 속도(#58). 2면 두 배 빠르게 재생해 타임라인 길이가 절반이다. `speedOptions` 중 하나다.
     var speed = 1.0
+    /// 타임라인에서 쓰임새를 구분하는 별칭(#78). `nil`이면 원본 이름을 보여준다.
+    var name: String?
+    /// 클립 색상 레이블(#78). 원본과 같은 7색을 쓴다.
+    var colorLabel: ColorLabel?
 
     init?(id: UUID = UUID(), assetID: MediaAsset.ID, sourceRange: CMTimeRange, timelineStart: CMTime) {
         guard sourceRange.start.isNumeric, sourceRange.duration.isNumeric, sourceRange.duration > .zero, timelineStart.isNumeric, timelineStart >= .zero else { return nil }
@@ -60,6 +64,21 @@ nonisolated extension Clip {
     private static func scaled(_ time: CMTime, by factor: Double) -> CMTime {
         let fine = CMTimeConvertScale(time, timescale: speedTimescale, method: .roundHalfAwayFromZero)
         return CMTime(value: CMTimeValue((Double(fine.value) * factor).rounded()), timescale: speedTimescale)
+    }
+
+    /// 타임라인·인스펙터에 보일 이름. 별칭이 없으면 원본 이름이다.
+    func displayName(assetName: String) -> String {
+        name ?? assetName
+    }
+}
+
+// MARK: - Commands
+
+nonisolated extension Clip {
+    /// 별칭을 바꾼다. 앞뒤 공백을 빼고, 비어 있으면 별칭을 떼 원본 이름을 보여준다.
+    mutating func rename(to newName: String) {
+        let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        name = trimmedName.isEmpty ? nil : trimmedName
     }
 }
 

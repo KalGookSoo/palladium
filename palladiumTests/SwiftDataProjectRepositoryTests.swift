@@ -89,6 +89,19 @@ struct SwiftDataProjectRepositoryTests {
         #expect(try repository.project(id: edited.id) == edited)
     }
 
+    @Test("클립 별칭·색상 레이블도 저장했다가 그대로 불러온다")
+    func clipLabelsRoundTrip() throws {
+        let repository = SwiftDataProjectRepository(modelContext: container.mainContext)
+        var edited = try sampleContent(withID: repository.createProject(named: "샘플").id)
+        let trackIndex = try #require(edited.sequences[0].tracks.firstIndex { !$0.clips.isEmpty })
+        edited.sequences[0].tracks[trackIndex].clips[0].rename(to: "인트로")
+        edited.sequences[0].tracks[trackIndex].clips[0].colorLabel = .orange
+
+        try repository.save(edited)
+
+        #expect(try repository.project(id: edited.id) == edited)
+    }
+
     @Test("다시 저장하면 이전 내용이 남지 않고 새 내용으로 바뀐다")
     func savingAgainReplacesContent() throws {
         let repository = SwiftDataProjectRepository(modelContext: container.mainContext)

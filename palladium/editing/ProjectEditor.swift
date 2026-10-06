@@ -333,6 +333,16 @@ final class ProjectEditor {
         editCurrentSequence("자르기") { $0.split(at: time, clipIDs: clipIDs.isEmpty ? nil : clipIDs) }
     }
 
+    /// 클립 별칭을 바꾼다(#78). 비우면 별칭을 떼 원본 이름을 보여준다. 원본 이름(`renameAsset`)과는 따로다.
+    func renameClip(_ clipID: Clip.ID, to newName: String) {
+        editCurrentSequence("클립 이름 변경") { $0.updateClips([clipID]) { $0.rename(to: newName) } }
+    }
+
+    /// 고른 클립 모두의 색상 레이블을 바꾼다(#78). `nil`이면 뗀다.
+    func setClipColorLabel(_ colorLabel: ColorLabel?, for clipIDs: Set<Clip.ID>) {
+        editCurrentSequence("클립 색상 레이블") { $0.updateClips(clipIDs) { $0.colorLabel = colorLabel } }
+    }
+
     @discardableResult
     func addFolder(named name: String) -> MediaFolder.ID {
         var folderID = UUID()

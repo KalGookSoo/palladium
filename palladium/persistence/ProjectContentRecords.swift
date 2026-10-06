@@ -128,6 +128,10 @@ final class ClipRecord {
     var audioCrossfadeValue: Int64?
     var audioCrossfadeTimescale: Int32 = 600
     var speed: Double = 1
+    /// 클립 별칭(#78). `nil`이면 원본 이름을 보여준다.
+    var name: String?
+    /// 클립 색상 레이블(`ColorLabel`). `nil`이면 없다.
+    var colorLabelRawValue: String?
     var track: TrackRecord?
 
     init(

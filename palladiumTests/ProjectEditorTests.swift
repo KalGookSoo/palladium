@@ -313,6 +313,78 @@ struct ProjectEditorTests {
         #expect(editor.project.sequences.count == 1)
     }
 
+    @Test("클립 별칭은 앞뒤 공백을 빼고 저장하며, 비우면 다시 원본 이름을 보여주고, 원본 이름을 바꿔도 별칭은 그대로다")
+    func renameClip() throws {
+        let editor = try makeEditorWithSampleContent()
+        let clips = try #require(editor.currentSequence.tracks.first { $0.kind == .video }?.clips)
+        let named = clips[0]
+        let unnamedID = try #require(clips.first { $0.assetID != named.assetID }?.id)
+        let unnamedAssetID = try #require(editor.currentSequence.clip(id: unnamedID)?.assetID)
+        let assetName = try #require(editor.asset(id: named.assetID)?.name)
+        // 기본은 별칭이 없어 원본 이름을 보여준다.
+        #expect(named.name == nil)
+        #expect(named.displayName(assetName: assetName) == assetName)
+
+        editor.renameClip(named.id, to: "  인트로 \n")
+        #expect(editor.currentSequence.clip(id: named.id)?.name == "인트로")
+
+        editor.renameAsset(named.assetID, to: "오프닝 원본")
+        editor.renameAsset(unnamedAssetID, to: "새 원본 이름")
+        #expect(editor.currentSequence.clip(id: named.id)?.displayName(assetName: "오프닝 원본") == "인트로")
+        let unnamed = try #require(editor.currentSequence.clip(id: unnamedID))
+        #expect(try unnamed.displayName(assetName: #require(editor.asset(id: unnamedAssetID)?.name)) == "새 원본 이름")
+
+        editor.renameClip(named.id, to: "   ")
+        #expect(editor.currentSequence.clip(id: named.id)?.name == nil)
+        #expect(editor.currentSequence.clip(id: named.id)?.displayName(assetName: "오프닝 원본") == "오프닝 원본")
+    }
+
+    @Test("클립 색상 레이블은 고른 클립 모두에 붙고 \"없음\"으로 떼며, 나눈 조각도 같은 별칭·색을 가진다")
+    func setClipColorLabel() throws {
+        let editor = try makeEditorWithSampleContent()
+        let clips = try #require(editor.currentSequence.tracks.first { $0.kind == .video }?.clips)
+        let ids: Set<Clip.ID> = [clips[0].id, clips[1].id]
+
+        editor.setClipColorLabel(.green, for: ids)
+        let labeledIDs = Set(editor.currentSequence.tracks.flatMap(\.clips).filter { $0.colorLabel == ColorLabel.green }.map(\.id))
+        #expect(labeledIDs == ids)
+
+        editor.setClipColorLabel(nil, for: [clips[1].id])
+        #expect(editor.currentSequence.clip(id: clips[1].id)?.colorLabel == nil)
+        #expect(editor.currentSequence.clip(id: clips[0].id)?.colorLabel == .green)
+
+        editor.renameClip(clips[0].id, to: "후렴")
+        editor.splitClips([clips[0].id], at: clips[0].timelineStart + CMTime(value: 1, timescale: 1))
+        let pieces = editor.currentSequence.tracks.flatMap(\.clips).filter { $0.assetID == clips[0].assetID }
+        #expect(pieces.count == 2)
+        #expect(pieces.allSatisfy { $0.name == "후렴" && $0.colorLabel == .green })
+        #expect(editor.hasUnsavedChanges)
+    }
+
+    @Test("클립 이름·색 변경은 실행 취소 한 번으로 되돌린다")
+    func clipLabelEditsUndo() throws {
+        let editor = try makeEditorWithSampleContent()
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+        editor.undoManager = undoManager
+        let clips = try #require(editor.currentSequence.tracks.first { $0.kind == .video }?.clips)
+        let before = editor.project
+
+        undoManager.beginUndoGrouping()
+        editor.renameClip(clips[0].id, to: "인트로")
+        undoManager.endUndoGrouping()
+        #expect(undoManager.undoActionName == "클립 이름 변경")
+        undoManager.undo()
+        #expect(editor.project == before)
+
+        undoManager.beginUndoGrouping()
+        editor.setClipColorLabel(.red, for: [clips[0].id, clips[1].id])
+        undoManager.endUndoGrouping()
+        #expect(undoManager.undoActionName == "클립 색상 레이블")
+        undoManager.undo()
+        #expect(editor.project == before)
+    }
+
     // MARK: - Helpers
 
     /// 샘플 내용을 저장한 프로젝트를 여는 편집기.

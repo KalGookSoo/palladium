@@ -76,12 +76,14 @@ struct TrackRowView: View {
         let asset = assets.first { $0.id == clip.assetID }
         let width = scale.width(for: clip.timelineDuration)
 
-        // 속도를 바꾼 클립은 이름 뒤에 배율을 붙인다.
-        let title = (asset?.name ?? "알 수 없는 원본") + (clip.speed == 1 ? "" : " · \(clip.speed.formatted())×")
+        let assetName = asset?.name ?? "알 수 없는 원본"
+        // 별칭이 없으면 원본 이름이다. 속도를 바꾼 클립은 이름 뒤에 배율을 붙인다.
+        let title = clip.displayName(assetName: assetName) + (clip.speed == 1 ? "" : " · \(clip.speed.formatted())×")
 
-        return ClipView(title: title, symbolName: track.kind.symbolName, isSelected: selectedClipIDs.contains(clip.id)) {
+        return ClipView(title: title, symbolName: track.kind.symbolName, isSelected: selectedClipIDs.contains(clip.id), colorLabel: clip.colorLabel) {
             ClipContentView(asset: asset, clip: clip, width: width, showsFilmstrip: showsFilmstrip, showsWaveform: showsWaveform)
         }
+        .help("원본: \(assetName)")
         .frame(width: max(width - 2, 1), height: clipHeight)
         .offset(x: scale.x(for: clip.timelineStart) + 1 + offset.width, y: TimelineMetrics.clipVerticalInset + offset.height)
         .onTapGesture { select(clip) }
@@ -188,6 +190,24 @@ struct TrackRowView: View {
                 Divider()
                 Button("전환 없음") { actions.setTransition(clip.id, nil) }
                     .disabled(clip.transitionIn == nil)
+            }
+        }
+        Divider()
+        // 별칭은 클립마다 다르므로 하나를 골랐을 때만 바꾼다. 입력은 인스펙터 맨 위 이름 칸에서 한다.
+        if targetIDs.count == 1 {
+            Button(ShortcutGuide.rename.title) { actions.renameClip(clip.id) }
+                .keyboardShortcut(.f2, modifiers: [])
+        }
+        Menu("색상 레이블") {
+            Button("없음") { actions.setClipColorLabel(targetIDs, nil) }
+            Divider()
+            ForEach(ColorLabel.allCases, id: \.self) { label in
+                Button {
+                    actions.setClipColorLabel(targetIDs, label)
+                } label: {
+                    Label(label.title, systemImage: "circle.fill")
+                        .tint(label.color)
+                }
             }
         }
         Divider()

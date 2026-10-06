@@ -9,10 +9,12 @@ enum ClipViewMetrics {
 
 /// 트랙 종류는 색이 아니라 트랙 레이블과 클립 내용 모양으로 구분하므로 바탕은 중립색으로 둔다.
 /// 내용(필름스트립·파형)은 바탕과 이름 사이에 그리고, 이름까지 모두 클립 모양 안에서 잘라 짧은 클립 밖으로 넘치지 않게 한다.
+/// 색상 레이블(#78)이 있으면 테두리와 이름 바탕을 그 색으로 칠한다(선택한 클립 테두리는 강조색).
 struct ClipView<Content: View>: View {
     let title: String
     let symbolName: String
     let isSelected: Bool
+    var colorLabel: ColorLabel?
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -30,6 +32,8 @@ struct ClipView<Content: View>: View {
                             .lineLimit(1)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
+                            // 색상 레이블은 반투명 바탕 위에 겹쳐 이름 배경을 그 색으로 물들인다.
+                            .background(colorLabel?.color.opacity(0.45) ?? .clear, in: RoundedRectangle(cornerRadius: 3))
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 3))
                             .padding(3)
                     }
@@ -37,21 +41,28 @@ struct ClipView<Content: View>: View {
                 .clipShape(shape)
                 .overlay {
                     // 맞닿은 클립끼리 구분되도록 테두리를 진하게 그린다.
-                    shape.strokeBorder(
-                        isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.primary.opacity(0.35)),
-                        lineWidth: isSelected ? 2 : 1
-                    )
+                    shape.strokeBorder(borderStyle, lineWidth: isSelected || colorLabel != nil ? 2 : 1)
                 }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
+
+    private var borderStyle: AnyShapeStyle {
+        if isSelected {
+            AnyShapeStyle(Color.accentColor)
+        } else if let colorLabel {
+            AnyShapeStyle(colorLabel.color)
+        } else {
+            AnyShapeStyle(Color.primary.opacity(0.35))
+        }
+    }
 }
 
 extension ClipView where Content == EmptyView {
-    init(title: String, symbolName: String, isSelected: Bool) {
-        self.init(title: title, symbolName: symbolName, isSelected: isSelected) { EmptyView() }
+    init(title: String, symbolName: String, isSelected: Bool, colorLabel: ColorLabel? = nil) {
+        self.init(title: title, symbolName: symbolName, isSelected: isSelected, colorLabel: colorLabel) { EmptyView() }
     }
 }
 
@@ -165,8 +176,9 @@ private struct WaveformShape: Shape {
     VStack {
         ClipView(title: "intro.mov", symbolName: "film", isSelected: false)
         ClipView(title: "b-roll.mov", symbolName: "film", isSelected: true)
+        ClipView(title: "후렴 1", symbolName: "film", isSelected: false, colorLabel: .green)
         ClipView(title: "background-music.m4a", symbolName: "waveform", isSelected: false)
     }
-    .frame(width: 200, height: 120)
+    .frame(width: 200, height: 160)
     .padding()
 }

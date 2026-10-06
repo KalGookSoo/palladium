@@ -127,7 +127,7 @@ struct MediaPanelView: View {
             }
             Button("취소", role: .cancel) {}
         }
-        .focusedSceneValue(\.renameSelectedAsset, selectedAssetID.map { assetID in { beginRenaming(assetID) } })
+        .focusedSceneValue(\.renameSelectedAsset, listHasFocus ? selectedAssetID.map { assetID in { beginRenaming(assetID) } } : nil)
         .focused($listHasFocus)
         .onChange(of: listHasFocus, initial: true) {
             isListFocused.wrappedValue = listHasFocus

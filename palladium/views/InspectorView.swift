@@ -8,6 +8,10 @@ struct InspectorView: View {
     let asset: MediaAsset?
     /// 여러 클립을 골랐으면 속성 대신 고른 개수를 보여준다.
     var selectedClipCount = 0
+    /// `true`면 이름 칸에 포커스를 주고 `false`로 되돌린다(F2·우클릭 > 이름 변경).
+    var isNameFocusRequested: Binding<Bool> = .constant(false)
+    /// 클립 별칭(#78). 비우면 원본 이름을 보여준다.
+    var renameClip: (Clip.ID, String) -> Void = { _, _ in }
     /// 트림 탭에서 원본 시작·끝 지점을 입력했을 때.
     var setClipSource: (Clip.ID, CMTime, CMTime) -> Void = { _, _, _ in }
     var setTransform: (Clip.ID, ClipTransform) -> Void = { _, _ in }
@@ -47,7 +51,7 @@ struct InspectorView: View {
             )
         } else if let clip {
             VStack(alignment: .leading, spacing: 0) {
-                InspectorHeader(clip: clip, asset: asset)
+                InspectorHeader(clip: clip, asset: asset, isNameFocusRequested: isNameFocusRequested, rename: renameClip)
                     .padding()
 
                 Picker("속성", selection: $selectedTab) {
@@ -134,21 +138,64 @@ private enum InspectorTab: CaseIterable, Identifiable {
     }
 }
 
+/// 맨 위 이름 칸에서 클립 별칭을 바꾼다. 비어 있으면 원본 이름이 흐리게 보이고, Return·다른 곳 누르기로 확정, Esc로 취소한다.
 private struct InspectorHeader: View {
     let clip: Clip
     let asset: MediaAsset?
+    @Binding var isNameFocusRequested: Bool
+    let rename: (Clip.ID, String) -> Void
+    @State private var nameText = ""
+    @FocusState private var isNameFocused: Bool
 
     var body: some View {
         let durationText = Duration.seconds(clip.timelineDuration.seconds).formatted(.time(pattern: .minuteSecond))
+        let assetName = asset?.name ?? "알 수 없는 원본"
 
         VStack(alignment: .leading) {
-            Text(asset?.name ?? "알 수 없는 원본")
+            TextField("클립 이름", text: $nameText, prompt: Text(assetName))
+                .textFieldStyle(.plain)
                 .font(.headline)
                 .lineLimit(1)
-            Text("\(kindTitle) 클립 · \(durationText)")
+                .focused($isNameFocused)
+                .onSubmit { isNameFocused = false }
+                .onExitCommand {
+                    nameText = clip.name ?? ""
+                    isNameFocused = false
+                }
+                // 다른 곳을 누르는 등 입력란에서 벗어나면 입력한 이름으로 확정한다(같으면 편집이 남지 않는다).
+                .onChange(of: isNameFocused) { _, isFocused in
+                    if !isFocused {
+                        rename(clip.id, nameText)
+                    }
+                }
+                .help("클립 이름 — 타임라인에서 쓰임새를 구분하는 별칭입니다. 비우면 원본 이름을 보여줍니다 (F2)")
+            // 별칭이 있으면 원본 이름을 함께 보여준다.
+            Text(clip.name == nil ? "\(kindTitle) 클립 · \(durationText)" : "원본: \(assetName) · \(kindTitle) 클립 · \(durationText)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
                 .monospacedDigit()
+        }
+        // 다른 클립을 고르거나 실행 취소로 별칭이 바뀌면 입력란도 따라간다.
+        .onChange(of: clip.id, initial: true) { oldID, _ in
+            // 입력하던 중 다른 클립을 고르면 입력한 이름은 원래 클립에 확정한다.
+            if isNameFocused {
+                rename(oldID, nameText)
+            }
+            nameText = clip.name ?? ""
+        }
+        .onChange(of: clip.name) { nameText = clip.name ?? "" }
+        // 입력하던 중 선택이 풀려 머리말이 사라져도 입력한 이름을 확정한다.
+        .onDisappear {
+            if isNameFocused {
+                rename(clip.id, nameText)
+            }
+        }
+        .onChange(of: isNameFocusRequested, initial: true) {
+            if isNameFocusRequested {
+                isNameFocused = true
+                isNameFocusRequested = false
+            }
         }
     }
 

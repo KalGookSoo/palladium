@@ -82,6 +82,7 @@ private extension SequenceRecord {
                 )
                 .withAudio(volume: clip.volume, isMuted: clip.isMuted)
                 .withTransitions(of: clip)
+                .withLabels(of: clip)
             }
             return trackRecord
         }
@@ -193,6 +194,12 @@ private extension ClipRecord {
         return self
     }
 
+    func withLabels(of clip: Clip) -> ClipRecord {
+        name = clip.name
+        colorLabelRawValue = clip.colorLabel?.rawValue
+        return self
+    }
+
     func makeClip() -> Clip? {
         let sourceRange = CMTimeRange(
             start: CMTime(value: sourceStartValue, timescale: sourceStartTimescale),
@@ -212,6 +219,8 @@ private extension ClipRecord {
         }
         clip?.audioCrossfadeIn = audioCrossfadeValue.map { CMTime(value: $0, timescale: audioCrossfadeTimescale) }
         clip?.speed = Clip.speedOptions.contains(speed) ? speed : 1
+        clip?.name = name
+        clip?.colorLabel = colorLabelRawValue.flatMap(ColorLabel.init(rawValue:))
         if clip == nil {
             let clipID = id
             Logger.project.error("Clip 불변식을 어기는 저장값이라 건너뜀: \(clipID, privacy: .public)")

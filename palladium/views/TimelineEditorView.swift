@@ -28,6 +28,10 @@ struct TimelineActions {
     var deleteClips: (Set<Clip.ID>, Bool) -> Void = { _, _ in }
     /// 재생 헤드에서 나눈다. 비어 있으면 재생 헤드에 걸친 모든 클립을 나눈다.
     var splitClips: (Set<Clip.ID>) -> Void = { _ in }
+    /// 클립 별칭 입력을 시작한다(#78). 상위가 그 클립을 고르고 인스펙터 이름 칸에 포커스를 준다.
+    var renameClip: (Clip.ID) -> Void = { _ in }
+    /// 고른 클립 모두의 색상 레이블. `nil`이면 뗀다(#78).
+    var setClipColorLabel: (Set<Clip.ID>, ColorLabel?) -> Void = { _, _ in }
     /// 원본을 훑어보기(Quick Look) 창으로 연다.
     var openAsset: (MediaAsset.ID) -> Void = { _ in }
     var revealAsset: (MediaAsset.ID) -> Void = { _ in }

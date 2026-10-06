@@ -48,6 +48,8 @@ struct MainWindowView: View {
     @State private var selectedSubtitleID: Subtitle.ID?
     /// 마스크 레인에서 고른 마스크(#59). 클립·자막 선택과 함께 있지 않는다.
     @State private var selectedMaskID: Mask.ID?
+    /// `true`면 인스펙터 이름 칸에 포커스를 준다(F2·우클릭 > 이름 변경, #78). 인스펙터가 포커스를 준 뒤 되돌린다.
+    @State private var isClipNameFocusRequested = false
     /// 타임라인에서 클립·원본을 끄는 중인지. Esc로 끌기를 취소할 때 쓴다.
     @State private var isTimelineDragging = false
     @State private var timelineDragCancelCount = 0
@@ -134,6 +136,7 @@ struct MainWindowView: View {
             .focusedSceneValue(\.importSubtitles) { chooseSubtitleFile() }
             .focusedSceneValue(\.exportSubtitles, exportSubtitlesAction)
             .focusedSceneValue(\.splitClips, splitAction)
+            .focusedSceneValue(\.renameSelectedClip, selectedClip.map { clip in { beginRenamingClip(clip.id) } })
             .focusedSceneValue(\.isTimelineVisible, $isTimelineVisible)
             .focusedSceneValue(\.isInspectorPresented, $isInspectorPresented)
             .focusedSceneValue(\.timelineScale, $timelineScale)
@@ -335,6 +338,8 @@ struct MainWindowView: View {
             splitClips: { clipIDs in
                 editor.splitClips(clipIDs, at: playheadTime)
             },
+            renameClip: beginRenamingClip,
+            setClipColorLabel: { clipIDs, colorLabel in editor.setClipColorLabel(colorLabel, for: clipIDs) },
             openAsset: quickLook,
             revealAsset: { assetID in selectedAssetID = assetID },
             switchSequence: { sequenceID in
@@ -407,6 +412,8 @@ struct MainWindowView: View {
                 clip: selectedClip,
                 asset: selectedClipAsset,
                 selectedClipCount: selectedClipIDs.count,
+                isNameFocusRequested: $isClipNameFocusRequested,
+                renameClip: { clipID, name in editor.renameClip(clipID, to: name) },
                 setClipSource: { clipID, start, end in editor.setClipSource(clipID, start: start, end: end) },
                 setTransform: { clipID, transform in editor.setTransform(transform, for: clipID) },
                 setClipAudio: { clipID, volume, isMuted in editor.setClipAudio(volume: volume, isMuted: isMuted, for: clipID) },
@@ -747,6 +754,15 @@ struct MainWindowView: View {
         if selectedSubtitleID == subtitleID {
             selectedSubtitleID = nil
         }
+    }
+
+    /// 클립 하나를 고르고 인스펙터 맨 위 이름 칸에서 별칭을 입력받는다(#78).
+    private func beginRenamingClip(_ clipID: Clip.ID) {
+        selectedClipIDs = [clipID]
+        selectedSubtitleID = nil
+        selectedMaskID = nil
+        isInspectorPresented = true
+        isClipNameFocusRequested = true
     }
 
     /// 편집 > 클립 분할(⌘B). 재생 헤드에서 나눌 클립이 없으면 `nil`이라 메뉴가 비활성화된다.
