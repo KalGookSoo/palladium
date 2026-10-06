@@ -247,7 +247,7 @@ nonisolated enum SequenceComposer {
     /// 시퀀스 처음부터 끝까지 덮는 바탕 영상 트랙. 층으로 그리지 않으므로 화면에는 보이지 않는다.
     private static func addBlankBase(to composition: AVMutableComposition, duration: CMTime) async {
         do {
-            let source = AVURLAsset(url: try await BlankVideo.url())
+            let source = try AVURLAsset(url: await BlankVideo.url())
             guard let sourceVideo = try await source.loadTracks(withMediaType: .video).first,
                   let base = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
             else { return }
@@ -283,7 +283,7 @@ nonisolated struct VolumeRamp {
 }
 
 /// 트랙 하나에 쓰는 합성 트랙 두 줄. 전환으로 앞 클립과 겹치는 클립만 다른 줄로 바꿔 넣는다.
-nonisolated private final class Rolls {
+private final nonisolated class Rolls {
     private let tracks: [AVMutableCompositionTrack?]
     private var index = 0
 
@@ -303,7 +303,7 @@ nonisolated private final class Rolls {
 }
 
 /// 클립 앞뒤의 전환·크로스페이드. 컷 지점을 가운데 두고 앞뒤로 절반씩 걸친다(#8).
-nonisolated private struct TransitionEdges {
+private nonisolated struct TransitionEdges {
     let transition: ClipTransition?
     let crossfadeIn: CMTime?
     let crossfadeOut: CMTime?
@@ -317,10 +317,21 @@ nonisolated private struct TransitionEdges {
         crossfadeOut = next.flatMap { track.effectiveAudioCrossfade(into: $0) }
     }
 
-    var videoLead: CMTime { half(transition?.duration) }
-    var videoTail: CMTime { half(transitionOut?.duration) }
-    var audioLead: CMTime { half(crossfadeIn) }
-    var audioTail: CMTime { half(crossfadeOut) }
+    var videoLead: CMTime {
+        half(transition?.duration)
+    }
+
+    var videoTail: CMTime {
+        half(transitionOut?.duration)
+    }
+
+    var audioLead: CMTime {
+        half(crossfadeIn)
+    }
+
+    var audioTail: CMTime {
+        half(crossfadeOut)
+    }
 
     /// 전환으로 컷 앞뒤까지 늘어난, 화면에 그릴 구간.
     func videoRange(of clip: Clip) -> CMTimeRange {

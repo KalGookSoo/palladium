@@ -73,4 +73,3 @@ nonisolated extension AspectRatioPreset {
         }
     }
 }
-
