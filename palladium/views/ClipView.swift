@@ -25,7 +25,9 @@ struct ClipView<Content: View>: View {
         GeometryReader { geometry in
             shape
                 .fill(isSelected ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.quaternary))
-                .overlay { content }
+                // 내용은 보여주기만 한다. 필름스트립 칸은 채우기(scaledToFill)로 그려 세로 영상이면 칸 위아래로 넘치는데,
+                // `clipped()`·`clipShape`는 그림만 자르고 누르는 영역은 자르지 않아 위쪽 자막·마스크 레인의 끌기를 가로챈다.
+                .overlay { content.allowsHitTesting(false) }
                 .overlay(alignment: .topLeading) {
                     if geometry.size.width >= ClipViewMetrics.minimumLabelWidth {
                         // 필름스트립 위에서도 읽히도록 반투명 바탕 위에 이름을 둔다.

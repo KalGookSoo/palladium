@@ -79,7 +79,9 @@ struct RangeLaneView: View {
             .contentShape(Rectangle())
             .onTapGesture { selectedID = item.id }
             .gesture(
-                DragGesture(minimumDistance: 3)
+                // 끄는 동안 블록 자체가 옮겨 그려지므로, 블록 좌표로 재면 끈 거리가 블록 위치에 따라 되먹임돼 덜덜 떨린다.
+                // 창 좌표로 잰다(양 끝 손잡이와 같다).
+                DragGesture(minimumDistance: 3, coordinateSpace: .global)
                     .updating($isPointerDragging) { _, isDragging, _ in isDragging = true }
                     .onChanged { value in preview(item, edge: nil, distance: value.translation.width) }
                     .onEnded { value in commit(item, edge: nil, distance: value.translation.width) }
