@@ -1,7 +1,7 @@
 import AppKit
 
 /// 텍스트를 입력하는 중이 아닐 때 편집 창의 단일 키 단축키(Space·←/→·Delete·Esc 등)를 받는다.
-/// 수식키가 있는 단축키(⌘B 클립 분할 등)는 메뉴가 맡는다.
+/// 수식키가 있는 단축키(⌘B 클립 분할 등)는 메뉴가 맡는다. ⌘A·⌘C·⌘X·⌘V는 입력란에서 글자 선택·복사로 쓰이므로 여기서 받는다.
 /// 메뉴 단축키로 두면 검색창·이름 입력란에서 띄어쓰기·커서 이동·글자 지우기까지 가로채므로 키 입력을 직접 살핀다.
 final class EditorKeyMonitor {
     enum Key {
@@ -15,6 +15,10 @@ final class EditorKeyMonitor {
         case addMarker
         case addSubtitle
         case toggleNarration
+        /// 타임라인 복사·잘라내기·붙여넣기(#62). 입력란을 편집 중이면 글자 복사로 넘어간다.
+        case copy
+        case cut
+        case paste
     }
 
     /// 편집 창이 여러 개 열려 있어도 앞에 있는 창 하나만 반응하도록, 창이 앞에 있을 때만 받는다.
@@ -53,6 +57,9 @@ final class EditorKeyMonitor {
         case (46, []): return .addMarker
         case (17, []): return .addSubtitle
         case (15, []): return .toggleNarration
+        case (8, .command): return .copy
+        case (7, .command): return .cut
+        case (9, .command): return .paste
         default: return nil
         }
     }

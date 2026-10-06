@@ -16,6 +16,8 @@ final class ProjectEditor {
     private var lastBackedUpProject: Project?
     /// 타임라인에 보이고 클립 편집 커맨드가 적용되는 시퀀스.
     private(set) var currentSequenceID: EditSequence.ID
+    /// 복사·잘라낸 클립·자막·마스크(#62). 앱 안에서만 쓰고, 프로젝트(편집 창)마다 따로다. 실행 취소 대상이 아니다.
+    private(set) var clipboard: TimelineClipboard?
     @ObservationIgnored private let repository: ProjectRepository
     /// 창의 실행 취소 관리자. 메뉴의 실행 취소(⌘Z)·다시 실행(⇧⌘Z)이 이것을 쓴다. 없으면 실행 취소를 남기지 않는다.
     @ObservationIgnored weak var undoManager: UndoManager?
@@ -341,6 +343,65 @@ final class ProjectEditor {
     /// 고른 클립 모두의 색상 레이블을 바꾼다(#78). `nil`이면 뗀다.
     func setClipColorLabel(_ colorLabel: ColorLabel?, for clipIDs: Set<Clip.ID>) {
         editCurrentSequence("클립 색상 레이블") { $0.updateClips(clipIDs) { $0.colorLabel = colorLabel } }
+    }
+
+    /// 고른 클립을 클립보드에 담는다(#62). 프로젝트는 바꾸지 않는다. 고른 클립이 없으면 클립보드를 그대로 둔다.
+    func copyClips(_ clipIDs: Set<Clip.ID>) {
+        let copied = currentSequence.copiedClips(clipIDs)
+        if !copied.isEmpty {
+            clipboard = .clips(copied)
+        }
+    }
+
+    func copySubtitle(_ subtitleID: Subtitle.ID) {
+        if let subtitle = currentSequence.subtitles.first(where: { $0.id == subtitleID }) {
+            clipboard = .subtitle(subtitle)
+        }
+    }
+
+    func copyMask(_ maskID: Mask.ID) {
+        if let mask = currentSequence.masks.first(where: { $0.id == maskID }) {
+            clipboard = .mask(mask)
+        }
+    }
+
+    /// 고른 클립을 클립보드에 담고 지운 뒤 자리를 메운다(리플 삭제).
+    func cutClips(_ clipIDs: Set<Clip.ID>) {
+        copyClips(clipIDs)
+        editCurrentSequence("잘라내기") { $0.removeClips(clipIDs, ripple: true) }
+    }
+
+    /// 클립보드 내용을 현재 시퀀스의 `time`(재생 헤드)에 붙인다. 클립은 삽입 규칙대로 경계에 넣어 뒤 클립을 밀고,
+    /// 자막·마스크는 그 시각에 같은 길이로 붙인다(다른 블록을 밀지 않는다). 지운 원본(#60)의 클립은 붙이지 않는다.
+    /// 붙인 것이 없으면 `nil`.
+    @discardableResult
+    func pasteClips(at time: CMTime) -> PastedItems? {
+        var pasted: PastedItems?
+        switch clipboard {
+        case let .clips(copied):
+            let available = copied.filter { asset(id: $0.clip.assetID) != nil }
+            editCurrentSequence("붙여넣기") { sequence in
+                let ids = sequence.paste(available, at: time)
+                pasted = ids.isEmpty ? nil : .clips(ids)
+            }
+        case let .subtitle(subtitle):
+            editCurrentSequence("붙여넣기") { pasted = .subtitle($0.paste(subtitle, at: time)) }
+        case let .mask(mask):
+            editCurrentSequence("붙여넣기") { pasted = .mask($0.paste(mask, at: time)) }
+        case nil:
+            break
+        }
+        return pasted
+    }
+
+    /// 고른 클립을 바로 뒤(고른 클립 중 가장 늦게 끝나는 시각)에 복제한다. 클립보드는 바꾸지 않는다. 반환값은 새 클립 ID.
+    @discardableResult
+    func duplicateClips(_ clipIDs: Set<Clip.ID>) -> Set<Clip.ID> {
+        let copied = currentSequence.copiedClips(clipIDs)
+        guard let end = currentSequence.tracks.flatMap(\.clips).filter({ clipIDs.contains($0.id) }).map(\.timelineRange.end).max() else { return [] }
+        var duplicatedIDs: Set<Clip.ID> = []
+        editCurrentSequence("복제") { duplicatedIDs = $0.paste(copied, at: end) }
+        return duplicatedIDs
     }
 
     @discardableResult

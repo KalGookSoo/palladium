@@ -33,6 +33,7 @@ struct TrackRowView: View {
             Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture { selectedClipIDs = [] }
+                .contextMenu { pasteButton }
 
             ForEach(track.clips) { clip in
                 clipView(clip, offset: .zero)
@@ -193,6 +194,14 @@ struct TrackRowView: View {
             }
         }
         Divider()
+        Button(ShortcutGuide.cutClips.title) { actions.cutClips(targetIDs) }
+            .keyboardShortcut("x", modifiers: .command)
+        Button(ShortcutGuide.copyClips.title) { actions.copyClips(targetIDs) }
+            .keyboardShortcut("c", modifiers: .command)
+        pasteButton
+        Button(ShortcutGuide.duplicateClips.title) { actions.duplicateClips(targetIDs) }
+            .keyboardShortcut("d", modifiers: .command)
+        Divider()
         // 별칭은 클립마다 다르므로 하나를 골랐을 때만 바꾼다. 입력은 인스펙터 맨 위 이름 칸에서 한다.
         if targetIDs.count == 1 {
             Button(ShortcutGuide.rename.title) { actions.renameClip(clip.id) }
@@ -213,6 +222,15 @@ struct TrackRowView: View {
         Divider()
         Button("원본 훑어보기") { actions.openAsset(clip.assetID) }
         Button("미디어 패널에서 원본 보기") { actions.revealAsset(clip.assetID) }
+    }
+}
+
+private extension TrackRowView {
+    /// 재생 헤드에 붙인다(마우스 위치가 아니다).
+    var pasteButton: some View {
+        Button(ShortcutGuide.pasteClips.title) { actions.paste?() }
+            .keyboardShortcut("v", modifiers: .command)
+            .disabled(actions.paste == nil)
     }
 }
 

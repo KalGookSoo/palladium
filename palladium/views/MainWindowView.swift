@@ -136,6 +136,7 @@ struct MainWindowView: View {
             .focusedSceneValue(\.importSubtitles) { chooseSubtitleFile() }
             .focusedSceneValue(\.exportSubtitles, exportSubtitlesAction)
             .focusedSceneValue(\.splitClips, splitAction)
+            .focusedSceneValue(\.duplicateClips, selectedClipIDs.isEmpty ? nil : { timelineActions.duplicateClips(selectedClipIDs) })
             .focusedSceneValue(\.renameSelectedClip, selectedClip.map { clip in { beginRenamingClip(clip.id) } })
             .focusedSceneValue(\.isTimelineVisible, $isTimelineVisible)
             .focusedSceneValue(\.isInspectorPresented, $isInspectorPresented)
@@ -314,7 +315,8 @@ struct MainWindowView: View {
 
     /// 타임라인의 편집 요청을 편집기 커맨드로 옮긴다. 화면 상태(선택, 미리보기에 연 원본)는 여기서 바꾼다.
     private var timelineActions: TimelineActions {
-        TimelineActions(
+        let paste: (() -> Void)? = editor.clipboard == nil ? nil : { pasteAtPlayhead() }
+        return TimelineActions(
             dropAsset: { assetID, trackID, time in
                 let hadPicture = editor.currentSequence.tracks.contains { $0.kind == .video && !$0.clips.isEmpty }
                 if let clipID = editor.placeAsset(assetID, onTrack: trackID, at: time) {
@@ -340,6 +342,18 @@ struct MainWindowView: View {
             },
             renameClip: beginRenamingClip,
             setClipColorLabel: { clipIDs, colorLabel in editor.setClipColorLabel(colorLabel, for: clipIDs) },
+            copyClips: { clipIDs in editor.copyClips(clipIDs) },
+            cutClips: { clipIDs in
+                editor.cutClips(clipIDs)
+                selectedClipIDs.subtract(clipIDs)
+            },
+            duplicateClips: { clipIDs in
+                let duplicated = editor.duplicateClips(clipIDs)
+                if !duplicated.isEmpty {
+                    selectedClipIDs = duplicated
+                }
+            },
+            paste: paste,
             openAsset: quickLook,
             revealAsset: { assetID in selectedAssetID = assetID },
             switchSequence: { sequenceID in
@@ -674,8 +688,58 @@ struct MainWindowView: View {
             addSubtitleAtPlayhead()
         case .toggleNarration:
             toggleNarration()
+        case .copy, .cut:
+            return copySelection(cut: key == .cut)
+        case .paste:
+            guard !isMediaPanelFocused, editor.clipboard != nil else { return false }
+            pasteAtPlayhead()
         }
         return true
+    }
+
+    /// 고른 자막·마스크·클립을 복사하거나 잘라낸다(#62). 고른 것이 없거나 미디어 패널에 포커스가 있으면 키를 넘긴다.
+    private func copySelection(cut: Bool) -> Bool {
+        guard !isMediaPanelFocused else { return false }
+        if let selectedSubtitleID {
+            editor.copySubtitle(selectedSubtitleID)
+            if cut {
+                deleteSubtitle(selectedSubtitleID)
+            }
+        } else if let selectedMaskID {
+            editor.copyMask(selectedMaskID)
+            if cut {
+                deleteMask(selectedMaskID)
+            }
+        } else if !selectedClipIDs.isEmpty {
+            if cut {
+                timelineActions.cutClips(selectedClipIDs)
+            } else {
+                editor.copyClips(selectedClipIDs)
+            }
+        } else {
+            return false
+        }
+        return true
+    }
+
+    /// 재생 헤드에 붙이고 붙인 것을 고른다.
+    private func pasteAtPlayhead() {
+        switch editor.pasteClips(at: playheadTime) {
+        case let .clips(clipIDs):
+            selectedSubtitleID = nil
+            selectedMaskID = nil
+            selectedClipIDs = clipIDs
+        case let .subtitle(subtitleID):
+            selectedClipIDs = []
+            selectedMaskID = nil
+            selectedSubtitleID = subtitleID
+        case let .mask(maskID):
+            selectedClipIDs = []
+            selectedSubtitleID = nil
+            selectedMaskID = maskID
+        case nil:
+            break
+        }
     }
 
     /// Esc를 누를 때마다 가장 안쪽 상태부터 한 단계씩 푼다: 끄는 중인 편집 → 클립 선택 → 원본 선택.

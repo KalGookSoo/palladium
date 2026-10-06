@@ -8,6 +8,8 @@ extension FocusedValues {
     @Entry var renameSelectedClip: (() -> Void)?
     /// 재생 헤드에서 나눌 클립이 있을 때만 값이 있다.
     @Entry var splitClips: (() -> Void)?
+    /// 타임라인에서 클립을 골랐을 때만 값이 있다(#62).
+    @Entry var duplicateClips: (() -> Void)?
 }
 
 extension KeyEquivalent {
@@ -18,6 +20,7 @@ struct MediaCommands: Commands {
     @FocusedValue(\.renameSelectedAsset) private var renameSelectedAsset
     @FocusedValue(\.renameSelectedClip) private var renameSelectedClip
     @FocusedValue(\.splitClips) private var splitClips
+    @FocusedValue(\.duplicateClips) private var duplicateClips
 
     var body: some Commands {
         CommandGroup(after: .pasteboard) {
@@ -36,6 +39,13 @@ struct MediaCommands: Commands {
             }
             .keyboardShortcut("b", modifiers: .command)
             .disabled(splitClips == nil)
+
+            // 복사·잘라내기·붙여넣기(⌘C·⌘X·⌘V)는 입력란과 같이 쓰도록 기본 편집 메뉴 항목의 단축키를 편집 창이 직접 받는다.
+            Button(ShortcutGuide.duplicateClips.title) {
+                duplicateClips?()
+            }
+            .keyboardShortcut("d", modifiers: .command)
+            .disabled(duplicateClips == nil)
         }
     }
 }

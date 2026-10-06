@@ -32,6 +32,12 @@ struct TimelineActions {
     var renameClip: (Clip.ID) -> Void = { _ in }
     /// 고른 클립 모두의 색상 레이블. `nil`이면 뗀다(#78).
     var setClipColorLabel: (Set<Clip.ID>, ColorLabel?) -> Void = { _, _ in }
+    /// 클립 복사·잘라내기·복제와 재생 헤드에 붙여넣기(#62).
+    var copyClips: (Set<Clip.ID>) -> Void = { _ in }
+    var cutClips: (Set<Clip.ID>) -> Void = { _ in }
+    var duplicateClips: (Set<Clip.ID>) -> Void = { _ in }
+    /// 붙여넣을 것이 없으면 `nil`이라 메뉴를 비활성화한다.
+    var paste: (() -> Void)?
     /// 원본을 훑어보기(Quick Look) 창으로 연다.
     var openAsset: (MediaAsset.ID) -> Void = { _ in }
     var revealAsset: (MediaAsset.ID) -> Void = { _ in }
