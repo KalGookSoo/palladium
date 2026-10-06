@@ -427,6 +427,10 @@ struct MainWindowView: View {
                 asset: selectedClipAsset,
                 selectedClipCount: selectedClipIDs.count,
                 isNameFocusRequested: $isClipNameFocusRequested,
+                multipleSelectionAdjustment: selectedClipIDs.count > 1 ? pictureClips(in: currentSequence).first?.colorAdjustment : nil,
+                setColorAdjustment: { adjustment in
+                    editor.setColorAdjustment(adjustment, for: Set(pictureClips(in: currentSequence).map(\.id)))
+                },
                 renameClip: { clipID, name in editor.renameClip(clipID, to: name) },
                 setClipSource: { clipID, start, end in editor.setClipSource(clipID, start: start, end: end) },
                 setTransform: { clipID, transform in editor.setTransform(transform, for: clipID) },
@@ -817,6 +821,13 @@ struct MainWindowView: View {
         editor.deleteSubtitle(subtitleID)
         if selectedSubtitleID == subtitleID {
             selectedSubtitleID = nil
+        }
+    }
+
+    /// 고른 클립 중 그림이 있는(영상·이미지) 클립. 색보정은 이 클립들에만 적용한다(#61). 타임라인 순서(트랙, 시각)다.
+    private func pictureClips(in sequence: EditSequence) -> [Clip] {
+        sequence.tracks.flatMap(\.clips).filter { clip in
+            selectedClipIDs.contains(clip.id) && editor.asset(id: clip.assetID)?.kind != .audio
         }
     }
 

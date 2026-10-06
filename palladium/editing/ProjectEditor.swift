@@ -345,6 +345,13 @@ final class ProjectEditor {
         editCurrentSequence("클립 색상 레이블") { $0.updateClips(clipIDs) { $0.colorLabel = colorLabel } }
     }
 
+    /// 고른 클립 모두에 같은 밝기·대비·채도를 넣는다(#61). 범위 밖 값은 범위 안으로 맞춘다.
+    func setColorAdjustment(_ adjustment: ColorAdjustment, for clipIDs: Set<Clip.ID>) {
+        var clamped = adjustment
+        clamped.clamp()
+        editCurrentSequence("색보정") { $0.updateClips(clipIDs) { $0.colorAdjustment = clamped } }
+    }
+
     /// 고른 클립을 클립보드에 담는다(#62). 프로젝트는 바꾸지 않는다. 고른 클립이 없으면 클립보드를 그대로 둔다.
     func copyClips(_ clipIDs: Set<Clip.ID>) {
         let copied = currentSequence.copiedClips(clipIDs)

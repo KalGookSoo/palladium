@@ -24,6 +24,8 @@ nonisolated struct Clip {
     var name: String?
     /// 클립 색상 레이블(#78). 원본과 같은 7색을 쓴다.
     var colorLabel: ColorLabel?
+    /// 밝기·대비·채도(#61). 영상·이미지 클립에만 그린다.
+    var colorAdjustment = ColorAdjustment()
 
     init?(id: UUID = UUID(), assetID: MediaAsset.ID, sourceRange: CMTimeRange, timelineStart: CMTime) {
         guard sourceRange.start.isNumeric, sourceRange.duration.isNumeric, sourceRange.duration > .zero, timelineStart.isNumeric, timelineStart >= .zero else { return nil }

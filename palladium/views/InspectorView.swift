@@ -10,6 +10,10 @@ struct InspectorView: View {
     var selectedClipCount = 0
     /// `true`면 이름 칸에 포커스를 주고 `false`로 되돌린다(F2·우클릭 > 이름 변경).
     var isNameFocusRequested: Binding<Bool> = .constant(false)
+    /// 여러 클립을 골랐을 때 이펙트 탭에 보일 값(고른 영상·이미지 클립 중 첫 클립). 그런 클립이 없으면 `nil`.
+    var multipleSelectionAdjustment: ColorAdjustment?
+    /// 고른 영상·이미지 클립 모두의 밝기·대비·채도(#61).
+    var setColorAdjustment: (ColorAdjustment) -> Void = { _ in }
     /// 클립 별칭(#78). 비우면 원본 이름을 보여준다.
     var renameClip: (Clip.ID, String) -> Void = { _, _ in }
     /// 트림 탭에서 원본 시작·끝 지점을 입력했을 때.
@@ -79,7 +83,12 @@ struct InspectorView: View {
                     } else {
                         AudioInspectorView(clip: clip) { volume, isMuted in setClipAudio(clip.id, volume, isMuted) }
                     }
-                case .effect: EffectInspectorView()
+                case .effect:
+                    if asset?.kind == .audio {
+                        ContentUnavailableView("오디오 클립", systemImage: "waveform", description: Text("오디오 클립에는 영상 이펙트가 없습니다"))
+                    } else {
+                        EffectInspectorView(adjustment: clip.colorAdjustment, setAdjustment: setColorAdjustment)
+                    }
                 case .transform:
                     // 소리만 있는 클립은 화면에 그리지 않는다.
                     if asset?.kind == .audio {
@@ -100,11 +109,22 @@ struct InspectorView: View {
             }
         } else {
             if selectedClipCount > 1 {
-                ContentUnavailableView(
-                    "클립 \(selectedClipCount)개 선택",
-                    systemImage: "square.stack",
-                    description: Text("속성을 보려면 클립을 하나만 선택하세요")
-                )
+                // 여러 클립은 색감을 맞출 수 있도록 이펙트만 보여준다(#61).
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading) {
+                        Text("클립 \(selectedClipCount)개 선택")
+                            .font(.headline)
+                        Text("다른 속성을 보려면 클립을 하나만 선택하세요")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding()
+                    if let multipleSelectionAdjustment {
+                        EffectInspectorView(adjustment: multipleSelectionAdjustment, appliesToMultipleClips: true, setAdjustment: setColorAdjustment)
+                    } else {
+                        ContentUnavailableView("오디오 클립", systemImage: "waveform", description: Text("오디오 클립에는 영상 이펙트가 없습니다"))
+                    }
+                }
             } else {
                 ContentUnavailableView(
                     "선택한 클립 없음",

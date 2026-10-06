@@ -340,6 +340,45 @@ struct SequenceComposerTests {
         return generator
     }
 
+    @Test("색보정은 영상·이미지 클립에 적용된다: 채도 0이면 회색, 밝기를 올리면 밝아지고, 기본값이면 원본 그대로다")
+    func colorAdjustmentChangesPixels() async throws {
+        let videoURL = try await TestMedia.makeVideo(red: 200, green: 40, blue: 40, seconds: 3)
+        let imageURL = try TestMedia.makeImage(red: 200, green: 40, blue: 40)
+        let video = MediaAsset(id: UUID(), name: "red.mov", sourceURL: videoURL, kind: .video, duration: seconds(3))
+        let image = MediaAsset(id: UUID(), name: "red.png", sourceURL: imageURL, kind: .image, duration: MediaAsset.stillImageDuration)
+
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let trackID = sequence.addTrack(kind: .video)
+        // 0~1초 기본값, 1~2초 흑백, 2~3초 밝게(같은 영상을 셋으로 나눔), 3~4초 흑백 이미지.
+        try sequence.place(#require(video.makeClip(at: .zero)), onTrack: trackID)
+        sequence.split(at: seconds(1), clipIDs: nil)
+        sequence.split(at: seconds(2), clipIDs: nil)
+        let pieces = sequence.tracks[0].clips
+        sequence.updateClips([pieces[1].id]) { $0.colorAdjustment = ColorAdjustment(saturation: 0) }
+        sequence.updateClips([pieces[2].id]) { $0.colorAdjustment = ColorAdjustment(brightness: 0.3) }
+        var still = try #require(image.makeClip(at: seconds(3)))
+        still.sourceRange = CMTimeRange(start: .zero, duration: seconds(1))
+        still.colorAdjustment = ColorAdjustment(saturation: 0)
+        sequence.place(still, onTrack: trackID)
+
+        let composition = try #require(await SequenceComposer.makeComposition(
+            sequence: sequence, assets: [video, image], aspectRatio: .landscape16x9, resolveURL: \.sourceURL
+        ))
+        let generator = AVAssetImageGenerator(asset: composition.asset)
+        generator.videoComposition = composition.videoComposition
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+
+        let original = try await TestMedia.color(of: generator.image(at: seconds(0.5)).image, atX: 0.5, y: 0.5)
+        #expect(original.red > 180 && original.green < 70 && original.blue < 70)
+        let gray = try await TestMedia.color(of: generator.image(at: seconds(1.5)).image, atX: 0.5, y: 0.5)
+        #expect(abs(gray.red - gray.green) < 12 && abs(gray.green - gray.blue) < 12)
+        let brighter = try await TestMedia.color(of: generator.image(at: seconds(2.5)).image, atX: 0.5, y: 0.5)
+        #expect(brighter.green > original.green + 40 && brighter.blue > original.blue + 40)
+        let grayStill = try await TestMedia.color(of: generator.image(at: seconds(3.5)).image, atX: 0.5, y: 0.5)
+        #expect(abs(grayStill.red - grayStill.green) < 12 && abs(grayStill.green - grayStill.blue) < 12)
+    }
+
     @Test("블러 마스크는 지정한 시간 동안 영역 안만 흐리고, 영역 밖과 다른 시간은 그대로 둔다")
     func blurMaskBlursOnlyArea() async throws {
         let mask = Mask(id: UUID(), range: CMTimeRange(start: seconds(1), duration: seconds(2)), area: MaskArea(width: 0.5, height: 0.5), effect: .blur, strength: 1)

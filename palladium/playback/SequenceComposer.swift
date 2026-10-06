@@ -83,7 +83,7 @@ nonisolated enum SequenceComposer {
                         images[asset.id] = loadImage(at: resolveURL(asset))
                     }
                     if let image = images[asset.id] {
-                        placedLayers.append((layerRange, CompositionLayer(content: .image(image), transform: clip.transform, fade: fade), order))
+                        placedLayers.append((layerRange, CompositionLayer(content: .image(image), transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment), order))
                     }
                     continue
                 }
@@ -99,7 +99,7 @@ nonisolated enum SequenceComposer {
                         sourceShortSides.append(min(abs(displayed.width), abs(displayed.height)))
                         sourceFrameTimings.append(SourceFrameTiming(nominalFrameRate: frameRate, minFrameDuration: minFrameDuration))
                         let content = CompositionLayer.Content.video(trackID: videoTrack.trackID, naturalSize: naturalSize, preferredTransform: preferredTransform)
-                        placedLayers.append((layerRange, CompositionLayer(content: content, transform: clip.transform, fade: fade), order))
+                        placedLayers.append((layerRange, CompositionLayer(content: content, transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment), order))
                     }
                     if let sourceAudio = try await source.loadTracks(withMediaType: .audio).first, let soundTrack {
                         try await insert(clip, of: sourceAudio, into: soundTrack, lead: edges.audioLead, tail: edges.audioTail, freezesMissingFrames: false)

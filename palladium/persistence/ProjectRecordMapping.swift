@@ -83,6 +83,7 @@ private extension SequenceRecord {
                 .withAudio(volume: clip.volume, isMuted: clip.isMuted)
                 .withTransitions(of: clip)
                 .withLabels(of: clip)
+                .withColorAdjustment(of: clip)
             }
             return trackRecord
         }
@@ -200,6 +201,13 @@ private extension ClipRecord {
         return self
     }
 
+    func withColorAdjustment(of clip: Clip) -> ClipRecord {
+        brightness = clip.colorAdjustment.brightness
+        contrast = clip.colorAdjustment.contrast
+        saturation = clip.colorAdjustment.saturation
+        return self
+    }
+
     func makeClip() -> Clip? {
         let sourceRange = CMTimeRange(
             start: CMTime(value: sourceStartValue, timescale: sourceStartTimescale),
@@ -221,6 +229,9 @@ private extension ClipRecord {
         clip?.speed = Clip.speedOptions.contains(speed) ? speed : 1
         clip?.name = name
         clip?.colorLabel = colorLabelRawValue.flatMap(ColorLabel.init(rawValue:))
+        var adjustment = ColorAdjustment(brightness: brightness, contrast: contrast, saturation: saturation)
+        adjustment.clamp()
+        clip?.colorAdjustment = adjustment
         if clip == nil {
             let clipID = id
             Logger.project.error("Clip 불변식을 어기는 저장값이라 건너뜀: \(clipID, privacy: .public)")

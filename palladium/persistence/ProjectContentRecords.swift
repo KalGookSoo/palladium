@@ -132,6 +132,10 @@ final class ClipRecord {
     var name: String?
     /// 클립 색상 레이블(`ColorLabel`). `nil`이면 없다.
     var colorLabelRawValue: String?
+    /// 기본 색보정(#61). 기본값은 원본 그대로다.
+    var brightness: Double = 0
+    var contrast: Double = 1
+    var saturation: Double = 1
     var track: TrackRecord?
 
     init(

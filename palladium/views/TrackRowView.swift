@@ -81,7 +81,13 @@ struct TrackRowView: View {
         // 별칭이 없으면 원본 이름이다. 속도를 바꾼 클립은 이름 뒤에 배율을 붙인다.
         let title = clip.displayName(assetName: assetName) + (clip.speed == 1 ? "" : " · \(clip.speed.formatted())×")
 
-        return ClipView(title: title, symbolName: track.kind.symbolName, isSelected: selectedClipIDs.contains(clip.id), colorLabel: clip.colorLabel) {
+        return ClipView(
+            title: title,
+            symbolName: track.kind.symbolName,
+            isSelected: selectedClipIDs.contains(clip.id),
+            colorLabel: clip.colorLabel,
+            hasEffect: !clip.colorAdjustment.isDefault
+        ) {
             ClipContentView(asset: asset, clip: clip, width: width, showsFilmstrip: showsFilmstrip, showsWaveform: showsWaveform)
         }
         .help("원본: \(assetName)")

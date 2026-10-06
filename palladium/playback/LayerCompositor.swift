@@ -21,6 +21,8 @@ nonisolated struct CompositionLayer {
     let content: Content
     let transform: ClipTransform
     var fade: Fade?
+    /// 밝기·대비·채도(#61). 화면에 놓기 전 원본 이미지에 적용한다.
+    var colorAdjustment = ColorAdjustment()
 }
 
 /// 시퀀스 구간 하나와 그 구간에 그릴 층들. 빈 구간은 층이 없어 검은 화면이다.
@@ -104,9 +106,10 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
                 clipTransform: layer.transform,
                 renderSize: renderSize
             )
-            placed = CIImage(cvPixelBuffer: buffer).transformed(by: transform)
+            placed = Self.applying(layer.colorAdjustment, to: CIImage(cvPixelBuffer: buffer)).transformed(by: transform)
         case let .image(source):
-            placed = source.transformed(by: Self.imageTransform(imageSize: source.extent.size, clipTransform: layer.transform, renderSize: renderSize))
+            let adjusted = Self.applying(layer.colorAdjustment, to: source)
+            placed = adjusted.transformed(by: Self.imageTransform(imageSize: source.extent.size, clipTransform: layer.transform, renderSize: renderSize))
         case let .subtitle(subtitle):
             return subtitleImage(subtitle, renderSize: renderSize)
         }
@@ -206,6 +209,16 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
         case .wipe:
             return image.cropped(to: CGRect(x: 0, y: 0, width: renderSize.width * progress, height: renderSize.height))
         }
+    }
+
+    /// 화면에 놓기 전(바깥이 투명해지기 전) 원본 이미지에 색보정을 적용한다. 기본값이면 그대로 둔다.
+    static func applying(_ adjustment: ColorAdjustment, to image: CIImage) -> CIImage {
+        guard !adjustment.isDefault else { return image }
+        return image.applyingFilter("CIColorControls", parameters: [
+            kCIInputBrightnessKey: adjustment.brightness,
+            kCIInputContrastKey: adjustment.contrast,
+            kCIInputSaturationKey: adjustment.saturation,
+        ])
     }
 
     private static func applyingOpacity(_ opacity: Double, to image: CIImage) -> CIImage {

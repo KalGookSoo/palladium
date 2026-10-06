@@ -15,6 +15,8 @@ struct ClipView<Content: View>: View {
     let symbolName: String
     let isSelected: Bool
     var colorLabel: ColorLabel?
+    /// 색보정(#61) 같은 이펙트가 걸려 있으면 이름 옆에 표시한다.
+    var hasEffect = false
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -27,15 +29,21 @@ struct ClipView<Content: View>: View {
                 .overlay(alignment: .topLeading) {
                     if geometry.size.width >= ClipViewMetrics.minimumLabelWidth {
                         // 필름스트립 위에서도 읽히도록 반투명 바탕 위에 이름을 둔다.
-                        Label(title, systemImage: symbolName)
-                            .font(.caption2)
-                            .lineLimit(1)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            // 색상 레이블은 반투명 바탕 위에 겹쳐 이름 배경을 그 색으로 물들인다.
-                            .background(colorLabel?.color.opacity(0.45) ?? .clear, in: RoundedRectangle(cornerRadius: 3))
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 3))
-                            .padding(3)
+                        HStack(spacing: 3) {
+                            Label(title, systemImage: symbolName)
+                            if hasEffect {
+                                Image(systemName: "camera.filters")
+                                    .accessibilityLabel("이펙트 적용됨")
+                            }
+                        }
+                        .font(.caption2)
+                        .lineLimit(1)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        // 색상 레이블은 반투명 바탕 위에 겹쳐 이름 배경을 그 색으로 물들인다.
+                        .background(colorLabel?.color.opacity(0.45) ?? .clear, in: RoundedRectangle(cornerRadius: 3))
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 3))
+                        .padding(3)
                     }
                 }
                 .clipShape(shape)
@@ -61,8 +69,8 @@ struct ClipView<Content: View>: View {
 }
 
 extension ClipView where Content == EmptyView {
-    init(title: String, symbolName: String, isSelected: Bool, colorLabel: ColorLabel? = nil) {
-        self.init(title: title, symbolName: symbolName, isSelected: isSelected, colorLabel: colorLabel) { EmptyView() }
+    init(title: String, symbolName: String, isSelected: Bool, colorLabel: ColorLabel? = nil, hasEffect: Bool = false) {
+        self.init(title: title, symbolName: symbolName, isSelected: isSelected, colorLabel: colorLabel, hasEffect: hasEffect) { EmptyView() }
     }
 }
 

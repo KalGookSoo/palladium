@@ -35,12 +35,16 @@ nav_order: 17
 
 - 이번에는 밝기·대비·채도 셋만 한다. 노출·색온도, 스코프·LUT는 #69, 블러 같은 필터는 #68에서 이 탭에 더한다.
 - 지금 화면에만 있고 동작하지 않는 "필터" 선택 칸은 지운다.
-- 합성기(`LayerCompositor`)에서 Core Image `CIColorControls`로 적용한다. 네트워크가 필요 없다.
+- 합성기(`LayerCompositor`)에서 Core Image `CIColorControls`로 적용한다. 네트워크가 필요 없다. 화면에 놓기 전(위치·크기를 바꾸기 전) 원본 이미지에 걸어 화면 밖 투명한 곳은 건드리지 않고, 기본값이면 건너뛴다. 미리보기와 내보내기가 같은 합성을 쓰므로 결과가 같다.
+- 슬라이더는 트랜스폼과 같이 손을 뗄 때 한 번의 편집으로 반영하고, 그때 미리보기가 바뀐다(끄는 동안은 숫자만 바뀐다). 끄는 동안 미리보기를 계속 다시 그리는 방식은 합성을 자주 새로 만들어야 해 하지 않았다.
+- 여러 클립을 고르면 인스펙터는 "클립 N개 선택"과 함께 이펙트만 보여준다. 값은 고른 영상·이미지 클립 중 첫 클립(트랙·시각 순) 기준으로 보이고, 바꾸면 고른 영상·이미지 클립 모두에 셋 다 같은 값이 들어간다(오디오 클립은 건너뛴다). 고른 클립이 모두 오디오면 "영상 이펙트 없음"을 보여준다.
+- 타임라인 표시: 색보정이 기본값이 아니면 클립 이름 옆에 작은 이펙트 아이콘(`camera.filters`)을 그린다.
+- 저장: 클립 레코드에 밝기·대비·채도를 기본값(0·1·1)과 함께 더해 기존 프로젝트도 그대로 열린다. 범위 밖 저장값은 불러올 때 범위 안으로 맞춘다.
 
 ## 관련 커맨드/쿼리
 
-- 커맨드(`ProjectEditor`): `setColorAdjustment(_:for:)` — 여러 클립에 한 번에 적용한다.
-- 도메인: `Clip.colorAdjustment`(`brightness`, `contrast`, `saturation`, `isDefault`)
+- 커맨드(`ProjectEditor`, 구현): `setColorAdjustment(_:for:)` — 여러 클립에 한 번에 적용하고 범위로 맞춘다. 실행 취소 이름은 "색보정".
+- 도메인(구현): `Clip.colorAdjustment: ColorAdjustment`(`brightness`, `contrast`, `saturation`, `isDefault`, `clamp()`), 합성 `LayerCompositor.applying(_:to:)`
 
 ## 미정 사항
 

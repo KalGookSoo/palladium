@@ -18,12 +18,13 @@ nonisolated extension Clip {
             timelineStart: clippedStart
         )
         portion?.speed = speed
-        // 나눈 조각도 같은 위치·크기·불투명도·음량·별칭·색상 레이블을 가진다.
+        // 나눈 조각도 같은 위치·크기·불투명도·음량·별칭·색상 레이블·색보정을 가진다.
         portion?.transform = transform
         portion?.volume = volume
         portion?.isMuted = isMuted
         portion?.name = name
         portion?.colorLabel = colorLabel
+        portion?.colorAdjustment = colorAdjustment
         // 앞 클립과의 전환은 원래 시작을 가진 조각에만 남는다.
         if clippedStart == timelineStart {
             portion?.transitionIn = transitionIn
