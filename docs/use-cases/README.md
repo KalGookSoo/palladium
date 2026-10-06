@@ -24,6 +24,10 @@ has_children: true
 - [환경설정](./preferences.md)
 - [도움말](./help.md)
 - [음량 조절과 오디오 믹싱](./audio-mixing.md)
+- [원본 삭제](./media-removal.md)
+- [클립 복사·붙여넣기](./copy-paste.md)
+- [이펙트(기본 색보정)](./effects.md)
+- [샘플 프로젝트와 온보딩](./onboarding.md)
 
 ## 공통 Mermaid 색상 기준
 
