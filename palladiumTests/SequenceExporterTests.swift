@@ -177,7 +177,7 @@ struct SequenceExporterTests {
     func exportsSubtitleOnlySequence() async throws {
         var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
         let subtitleID = sequence.addSubtitle(at: .zero, text: "■")
-        sequence.updateSubtitle(subtitleID, text: "■", style: SubtitleStyle(fontSize: 120, position: .middle, color: .yellow, hasBackground: false))
+        sequence.updateSubtitle(subtitleID, text: "■", style: SubtitleStyle(fontSize: 120, centerY: 0.5, textColor: .yellow, backgroundOpacity: 0))
         let composition = try #require(await SequenceComposer.makeComposition(
             sequence: sequence, assets: [], aspectRatio: .square1x1, resolveURL: \.sourceURL
         ))

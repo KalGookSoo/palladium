@@ -195,7 +195,7 @@ struct SequenceComposerTests {
         let videoID = sequence.addTrack(kind: .video)
         try sequence.place(#require(red.makeClip(at: .zero)), onTrack: videoID)
         let subtitleID = sequence.addSubtitle(at: .zero, text: "■")
-        sequence.updateSubtitle(subtitleID, text: "■", style: SubtitleStyle(fontSize: 120, position: .middle, color: .yellow, hasBackground: true))
+        sequence.updateSubtitle(subtitleID, text: "■", style: SubtitleStyle(fontSize: 120, centerY: 0.5, textColor: .yellow))
         let subtitle = try #require(sequence.subtitles.first)
 
         let composition = try #require(await SequenceComposer.makeComposition(
@@ -235,7 +235,7 @@ struct SequenceComposerTests {
         func box(_ position: SubtitlePosition) throws -> CGRect {
             let subtitle = Subtitle(
                 id: UUID(), range: CMTimeRange(start: .zero, duration: seconds(1)), text: "안녕하세요",
-                style: SubtitleStyle(position: position)
+                style: SubtitleStyle(centerY: position.centerY)
             )
             return try #require(SubtitleRenderer.image(for: subtitle, renderSize: render)).extent
         }

@@ -59,7 +59,7 @@ nonisolated enum SampleData {
             Subtitle(id: UUID(), range: CMTimeRange(start: seconds(1), duration: seconds(3)), text: "여행 첫날"),
             Subtitle(
                 id: UUID(), range: CMTimeRange(start: seconds(9), duration: seconds(2.5)), text: "바닷가로",
-                style: SubtitleStyle(fontSize: 72, position: .top, color: .yellow, hasBackground: false)
+                style: SubtitleStyle(fontSize: 72, centerY: SubtitlePosition.top.centerY, textColor: .yellow, backgroundOpacity: 0)
             ),
         ],
         masks: [

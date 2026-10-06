@@ -202,9 +202,23 @@ final class SubtitleRecord {
     var durationValue: Int64 = 0
     var durationTimescale: Int32 = 600
     var fontSize = 54.0
+    // #82 전의 스타일(위·가운데·아래, 흰색·노란색, 배경 켜기/끄기). `usesFreeStyle`이 `false`인 옛 레코드를 열 때만 쓴다.
     var positionRawValue = "bottom"
     var colorRawValue = "white"
     var hasBackground = true
+    // #82 자유 위치·글꼴·색·불투명도. 이 속성들이 생기기 전 레코드는 `usesFreeStyle`이 `false`라 옛 스타일에서 옮긴다.
+    var usesFreeStyle = false
+    var centerX = 0.5
+    var centerY = 1.0
+    var fontName = SubtitleStyle.defaultFontName
+    var textRed = 1.0
+    var textGreen = 1.0
+    var textBlue = 1.0
+    var textOpacity = 1.0
+    var backgroundRed = 0.0
+    var backgroundGreen = 0.0
+    var backgroundBlue = 0.0
+    var backgroundOpacity = 0.6
     var sequence: SequenceRecord?
 
     init(subtitle: Subtitle, sortIndex: Int) {
@@ -215,10 +229,20 @@ final class SubtitleRecord {
         startTimescale = subtitle.range.start.timescale
         durationValue = subtitle.range.duration.value
         durationTimescale = subtitle.range.duration.timescale
-        fontSize = subtitle.style.fontSize
-        positionRawValue = subtitle.style.position.rawValue
-        colorRawValue = subtitle.style.color.rawValue
-        hasBackground = subtitle.style.hasBackground
+        let style = subtitle.style
+        fontSize = style.fontSize
+        usesFreeStyle = true
+        centerX = style.centerX
+        centerY = style.centerY
+        fontName = style.fontName
+        textRed = style.textColor.red
+        textGreen = style.textColor.green
+        textBlue = style.textColor.blue
+        textOpacity = style.textOpacity
+        backgroundRed = style.backgroundColor.red
+        backgroundGreen = style.backgroundColor.green
+        backgroundBlue = style.backgroundColor.blue
+        backgroundOpacity = style.backgroundOpacity
     }
 
     func makeSubtitle() -> Subtitle {
@@ -229,13 +253,28 @@ final class SubtitleRecord {
                 duration: CMTime(value: durationValue, timescale: durationTimescale)
             ),
             text: text,
-            style: SubtitleStyle(
-                fontSize: fontSize,
-                position: SubtitlePosition(rawValue: positionRawValue) ?? .bottom,
-                color: SubtitleColor(rawValue: colorRawValue) ?? .white,
-                hasBackground: hasBackground
-            )
+            style: usesFreeStyle ? freeStyle : Self.legacyStyle(fontSize: fontSize, position: positionRawValue, color: colorRawValue, hasBackground: hasBackground)
         )
+    }
+
+    private var freeStyle: SubtitleStyle {
+        var style = SubtitleStyle(
+            fontSize: fontSize, centerX: centerX, centerY: centerY, fontName: fontName,
+            textColor: SubtitleRGB(red: textRed, green: textGreen, blue: textBlue), textOpacity: textOpacity,
+            backgroundColor: SubtitleRGB(red: backgroundRed, green: backgroundGreen, blue: backgroundBlue), backgroundOpacity: backgroundOpacity
+        )
+        style.clamp()
+        return style
+    }
+
+    /// #82 전 스타일을 자유 스타일로 옮긴다. 위·가운데·아래는 빠른 위치, 노란색은 지금까지 그리던 노랑, 배경은 반투명 검정(0.6)이나 없음.
+    static func legacyStyle(fontSize: Double, position: String, color: String, hasBackground: Bool) -> SubtitleStyle {
+        var style = SubtitleStyle(fontSize: fontSize)
+        style.move(to: SubtitlePosition(rawValue: position) ?? .bottom)
+        style.textColor = color == "yellow" ? .yellow : .white
+        style.backgroundOpacity = hasBackground ? 0.6 : 0
+        style.clamp()
+        return style
     }
 }
 

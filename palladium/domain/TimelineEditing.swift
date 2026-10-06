@@ -187,8 +187,16 @@ nonisolated extension EditSequence {
         guard let index = subtitles.firstIndex(where: { $0.id == subtitleID }) else { return }
         subtitles[index].text = text
         var clampedStyle = style
-        clampedStyle.fontSize = min(max(style.fontSize, SubtitleStyle.fontSizeRange.lowerBound), SubtitleStyle.fontSizeRange.upperBound)
+        clampedStyle.clamp()
         subtitles[index].style = clampedStyle
+    }
+
+    /// 자막 위치를 바꾼다(#82). 화면 비율 좌표(0~1)로 맞춘다.
+    mutating func setSubtitlePosition(_ subtitleID: Subtitle.ID, centerX: Double, centerY: Double) {
+        guard let index = subtitles.firstIndex(where: { $0.id == subtitleID }) else { return }
+        subtitles[index].style.centerX = centerX
+        subtitles[index].style.centerY = centerY
+        subtitles[index].style.clamp()
     }
 
     /// 시작이 0보다 앞서지 않고 최소 길이는 남도록 맞춘다.

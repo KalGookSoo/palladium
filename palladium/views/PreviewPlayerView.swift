@@ -13,6 +13,9 @@ struct PreviewPlayerView: View {
     /// 마스크 레인에서 고른 마스크. 있으면 미리보기 위에 영역과 손잡이를 그린다(#59).
     var maskTarget: Mask?
     var setMaskArea: (Mask.ID, MaskArea) -> Void = { _, _ in }
+    /// 자막 레인에서 고른 자막. 있으면 미리보기 위에 상자를 그려 끌어 옮긴다(#82).
+    var subtitleTarget: Subtitle?
+    var setSubtitlePosition: (Subtitle.ID, Double, Double) -> Void = { _, _, _ in }
     /// 내레이션을 녹음 중이면 녹음을 시작한 때(#10).
     var narrationStartedAt: Date?
     var toggleNarration: () -> Void = {}
@@ -43,6 +46,9 @@ struct PreviewPlayerView: View {
                         }
                         if let maskTarget {
                             MaskHandlesView(mask: maskTarget, renderSize: renderSize) { setMaskArea(maskTarget.id, $0) }
+                        }
+                        if let subtitleTarget {
+                            SubtitleHandlesView(subtitle: subtitleTarget, renderSize: renderSize) { setSubtitlePosition(subtitleTarget.id, $0, $1) }
                         }
                     }
                     .task(id: transformTarget?.asset.id) {

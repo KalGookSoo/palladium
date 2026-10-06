@@ -237,6 +237,20 @@ final class ProjectEditor {
         editCurrentSequence("자막 편집") { $0.updateSubtitle(subtitleID, text: text, style: style) }
     }
 
+    /// 자막 위치를 화면 비율 좌표(0~1)로 바꾼다(#82). 미리보기 끌기·인스펙터 슬라이더·숫자 입력이 쓴다.
+    func setSubtitlePosition(_ subtitleID: Subtitle.ID, centerX: Double, centerY: Double) {
+        editCurrentSequence("자막 위치") { $0.setSubtitlePosition(subtitleID, centerX: centerX, centerY: centerY) }
+    }
+
+    /// 자막을 화면 비율만큼 옮긴다(방향키, #82). 실제로 보이는 자리(가장자리 여백에 맞춘 상자)에서 시작해,
+    /// 위·아래 빠른 위치처럼 여백에 붙은 자막도 한 번 누르면 바로 움직인다.
+    func nudgeSubtitle(_ subtitleID: Subtitle.ID, dx: Double, dy: Double, renderSize: CGSize) {
+        guard let subtitle = currentSequence.subtitles.first(where: { $0.id == subtitleID }) else { return }
+        let shown = SubtitleRenderer.frame(for: subtitle, renderSize: renderSize).map { CGPoint(x: $0.midX / renderSize.width, y: $0.midY / renderSize.height) }
+        let start = shown ?? CGPoint(x: subtitle.style.centerX, y: subtitle.style.centerY)
+        setSubtitlePosition(subtitleID, centerX: start.x + dx, centerY: start.y + dy)
+    }
+
     func setSubtitleRange(_ subtitleID: Subtitle.ID, start: CMTime, end: CMTime) {
         editCurrentSequence("자막 시간 조정") { $0.setSubtitleRange(subtitleID, start: start, end: end) }
     }

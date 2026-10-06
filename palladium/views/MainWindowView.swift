@@ -272,6 +272,8 @@ struct MainWindowView: View {
                     setTransform: { clipID, transform in editor.setTransform(transform, for: clipID) },
                     maskTarget: currentSequence.masks.first { $0.id == selectedMaskID },
                     setMaskArea: setMaskArea,
+                    subtitleTarget: currentSequence.subtitles.first { $0.id == selectedSubtitleID },
+                    setSubtitlePosition: { subtitleID, centerX, centerY in editor.setSubtitlePosition(subtitleID, centerX: centerX, centerY: centerY) },
                     narrationStartedAt: narration.startedAt,
                     toggleNarration: toggleNarration
                 )
@@ -451,6 +453,8 @@ struct MainWindowView: View {
                 setAudioCrossfade: { clipID, duration in editor.setAudioCrossfade(duration, forClip: clipID) },
                 subtitle: currentSequence.subtitles.first { $0.id == selectedSubtitleID },
                 updateSubtitle: { subtitleID, text, style in editor.updateSubtitle(subtitleID, text: text, style: style) },
+                setSubtitlePosition: { subtitleID, centerX, centerY in editor.setSubtitlePosition(subtitleID, centerX: centerX, centerY: centerY) },
+                renderSize: SequenceComposer.renderSize(for: aspectRatio),
                 setSubtitleRange: { subtitleID, start, end in editor.setSubtitleRange(subtitleID, start: start, end: end) },
                 deleteSubtitle: deleteSubtitle,
                 mask: currentSequence.masks.first { $0.id == selectedMaskID },
@@ -670,7 +674,13 @@ struct MainWindowView: View {
 
     /// 처리하지 않는 키(미리보기에 원본이 없을 때의 재생 키, 고른 클립이 없을 때의 삭제)는 그대로 넘긴다.
     private func handleEditorKey(_ key: EditorKeyMonitor.Key) -> Bool {
+        // 자막을 골랐으면 ←/→는 프레임 이동 대신 자막을 옮긴다(#82).
+        if selectedSubtitleID != nil, key == .previousFrame || key == .nextFrame {
+            return nudgeSelectedSubtitle(key)
+        }
         switch key {
+        case .moveUp, .moveDown, .moveLeftLarge, .moveRightLarge, .moveUpLarge, .moveDownLarge:
+            return nudgeSelectedSubtitle(key)
         case .playPause, .previousFrame, .nextFrame:
             guard case let .ready(timeline) = previewPlayer.loadState else { return false }
             switch key {
@@ -706,6 +716,26 @@ struct MainWindowView: View {
             guard !isMediaPanelFocused, editor.clipboard != nil else { return false }
             pasteAtPlayhead()
         }
+        return true
+    }
+
+    /// 고른 자막을 방향키로 옮긴다(#82). 한 번에 화면의 0.5%, ⇧와 함께 5%.
+    private func nudgeSelectedSubtitle(_ key: EditorKeyMonitor.Key) -> Bool {
+        guard !isMediaPanelFocused, let selectedSubtitleID else { return false }
+        let small = 0.005
+        let large = 0.05
+        let (dx, dy): (Double, Double) = switch key {
+        case .previousFrame: (-small, 0)
+        case .nextFrame: (small, 0)
+        case .moveUp: (0, -small)
+        case .moveDown: (0, small)
+        case .moveLeftLarge: (-large, 0)
+        case .moveRightLarge: (large, 0)
+        case .moveUpLarge: (0, -large)
+        case .moveDownLarge: (0, large)
+        default: (0, 0)
+        }
+        editor.nudgeSubtitle(selectedSubtitleID, dx: dx, dy: dy, renderSize: SequenceComposer.renderSize(for: aspectRatio))
         return true
     }
 

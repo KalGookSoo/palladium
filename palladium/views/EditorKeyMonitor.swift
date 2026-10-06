@@ -8,6 +8,13 @@ final class EditorKeyMonitor {
         case playPause
         case previousFrame
         case nextFrame
+        /// ↑/↓와 ⇧+방향키. 자막을 골랐을 때만 자막을 옮긴다(#82). ←/→는 자막을 골랐으면 자막을, 아니면 재생 헤드를 옮긴다.
+        case moveUp
+        case moveDown
+        case moveLeftLarge
+        case moveRightLarge
+        case moveUpLarge
+        case moveDownLarge
         case deleteSelection
         case rippleDeleteSelection
         case selectAll
@@ -49,6 +56,12 @@ final class EditorKeyMonitor {
         case (49, []): return .playPause
         case (123, []): return .previousFrame
         case (124, []): return .nextFrame
+        case (126, []): return .moveUp
+        case (125, []): return .moveDown
+        case (123, .shift): return .moveLeftLarge
+        case (124, .shift): return .moveRightLarge
+        case (126, .shift): return .moveUpLarge
+        case (125, .shift): return .moveDownLarge
         // 51은 Delete(백스페이스), 117은 앞쪽 지우기(fn+Delete).
         case (51, []), (117, []): return .deleteSelection
         case (51, .shift), (117, .shift): return .rippleDeleteSelection

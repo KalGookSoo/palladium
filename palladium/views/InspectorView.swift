@@ -28,6 +28,10 @@ struct InspectorView: View {
     /// 자막 트랙에서 고른 자막. 있으면 클립 대신 자막 속성을 보여준다.
     var subtitle: Subtitle?
     var updateSubtitle: (Subtitle.ID, String, SubtitleStyle) -> Void = { _, _, _ in }
+    /// 자막 위치(화면 비율 좌표, #82).
+    var setSubtitlePosition: (Subtitle.ID, Double, Double) -> Void = { _, _, _ in }
+    /// 합성 화면 크기(화면비 프리셋). 자막 위치가 실제로 보이는 자리를 계산하는 데 쓴다.
+    var renderSize = SequenceComposer.renderSize(for: .landscape16x9)
     var setSubtitleRange: (Subtitle.ID, CMTime, CMTime) -> Void = { _, _, _ in }
     var deleteSubtitle: (Subtitle.ID) -> Void = { _ in }
     /// 마스크 레인에서 고른 마스크(#59).
@@ -41,7 +45,9 @@ struct InspectorView: View {
         if let subtitle {
             SubtitleInspectorView(
                 subtitle: subtitle,
+                renderSize: renderSize,
                 update: { text, style in updateSubtitle(subtitle.id, text, style) },
+                setPosition: { centerX, centerY in setSubtitlePosition(subtitle.id, centerX, centerY) },
                 setRange: { start, end in setSubtitleRange(subtitle.id, start, end) },
                 delete: { deleteSubtitle(subtitle.id) }
             )

@@ -49,6 +49,7 @@ enum ShortcutGuide {
     static let pasteClips = ShortcutGuideEntry(title: "붙여넣기", summary: "재생 헤드에 붙입니다. 클립은 경계에 끼워 넣고 뒤 클립을 밀며, 다른 시퀀스에도 붙일 수 있습니다", keys: "⌘V")
     static let duplicateClips = ShortcutGuideEntry(title: "복제", summary: "고른 클립 바로 뒤에 같은 클립을 넣습니다(클립보드는 그대로)", keys: "⌘D")
     static let addMarker = ShortcutGuideEntry(title: "재생 헤드에 마커 추가", summary: "나중에 다시 찾을 시점에 책갈피를 둡니다", keys: "M")
+    static let moveSubtitle = ShortcutGuideEntry(title: "자막 옮기기", summary: "고른 자막을 화면의 0.5%씩, ⇧와 함께 5%씩 옮깁니다(자막을 고르지 않았으면 ←/→는 프레임 이동)", keys: "←/→/↑/↓ (자막 선택 시)")
     static let addSubtitle = ShortcutGuideEntry(title: "재생 헤드에 자막 추가", summary: "재생 헤드부터 3초 동안 나오는 자막을 자막 트랙에 둡니다", keys: "T")
     static let preciseTrim = ShortcutGuideEntry(title: "정밀 트림", summary: "클립 끝을 끌 때 이동량을 줄여 프레임 단위로 맞춥니다", keys: "⌥ 누른 채 끌기")
     static let rollTrim = ShortcutGuideEntry(title: "롤 트림", summary: "클립 끝을 끌어 맞닿은 이웃 클립과의 경계를 옮깁니다(전체 길이 그대로)", keys: "⌘ 누른 채 끝 끌기")
@@ -75,7 +76,7 @@ enum ShortcutGuide {
         ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline]),
         ("재생", [playPause, previousFrame, nextFrame, narration]),
         ("편집", [undo, redo, rename, trimSheet, trimNudge, deleteAsset]),
-        ("타임라인", [deleteClips, rippleDeleteClips, cutClips, copyClips, pasteClips, duplicateClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect, addMarker, addSubtitle, preciseTrim, rollTrim, slipTrim, slideTrim]),
+        ("타임라인", [deleteClips, rippleDeleteClips, cutClips, copyClips, pasteClips, duplicateClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect, addMarker, addSubtitle, moveSubtitle, preciseTrim, rollTrim, slipTrim, slideTrim]),
         ("도움말", [showHelp, showShortcuts]),
     ]
 }
