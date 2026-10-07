@@ -135,6 +135,34 @@ struct SubtitleStyleTests {
         #expect(defaults == SubtitleStyle())
     }
 
+    @Test("마이그레이션으로 #82 속성이 빈 값(NULL)인 옛 레코드도 멈추지 않고 옛 스타일 그대로 연다")
+    func migratedRecordWithEmptyFields() {
+        let subtitle = Subtitle(id: UUID(), range: CMTimeRange(start: .zero, duration: seconds(1)), text: "이런이런")
+        let record = SubtitleRecord(subtitle: subtitle, sortIndex: 0)
+        // 마이그레이션이 남긴 모습: 새 속성은 모두 비어 있고 옛 속성만 있다.
+        record.usesFreeStyle = nil
+        record.centerX = nil
+        record.centerY = nil
+        record.fontName = nil
+        record.textRed = nil
+        record.textOpacity = nil
+        record.backgroundOpacity = nil
+        record.positionRawValue = "middle"
+        record.colorRawValue = "yellow"
+        record.hasBackground = false
+
+        let opened = record.makeSubtitle()
+        #expect(opened.text == "이런이런")
+        #expect(opened.style.preset == .middle && opened.style.textColor == .yellow && opened.style.backgroundOpacity == 0)
+
+        // 새 스타일로 저장했는데 일부 값만 비어 있으면 그 값은 기본값으로 읽는다.
+        record.usesFreeStyle = true
+        record.centerX = 0.2
+        let partial = record.makeSubtitle()
+        #expect(partial.style.centerX == 0.2)
+        #expect(partial.style.centerY == SubtitleStyle().centerY && partial.style.fontName == SubtitleStyle.defaultFontName)
+    }
+
     // MARK: - 그리기
 
     @Test("이 Mac에 없는 글꼴은 기본 글꼴로 그리고, 상자 자리는 그린 이미지와 같다")

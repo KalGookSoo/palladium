@@ -206,19 +206,21 @@ final class SubtitleRecord {
     var positionRawValue = "bottom"
     var colorRawValue = "white"
     var hasBackground = true
-    // #82 자유 위치·글꼴·색·불투명도. 이 속성들이 생기기 전 레코드는 `usesFreeStyle`이 `false`라 옛 스타일에서 옮긴다.
-    var usesFreeStyle = false
-    var centerX = 0.5
-    var centerY = 1.0
-    var fontName = SubtitleStyle.defaultFontName
-    var textRed = 1.0
-    var textGreen = 1.0
-    var textBlue = 1.0
-    var textOpacity = 1.0
-    var backgroundRed = 0.0
-    var backgroundGreen = 0.0
-    var backgroundBlue = 0.0
-    var backgroundOpacity = 0.6
+    // #82 자유 위치·글꼴·색·불투명도. 모두 옵셔널이다: 가벼운 마이그레이션은 이 속성들이 생기기 전 레코드를 빈 값(NULL)으로 두는데
+    // (기본값이 상수 참조라 저장소에 기본값이 들어가지 않은 적이 있다), 옵셔널이 아니면 그 레코드를 읽을 때 앱이 멈춘다.
+    // `usesFreeStyle`이 `true`가 아니면 옛 스타일에서 옮기고, 빈 값은 기본 스타일 값으로 읽는다.
+    var usesFreeStyle: Bool?
+    var centerX: Double?
+    var centerY: Double?
+    var fontName: String?
+    var textRed: Double?
+    var textGreen: Double?
+    var textBlue: Double?
+    var textOpacity: Double?
+    var backgroundRed: Double?
+    var backgroundGreen: Double?
+    var backgroundBlue: Double?
+    var backgroundOpacity: Double?
     var sequence: SequenceRecord?
 
     init(subtitle: Subtitle, sortIndex: Int) {
@@ -253,15 +255,27 @@ final class SubtitleRecord {
                 duration: CMTime(value: durationValue, timescale: durationTimescale)
             ),
             text: text,
-            style: usesFreeStyle ? freeStyle : Self.legacyStyle(fontSize: fontSize, position: positionRawValue, color: colorRawValue, hasBackground: hasBackground)
+            style: usesFreeStyle == true ? freeStyle : Self.legacyStyle(fontSize: fontSize, position: positionRawValue, color: colorRawValue, hasBackground: hasBackground)
         )
     }
 
     private var freeStyle: SubtitleStyle {
+        let defaults = SubtitleStyle()
         var style = SubtitleStyle(
-            fontSize: fontSize, centerX: centerX, centerY: centerY, fontName: fontName,
-            textColor: SubtitleRGB(red: textRed, green: textGreen, blue: textBlue), textOpacity: textOpacity,
-            backgroundColor: SubtitleRGB(red: backgroundRed, green: backgroundGreen, blue: backgroundBlue), backgroundOpacity: backgroundOpacity
+            fontSize: fontSize,
+            centerX: centerX ?? defaults.centerX,
+            centerY: centerY ?? defaults.centerY,
+            fontName: fontName ?? defaults.fontName,
+            textColor: SubtitleRGB(
+                red: textRed ?? defaults.textColor.red, green: textGreen ?? defaults.textColor.green, blue: textBlue ?? defaults.textColor.blue
+            ),
+            textOpacity: textOpacity ?? defaults.textOpacity,
+            backgroundColor: SubtitleRGB(
+                red: backgroundRed ?? defaults.backgroundColor.red,
+                green: backgroundGreen ?? defaults.backgroundColor.green,
+                blue: backgroundBlue ?? defaults.backgroundColor.blue
+            ),
+            backgroundOpacity: backgroundOpacity ?? defaults.backgroundOpacity
         )
         style.clamp()
         return style
