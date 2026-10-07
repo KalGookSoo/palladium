@@ -68,11 +68,11 @@ struct SubtitleInspectorView: View {
                     positionRow("세로", value: shown.y) { setPosition(shown.x, $0) }
                 }
                 Section("색") {
-                    ColorPicker("글자색", selection: colorBinding(\.textColor), supportsOpacity: false)
+                    LabeledContent("글자색") { PopoverColorWell(color: colorBinding(\.textColor)) }
                     CommitSlider(title: "글자 불투명도", value: style.textOpacity, range: 0 ... 1, text: percent) { opacity in
                         changeStyle { $0.textOpacity = opacity }
                     }
-                    ColorPicker("배경색", selection: colorBinding(\.backgroundColor), supportsOpacity: false)
+                    LabeledContent("배경색") { PopoverColorWell(color: colorBinding(\.backgroundColor)) }
                     CommitSlider(title: "배경 불투명도", value: style.backgroundOpacity, range: 0 ... 1, text: percent) { opacity in
                         changeStyle { $0.backgroundOpacity = opacity }
                     }
