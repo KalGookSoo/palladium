@@ -67,6 +67,21 @@ struct SubtitleStyleTests {
         #expect(SubtitleStyle(centerX: 0).boxOrigin(boxSize: CGSize(width: 1900, height: 100), renderSize: render).x == 10)
     }
 
+    @Test("안전 영역은 여백 안쪽이고, 상자 가운데가 갈 수 있는 범위는 상자가 여백에 닿는 데까지다")
+    func safeAreaAndCenterRange() {
+        let area = SubtitleStyle.safeArea(in: render)
+        #expect(area == CGRect(x: 96, y: 65, width: 1728, height: 950))
+        let range = SubtitleStyle.centerRange(boxSize: CGSize(width: 400, height: 100), renderSize: render)
+        // 가로: (96 + 200) / 1920 ~ (1824 - 200) / 1920
+        #expect(abs(range.x.lowerBound - 296.0 / 1920) < 1e-9 && abs(range.x.upperBound - 1624.0 / 1920) < 1e-9)
+        #expect(abs(range.y.lowerBound - 115.0 / 1080) < 1e-9 && abs(range.y.upperBound - 965.0 / 1080) < 1e-9)
+        // 범위 끝에 두면 상자가 여백에 닿는다.
+        let origin = SubtitleStyle(centerX: range.x.upperBound, centerY: range.y.upperBound).boxOrigin(boxSize: CGSize(width: 400, height: 100), renderSize: render)
+        #expect(origin.x + 400 == area.maxX && origin.y + 100 == area.maxY)
+        // 안전 영역보다 큰 상자는 가운데 한 점이다.
+        #expect(SubtitleStyle.centerRange(boxSize: CGSize(width: 1900, height: 100), renderSize: render).x == 0.5 ... 0.5)
+    }
+
     // MARK: - 편집기
 
     @Test("자막 위치 커맨드는 0~1로 맞추고 실행 취소 한 번으로 되돌리며, 방향키 이동은 실제로 보이는 자리에서 시작한다")

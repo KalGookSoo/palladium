@@ -108,6 +108,28 @@ nonisolated extension SubtitleStyle {
         )
     }
 
+    /// 여백 안쪽 사각형(안전 영역, 왼쪽 위 원점). 자막 상자는 이 안에서만 그려진다. 미리보기 보조선으로 보여준다.
+    static func safeArea(in renderSize: CGSize) -> CGRect {
+        let marginX = (renderSize.width * horizontalMarginRatio).rounded()
+        let marginY = (renderSize.height * verticalMarginRatio).rounded()
+        return CGRect(x: marginX, y: marginY, width: renderSize.width - marginX * 2, height: renderSize.height - marginY * 2)
+    }
+
+    /// `boxSize` 상자의 가운데가 갈 수 있는 범위(화면 비율). 인스펙터 슬라이더의 0~100%를 이 범위에 맞춰,
+    /// 끝까지 끌면 상자가 여백에 닿는다. 상자가 안전 영역보다 크면 가운데 한 점이다.
+    static func centerRange(boxSize: CGSize, renderSize: CGSize) -> (x: ClosedRange<Double>, y: ClosedRange<Double>) {
+        let area = safeArea(in: renderSize)
+        func range(min lower: Double, max upper: Double, box: Double, length: Double) -> ClosedRange<Double> {
+            let low = (lower + box / 2) / length
+            let high = (upper - box / 2) / length
+            return low <= high ? low ... high : 0.5 ... 0.5
+        }
+        return (
+            range(min: area.minX, max: area.maxX, box: boxSize.width, length: renderSize.width),
+            range(min: area.minY, max: area.maxY, box: boxSize.height, length: renderSize.height)
+        )
+    }
+
     private static func unit(_ value: Double) -> Double {
         min(max(value, 0), 1)
     }

@@ -63,9 +63,11 @@ struct SubtitleInspectorView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .trailing)
+                    // 0~100%는 상자가 갈 수 있는 범위(여백에 닿을 때까지)다. 끝까지 끌면 여백에 닿는다.
                     let shown = shownCenter
-                    positionRow("가로", value: shown.x) { setPosition($0, shown.y) }
-                    positionRow("세로", value: shown.y) { setPosition(shown.x, $0) }
+                    let ranges = centerRanges
+                    positionRow("가로", value: shown.x, range: ranges.x) { setPosition($0, shown.y) }
+                    positionRow("세로", value: shown.y, range: ranges.y) { setPosition(shown.x, $0) }
                 }
                 Section("색") {
                     LabeledContent("글자색") { PopoverColorWell(color: colorBinding(\.textColor)) }
@@ -125,16 +127,28 @@ struct SubtitleInspectorView: View {
         return CGPoint(x: frame.midX / renderSize.width, y: frame.midY / renderSize.height)
     }
 
-    private func positionRow(_ title: String, value: Double, set: @escaping (Double) -> Void) -> some View {
-        HStack {
-            CommitSlider(title: title, value: value, range: 0 ... 1, text: percent, commit: set)
-            TextField(title, value: Binding(get: { (value * 100).rounded() }, set: { set($0 / 100) }), format: .number)
+    /// 상자 가운데가 갈 수 있는 범위(화면 비율). 글자가 비어 있으면 화면 전체.
+    private var centerRanges: (x: ClosedRange<Double>, y: ClosedRange<Double>) {
+        guard let frame = SubtitleRenderer.frame(for: subtitle, renderSize: renderSize) else { return (0 ... 1, 0 ... 1) }
+        return SubtitleStyle.centerRange(boxSize: frame.size, renderSize: renderSize)
+    }
+
+    /// `value`(화면 비율)를 `range` 안의 0~1로 보여주고, 바꾼 값은 다시 화면 비율로 돌려 반영한다.
+    private func positionRow(_ title: String, value: Double, range: ClosedRange<Double>, set: @escaping (Double) -> Void) -> some View {
+        let span = range.upperBound - range.lowerBound
+        let fraction = span > 0 ? min(max((value - range.lowerBound) / span, 0), 1) : 0.5
+        let apply = { (fraction: Double) in set(range.lowerBound + min(max(fraction, 0), 1) * span) }
+        return HStack {
+            CommitSlider(title: title, value: fraction, range: 0 ... 1, text: percent, commit: apply)
+            TextField(title, value: Binding(get: { (fraction * 100).rounded() }, set: { apply($0 / 100) }), format: .number)
                 .labelsHidden()
                 .multilineTextAlignment(.trailing)
                 .frame(width: 44)
             Text("%")
                 .foregroundStyle(.secondary)
         }
+        // 상자가 안전 영역보다 커 움직일 수 없으면 끈다.
+        .disabled(span <= 0)
     }
 
     /// 설치된 글꼴 가족과 그 가족의 굵기. 이 Mac에 없는 글꼴이면 알리고 기본 글꼴로 그린다.
