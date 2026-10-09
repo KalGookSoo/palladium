@@ -204,8 +204,9 @@ struct MainWindowView: View {
             .navigationTitle(project.name)
             .background {
                 UnsavedChangesGuard(
-                    hasUnsavedChanges: hasUnsavedChanges,
-                    projectName: project.name,
+                    hasUnsavedChanges: { editor.hasUnsavedChanges },
+                    prompt: .project(named: project.name),
+                    role: .project(project.id),
                     save: saveProject,
                     discardChanges: editor.discardBackup
                 )

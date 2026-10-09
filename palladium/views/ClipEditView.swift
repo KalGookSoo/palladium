@@ -30,6 +30,10 @@ final class ClipEditSession {
     var hasUnappliedChanges = false
     /// 창이 열려 있는지. 창이 알려 준다.
     var isWindowOpen = false
+    /// 적용하지 않은 채 창을 닫을 때의 확인 문구. 창이 대상에 맞춰 알려 준다.
+    var closePrompt = UnsavedChangesPrompt(message: "")
+    /// 닫기 확인에서 "적용"(원본 항목이면 "새 항목으로 저장")을 고르면 창의 기본 버튼과 같은 일을 한다. 창이 넣어 준다.
+    var applyChanges: () -> Void = {}
 
     init(editor: ProjectEditor) {
         self.editor = editor
@@ -82,6 +86,8 @@ struct ClipEditWindowView: View {
 
     var body: some View {
         let session = value.flatMap { ClipEditSessions.shared.sessions[$0.projectID] }
+        // 닫기 버튼의 변경 표시(점)가 바로 바뀌도록 이 값을 읽어 둔다(확인 장치는 닫는 순간 다시 읽는다).
+        let _ = session?.hasUnappliedChanges
         Group {
             if let session, let target = session.target {
                 ClipEditView(session: session, target: target)
@@ -94,6 +100,19 @@ struct ClipEditWindowView: View {
         }
         .onAppear { session?.isWindowOpen = true }
         .onDisappear { session?.isWindowOpen = false }
+        // 적용하지 않은 채 닫으면(닫기 버튼·⌘W·앱 종료·프로젝트 창 닫기) 묻는다. 창이 살아 있는 동안 바뀌지 않는 이 뷰에 둔다.
+        .background {
+            UnsavedChangesGuard(
+                hasUnsavedChanges: { session?.hasUnappliedChanges ?? false },
+                prompt: session?.closePrompt ?? UnsavedChangesPrompt(message: ""),
+                role: .attached(to: value?.projectID ?? UUID()),
+                save: {
+                    session?.applyChanges()
+                    return true
+                },
+                discardChanges: { session?.hasUnappliedChanges = false }
+            )
+        }
     }
 }
 
@@ -195,7 +214,7 @@ struct ClipEditView: View {
                 actions(for: asset)
             } else {
                 ContentUnavailableView("대상이 없습니다", systemImage: "scissors", description: Text("원본이나 클립이 지워졌습니다"))
-                Button("닫기") { dismiss() }
+                Button("닫기") { close() }
             }
         }
         .padding()
@@ -225,6 +244,10 @@ struct ClipEditView: View {
         }
         .onChange(of: hasUnappliedChanges, initial: true) { _, hasChanges in
             session.hasUnappliedChanges = hasChanges
+        }
+        .onChange(of: closePrompt.message + closePrompt.saveTitle, initial: true) {
+            session.closePrompt = closePrompt
+            session.applyChanges = { applyDefault() }
         }
         .alert("적용하지 않은 변경이 있습니다", isPresented: isAskingToSwitch) {
             Button("변경 버리기", role: .destructive) {
@@ -334,7 +357,8 @@ struct ClipEditView: View {
                     .help("재생 위치에서 둘로 자릅니다. 옮겨 둔 손잡이 구간과 크롭도 함께 반영합니다")
             }
             Spacer()
-            Button("취소", role: .cancel) { dismiss() }
+            // "취소"는 버리겠다는 뜻이라 묻지 않고 닫는다.
+            Button("취소", role: .cancel) { close() }
                 .keyboardShortcut(.cancelAction)
             switch kind {
             case .asset:
@@ -343,20 +367,23 @@ struct ClipEditView: View {
                     Button("새 항목으로 저장") { saveAsNewItem(asset) }
                         .help("이 구간·크롭으로 파생 항목을 하나 더 미디어 패널에 추가합니다(파일은 복사하지 않음)")
                     Button("적용") {
-                        editor.setUsedRange(start: range.start, end: range.end, crop: cropToApply, for: asset.id)
-                        dismiss()
+                        applyDefault()
+                        close()
                     }
                     .keyboardShortcut(.defaultAction)
                     .help("이 파생 항목이 쓰는 구간·크롭을 바꿉니다")
                 } else {
-                    Button("새 항목으로 저장") { saveAsNewItem(asset) }
-                        .keyboardShortcut(.defaultAction)
-                        .help("이 구간·크롭으로 파생 항목을 미디어 패널에 추가합니다. 원본 항목·파일은 그대로입니다")
+                    Button("새 항목으로 저장") {
+                        applyDefault()
+                        close()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .help("이 구간·크롭으로 파생 항목을 미디어 패널에 추가합니다. 원본 항목·파일은 그대로입니다")
                 }
             case let .clip(clipID):
                 Button("적용") {
-                    editor.commitClipTrim(clipID, start: range.start, end: range.end, crop: cropToApply)
-                    dismiss()
+                    applyDefault()
+                    close()
                 }
                 .keyboardShortcut(.defaultAction)
             }
@@ -383,13 +410,16 @@ struct ClipEditView: View {
 
     /// 창 제목 "클립 편집 — 이름 (프로젝트 이름)".
     private var windowTitle: String {
-        guard let asset else { return "클립 편집" }
-        let name: String = if case let .clip(clipID) = kind, let clip = editor.currentSequence.clip(id: clipID) {
-            clip.displayName(assetName: asset.name)
-        } else {
-            asset.name
+        asset == nil ? "클립 편집" : "클립 편집 — \(targetName) (\(editor.project.name))"
+    }
+
+    /// 대상 이름. 클립은 별칭이 있으면 별칭이다.
+    private var targetName: String {
+        guard let asset else { return "" }
+        if case let .clip(clipID) = kind, let clip = editor.currentSequence.clip(id: clipID) {
+            return clip.displayName(assetName: asset.name)
         }
-        return "클립 편집 — \(name) (\(editor.project.name))"
+        return asset.name
     }
 
     /// 대상의 지금 구간과 크롭. 원본은 사용 구간(없으면 전체), 클립은 쓰는 원본 구간이다. 대상이 없으면 `nil`.
@@ -436,7 +466,42 @@ struct ClipEditView: View {
 
     private func saveAsNewItem(_ asset: MediaAsset) {
         editor.addTrimmedAsset(from: asset.id, start: range.start, end: range.end, crop: cropToApply ?? ClipCrop())
+        close()
+    }
+
+    /// 기본 버튼이 하는 일: 클립·파생 항목은 고친 구간·크롭을 적용하고, 원본 항목은 새 파생 항목으로 저장한다(원본은 바꾸지 않는다).
+    /// 닫기 확인의 "적용"도 이것을 쓴다.
+    private func applyDefault() {
+        guard let asset else { return }
+        switch kind {
+        case let .clip(clipID):
+            editor.commitClipTrim(clipID, start: range.start, end: range.end, crop: cropToApply)
+        case .asset where asset.isDerived:
+            editor.setUsedRange(start: range.start, end: range.end, crop: cropToApply, for: asset.id)
+        case .asset:
+            editor.addTrimmedAsset(from: asset.id, start: range.start, end: range.end, crop: cropToApply ?? ClipCrop())
+        }
+    }
+
+    /// 확정했거나 버리기로 한 뒤 묻지 않고 창을 닫는다.
+    private func close() {
+        session.hasUnappliedChanges = false
         dismiss()
+    }
+
+    /// 적용하지 않은 채 닫을 때의 확인 문구. 원본 항목은 바꿀 수 없어 "새 항목으로 저장"을 묻는다.
+    private var closePrompt: UnsavedChangesPrompt {
+        let isOriginalAsset = if case .asset = kind {
+            asset?.isDerived == false
+        } else {
+            false
+        }
+        return UnsavedChangesPrompt(
+            message: "\"\(targetName)\"에서 고친 트림·크롭을 \(isOriginalAsset ? "새 항목으로 저장" : "적용")하시겠습니까?",
+            information: "\(isOriginalAsset ? "저장" : "적용")하지 않으면 이 창에서 고친 내용이 사라집니다.",
+            saveTitle: isOriginalAsset ? "새 항목으로 저장" : "적용",
+            discardTitle: isOriginalAsset ? "저장 안 함" : "적용 안 함"
+        )
     }
 
     /// 옮겨 둔 구간·크롭을 함께 반영해 재생 위치에서 자르고, 앞 조각을 계속 편집한다.
