@@ -401,8 +401,10 @@ private struct MediaAssetRow<Name: View>: View {
         let durationText = asset.kind == .image
             ? "이미지"
             : Duration.seconds((asset.usedRange?.duration ?? asset.duration).seconds).formatted(.time(pattern: .minuteSecond))
+        let showsProxyBadge = ProxyGenerator.shared.progress[asset.mediaKey] == nil && ProxyGenerator.shared.hasProxy(asset)
 
-        HStack {
+        // 간격을 정하지 않으면 뱃지 유무에 따라 썸네일과 이름 사이 여백이 달라진다(#83).
+        HStack(spacing: 8) {
             MediaThumbnailView(asset: asset)
             VStack(alignment: .leading) {
                 HStack(spacing: 4) {
@@ -428,23 +430,25 @@ private struct MediaAssetRow<Name: View>: View {
                     }
                     .controlSize(.mini)
                 }
-                // 파생 항목(#81)과 프록시 표시는 한 줄에 둔다.
-                HStack(spacing: 4) {
-                    if asset.isDerived {
-                        Text("파생")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 4)
-                            .background(.yellow.opacity(0.3), in: Capsule())
-                            .help("원본에서 트림한 항목입니다. 타임라인에 놓으면 이 구간만 들어가고, 원본 항목·파일은 그대로입니다")
-                    }
-                    if ProxyGenerator.shared.progress[asset.mediaKey] == nil, ProxyGenerator.shared.hasProxy(asset) {
-                        Text("프록시")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 4)
-                            .background(.quaternary, in: Capsule())
-                            .help("미리보기는 1080p 대체 파일로 재생하고, 내보내기는 원본으로 합니다")
+                // 파생 항목(#81)과 프록시 표시는 한 줄에 둔다. 뱃지가 없으면 줄을 넣지 않는다.
+                if asset.isDerived || showsProxyBadge {
+                    HStack(spacing: 4) {
+                        if asset.isDerived {
+                            Text("파생")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 4)
+                                .background(.yellow.opacity(0.3), in: Capsule())
+                                .help("원본에서 트림한 항목입니다. 타임라인에 놓으면 이 구간만 들어가고, 원본 항목·파일은 그대로입니다")
+                        }
+                        if showsProxyBadge {
+                            Text("프록시")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 4)
+                                .background(.quaternary, in: Capsule())
+                                .help("미리보기는 1080p 대체 파일로 재생하고, 내보내기는 원본으로 합니다")
+                        }
                     }
                 }
             }
