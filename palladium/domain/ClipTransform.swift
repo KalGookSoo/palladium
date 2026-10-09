@@ -40,6 +40,31 @@ nonisolated extension ClipTransform {
         scale = min(max(scale, Self.scaleRange.lowerBound), Self.scaleRange.upperBound)
         opacity = min(max(opacity, 0), 1)
     }
+
+    /// 끌기 시작 때의 트랜스폼을 화면 비율 `offset`만큼 옮긴 결과(#84). 가운데가 화면 가로·세로 가운데에서 `snap`(화면 비율) 안이면 가운데에 붙이고, 붙었는지 함께 돌려준다.
+    func moved(by offset: CGVector, snap: CGVector) -> (transform: ClipTransform, snapped: (x: Bool, y: Bool)) {
+        var moved = self
+        moved.centerX += offset.dx
+        moved.centerY += offset.dy
+        let snapsX = abs(moved.centerX - 0.5) < snap.dx
+        let snapsY = abs(moved.centerY - 0.5) < snap.dy
+        if snapsX {
+            moved.centerX = 0.5
+        }
+        if snapsY {
+            moved.centerY = 0.5
+        }
+        return (moved, (snapsX, snapsY))
+    }
+
+    /// 끌기 시작 때 폭이 `startWidth`인 테두리를 가운데 기준으로 `widthChange`만큼 넓힌 배율(#84). 폭과 변화량은 같은 단위면 된다.
+    func resized(widthChange: Double, startWidth: Double) -> ClipTransform {
+        guard startWidth > 0 else { return self }
+        var resized = self
+        resized.scale = scale * max(startWidth + widthChange, 0) / startWidth
+        resized.clamp()
+        return resized
+    }
 }
 
 nonisolated extension ClipTransform: Equatable {}

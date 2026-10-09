@@ -196,7 +196,9 @@ struct SequenceExporterTests {
 @MainActor
 struct BatchExportJobTests {
     private struct FakeFailure: Error, LocalizedError {
-        var errorDescription: String? { "디스크가 가득 찼습니다" }
+        var errorDescription: String? {
+            "디스크가 가득 찼습니다"
+        }
     }
 
     @Test("배치 내보내기는 순서대로 처리하고, 하나가 실패해도 나머지를 계속한다")

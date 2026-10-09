@@ -216,7 +216,7 @@ struct SubtitleTests {
     }
 
     @Test("SRT를 읽고 쓰면 시간과 여러 줄 글자가 그대로이고, 형식이 틀린 항목은 건너뛴다")
-    func srtRoundTrip() throws {
+    func srtRoundTrip() {
         let source = "\u{FEFF}1\r\n00:00:01,500 --> 00:00:03,000\r\n안녕하세요\r\n두 번째 줄\r\n\r\n2\r\n잘못된 시간\r\n무시\r\n\r\n3\r\n01:02:03.040 --> 01:02:05,000 X1:0\r\n끝\r\n"
         let parsed = SubtitleFile.parseSRT(source)
         #expect(parsed.map(\.text) == ["안녕하세요\n두 번째 줄", "끝"])

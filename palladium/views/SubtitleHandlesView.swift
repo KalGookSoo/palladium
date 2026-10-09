@@ -25,7 +25,7 @@ struct SubtitleHandlesView: View {
                 height: renderSize.height * fitScale
             )
             // 자막을 고르면 안전 영역(상자가 갈 수 있는 끝)·3분할 격자·가운데 선을 옅게, 끄는 동안 진하게 보여준다.
-            SubtitleGuides(
+            PositionGuides(
                 render: shownRender,
                 safeArea: SubtitleStyle.safeArea(in: renderSize),
                 scale: fitScale,
@@ -93,56 +93,5 @@ struct SubtitleHandlesView: View {
                 draft = nil
                 snapped = (false, false)
             }
-    }
-}
-
-/// 자막 위치 보조선(#82). 사진 앱 격자처럼 안전 영역 안을 3분할하고, 화면 가로·세로 가운데 선을 그린다.
-private struct SubtitleGuides: View {
-    /// 미리보기 안에서 합성 화면이 보이는 사각형.
-    let render: CGRect
-    /// 합성 화면 좌표의 안전 영역.
-    let safeArea: CGRect
-    let scale: Double
-    let isDragging: Bool
-    let snapped: (x: Bool, y: Bool)
-
-    var body: some View {
-        let area = CGRect(
-            x: render.minX + safeArea.minX * scale,
-            y: render.minY + safeArea.minY * scale,
-            width: safeArea.width * scale,
-            height: safeArea.height * scale
-        )
-        let strength = isDragging ? 0.6 : 0.3
-        ZStack(alignment: .topLeading) {
-            // 3분할 격자.
-            Path { path in
-                for index in 1 ... 2 {
-                    let x = area.minX + area.width * Double(index) / 3
-                    let y = area.minY + area.height * Double(index) / 3
-                    path.move(to: CGPoint(x: x, y: area.minY))
-                    path.addLine(to: CGPoint(x: x, y: area.maxY))
-                    path.move(to: CGPoint(x: area.minX, y: y))
-                    path.addLine(to: CGPoint(x: area.maxX, y: y))
-                }
-            }
-            .stroke(Color.white.opacity(strength * 0.5), lineWidth: 0.5)
-            // 안전 영역 테두리: 자막 상자는 이 안에서만 움직인다.
-            Rectangle()
-                .stroke(Color.teal.opacity(strength), style: StrokeStyle(lineWidth: 1, dash: [6, 4]))
-                .frame(width: area.width, height: area.height)
-                .offset(x: area.minX, y: area.minY)
-            // 가운데 선. 붙으면 진하게.
-            Path { path in
-                path.move(to: CGPoint(x: render.midX, y: area.minY))
-                path.addLine(to: CGPoint(x: render.midX, y: area.maxY))
-            }
-            .stroke(Color.yellow.opacity(snapped.x ? 0.9 : strength * 0.6), lineWidth: snapped.x ? 1.5 : 0.5)
-            Path { path in
-                path.move(to: CGPoint(x: area.minX, y: render.midY))
-                path.addLine(to: CGPoint(x: area.maxX, y: render.midY))
-            }
-            .stroke(Color.yellow.opacity(snapped.y ? 0.9 : strength * 0.6), lineWidth: snapped.y ? 1.5 : 0.5)
-        }
     }
 }
