@@ -96,10 +96,10 @@ struct TrackRowView: View {
         .frame(width: max(width - 2, 1), height: clipHeight)
         .offset(x: scale.x(for: clip.timelineStart) + 1 + offset.width, y: TimelineMetrics.clipVerticalInset + offset.height)
         .onTapGesture { select(clip) }
-        // 두 번 누르면 트림 시트를 연다(#81). 한 번 누르기 선택이 늦어지지 않게 함께 받는다.
+        // 두 번 누르면 클립 편집 창을 연다(#81·#85). 한 번 누르기 선택이 늦어지지 않게 함께 받는다.
         .simultaneousGesture(TapGesture(count: 2).onEnded {
             if asset?.isTrimmable == true {
-                actions.openTrimSheet(clip.id)
+                actions.openClipEditor(clip.id)
             }
         })
         .gesture(
@@ -218,7 +218,7 @@ struct TrackRowView: View {
         Divider()
         // 트림 시트(#81)는 영상·오디오 클립 하나만 연다.
         if targetIDs.count == 1, assets.first(where: { $0.id == clip.assetID })?.isTrimmable == true {
-            Button(ShortcutGuide.trimSheet.title) { actions.openTrimSheet(clip.id) }
+            Button(ShortcutGuide.clipEditor.title) { actions.openClipEditor(clip.id) }
                 .keyboardShortcut("t", modifiers: .command)
         }
         // 별칭은 클립마다 다르므로 하나를 골랐을 때만 바꾼다. 입력은 인스펙터 맨 위 이름 칸에서 한다.

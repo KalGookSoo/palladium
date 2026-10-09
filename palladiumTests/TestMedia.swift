@@ -11,7 +11,11 @@ enum TestMedia {
 
     /// 한 가지 색으로 칠한 무음 영상(기본 30fps). 시각은 1/600초 단위로 반올림해, 59.95처럼 정수가 아닌 값을 주면
     /// 아이폰 영상처럼 프레임 간격이 1/60초와 11/600초로 흔들린다.
-    static func makeVideo(red: UInt8, green: UInt8, blue: UInt8, seconds: Double, width: Int = 64, height: Int = 36, fps: Double = 30) async throws -> URL {
+    /// `rightHalf`가 있으면 오른쪽 절반을 그 색으로 칠한다(크롭 확인용, #85).
+    static func makeVideo(
+        red: UInt8, green: UInt8, blue: UInt8, seconds: Double, width: Int = 64, height: Int = 36, fps: Double = 30,
+        rightHalf: (red: UInt8, green: UInt8, blue: UInt8)? = nil
+    ) async throws -> URL {
         let url = temporaryURL(extension: "mov")
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
@@ -42,9 +46,10 @@ enum TestMedia {
             for row in 0 ..< height {
                 for column in 0 ..< width {
                     let offset = row * bytesPerRow + column * 4
-                    base[offset] = blue
-                    base[offset + 1] = green
-                    base[offset + 2] = red
+                    let color = column >= width / 2 ? rightHalf ?? (red: red, green: green, blue: blue) : (red: red, green: green, blue: blue)
+                    base[offset] = color.blue
+                    base[offset + 1] = color.green
+                    base[offset + 2] = color.red
                     base[offset + 3] = 255
                 }
             }

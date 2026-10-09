@@ -81,58 +81,71 @@ final class ProjectEditor {
         updateAssets(assetIDs, actionName: "색상 레이블") { $0.colorLabel = colorLabel }
     }
 
-    // MARK: 트림 시트(#81) — 원본 항목·파일은 바꾸지 않는다
+    // MARK: 클립 편집 창(#81 트림, #85 크롭) — 원본 항목·파일은 바꾸지 않는다
 
-    /// 파생 항목이 쓰는 구간을 바꾼다(트림 시트의 "적용"). 원본 범위로 맞추고, 원본 전체면 구간을 없앤다. 원본 항목은 바꾸지 않는다.
-    func setUsedRange(start: CMTime, end: CMTime, for assetID: MediaAsset.ID) {
-        perform("트림") { $0.setUsedRange(CMTimeRange(start: start, end: end), for: assetID) }
+    /// 파생 항목이 쓰는 구간을 바꾼다(클립 편집 창의 "적용"). 원본 범위로 맞추고, 원본 전체면 구간을 없앤다.
+    /// `crop`이 있으면 크롭도 함께 바꾼다(실행 취소 한 번). 원본 항목은 바꾸지 않는다.
+    func setUsedRange(start: CMTime, end: CMTime, crop: ClipCrop? = nil, for assetID: MediaAsset.ID) {
+        perform("트림") { $0.setUsedRange(CMTimeRange(start: start, end: end), crop: crop, for: assetID) }
     }
 
-    /// 같은 파일을 가리키는 파생 항목을 구간과 함께 고른 항목 바로 뒤에 추가한다("새 항목으로 저장"). 새 항목 ID.
+    /// 같은 파일을 가리키는 파생 항목을 구간·크롭과 함께 고른 항목 바로 뒤에 추가한다("새 항목으로 저장"). 새 항목 ID.
     @discardableResult
-    func addTrimmedAsset(from assetID: MediaAsset.ID, start: CMTime, end: CMTime) -> MediaAsset.ID? {
+    func addTrimmedAsset(from assetID: MediaAsset.ID, start: CMTime, end: CMTime, crop: ClipCrop = ClipCrop()) -> MediaAsset.ID? {
         var newID: MediaAsset.ID?
-        perform("새 항목으로 저장") { newID = $0.addDerivedAsset(from: assetID, usedRange: CMTimeRange(start: start, end: end), after: assetID) }
+        perform("새 항목으로 저장") { newID = $0.addDerivedAsset(from: assetID, usedRange: CMTimeRange(start: start, end: end), crop: crop, after: assetID) }
         return newID
     }
 
     /// 항목을 `start`~`end` 구간으로 보고 `time`(원본 시각)에서 잘라, 앞·뒤 구간을 각각 파생 항목으로 고른 항목 뒤에 추가한다.
-    /// 고른 항목은 그대로다. 자를 수 없으면(구간 밖) `nil`.
-    func splitAsset(_ assetID: MediaAsset.ID, start: CMTime, end: CMTime, at time: CMTime) -> (front: MediaAsset.ID, back: MediaAsset.ID)? {
+    /// 두 항목은 `crop`을 갖는다. 고른 항목은 그대로다. 자를 수 없으면(구간 밖) `nil`.
+    func splitAsset(_ assetID: MediaAsset.ID, start: CMTime, end: CMTime, crop: ClipCrop = ClipCrop(), at time: CMTime) -> (front: MediaAsset.ID, back: MediaAsset.ID)? {
         guard let source = asset(id: assetID), source.isTrimmable else { return nil }
         let range = TrimRange.clamped(start: start, end: end, sourceDuration: source.duration)
         guard TrimRange.canSplit(range, at: time) else { return nil }
         var pieces: (front: MediaAsset.ID, back: MediaAsset.ID)?
         perform("자르기") { project in
-            guard let front = project.addDerivedAsset(from: assetID, usedRange: CMTimeRange(start: range.start, end: time), after: assetID),
-                  let back = project.addDerivedAsset(from: assetID, usedRange: CMTimeRange(start: time, end: range.end), after: front)
+            guard let front = project.addDerivedAsset(from: assetID, usedRange: CMTimeRange(start: range.start, end: time), crop: crop, after: assetID),
+                  let back = project.addDerivedAsset(from: assetID, usedRange: CMTimeRange(start: time, end: range.end), crop: crop, after: front)
             else { return }
             pieces = (front, back)
         }
         return pieces
     }
 
-    /// 타임라인 클립을 원본 `start`~`end` 구간으로 트림한다(트림 시트의 "적용", 리플 — 뒤 클립이 따라온다). 원본 항목은 바꾸지 않는다.
-    func commitClipTrim(_ clipID: Clip.ID, start: CMTime, end: CMTime) {
+    /// 타임라인 클립을 원본 `start`~`end` 구간으로 트림한다(클립 편집 창의 "적용", 리플 — 뒤 클립이 따라온다).
+    /// `crop`이 있으면 크롭도 범위로 맞춰 함께 바꾼다(실행 취소 한 번). 원본 항목은 바꾸지 않는다.
+    func commitClipTrim(_ clipID: Clip.ID, start: CMTime, end: CMTime, crop: ClipCrop? = nil) {
         guard let clip = currentSequence.clip(id: clipID) else { return }
         let range = clip.clampedSourceRange(start: start, end: end, sourceDuration: asset(id: clip.assetID)?.trimmableDuration)
-        editCurrentSequence("트림") { $0.setSourceRange(range, forClip: clipID) }
+        editCurrentSequence("트림") { sequence in
+            sequence.setSourceRange(range, forClip: clipID)
+            Self.setCrop(crop, forClip: clipID, in: &sequence)
+        }
     }
 
-    /// 타임라인 클립을 원본 `start`~`end` 구간으로 트림하고 `time`(원본 시각)에서 자른다(트림 시트의 "자르기"). 한 번의 편집이다.
-    /// 앞 조각은 원래 ID를 지킨다. 자를 수 없으면(구간 밖) 바꾸지 않고 `false`.
+    /// 타임라인 클립을 원본 `start`~`end` 구간으로 트림하고 `time`(원본 시각)에서 자른다(클립 편집 창의 "자르기"). 한 번의 편집이다.
+    /// `crop`이 있으면 크롭도 반영해 두 조각이 같은 크롭을 갖는다. 앞 조각은 원래 ID를 지킨다. 자를 수 없으면(구간 밖) 바꾸지 않고 `false`.
     @discardableResult
-    func splitClip(_ clipID: Clip.ID, start: CMTime, end: CMTime, at time: CMTime) -> Bool {
+    func splitClip(_ clipID: Clip.ID, start: CMTime, end: CMTime, crop: ClipCrop? = nil, at time: CMTime) -> Bool {
         guard let clip = currentSequence.clip(id: clipID) else { return false }
         let range = clip.clampedSourceRange(start: start, end: end, sourceDuration: asset(id: clip.assetID)?.trimmableDuration)
         guard TrimRange.canSplit(range, at: time) else { return false }
         editCurrentSequence("자르기") { sequence in
             sequence.setSourceRange(range, forClip: clipID)
+            Self.setCrop(crop, forClip: clipID, in: &sequence)
             guard let trimmed = sequence.clip(id: clipID) else { return }
             let splitTime = trimmed.timelineStart + trimmed.timelineTime(forSource: time - range.start)
             sequence.split(at: splitTime, clipIDs: [clipID])
         }
         return true
+    }
+
+    /// 크롭을 범위로 맞춰 클립에 넣는다. `nil`이면 그대로 둔다.
+    private static func setCrop(_ crop: ClipCrop?, forClip clipID: Clip.ID, in sequence: inout EditSequence) {
+        guard var crop else { return }
+        crop.clamp()
+        sequence.updateClips([clipID]) { $0.crop = crop }
     }
 
     /// 쉼표로 나눈 태그 목록으로 바꾼다.

@@ -18,13 +18,14 @@ nonisolated extension Clip {
             timelineStart: clippedStart
         )
         portion?.speed = speed
-        // 나눈 조각도 같은 위치·크기·불투명도·음량·별칭·색상 레이블·색보정을 가진다.
+        // 나눈 조각도 같은 위치·크기·불투명도·음량·별칭·색상 레이블·색보정·크롭을 가진다.
         portion?.transform = transform
         portion?.volume = volume
         portion?.isMuted = isMuted
         portion?.name = name
         portion?.colorLabel = colorLabel
         portion?.colorAdjustment = colorAdjustment
+        portion?.crop = crop
         // 앞 클립과의 전환은 원래 시작을 가진 조각에만 남는다.
         if clippedStart == timelineStart {
             portion?.transitionIn = transitionIn
@@ -399,9 +400,11 @@ nonisolated extension MediaAsset {
         kind == .image ? nil : duration
     }
 
-    /// 이 항목(파생 항목이면 쓰는 구간)을 `time`에 놓는 새 클립. 길이가 0이면 `nil`.
+    /// 이 항목(파생 항목이면 쓰는 구간과 크롭)을 `time`에 놓는 새 클립. 길이가 0이면 `nil`.
     func makeClip(at time: CMTime) -> Clip? {
-        // 파생 항목(#81)은 쓰는 구간만 놓는다.
-        Clip(assetID: id, sourceRange: usedRange ?? CMTimeRange(start: .zero, duration: placementDuration), timelineStart: CMTimeMaximum(time, .zero))
+        // 파생 항목(#81)은 쓰는 구간만 놓고, 크롭(#85)도 클립에 따라간다.
+        var clip = Clip(assetID: id, sourceRange: usedRange ?? CMTimeRange(start: .zero, duration: placementDuration), timelineStart: CMTimeMaximum(time, .zero))
+        clip?.crop = crop
+        return clip
     }
 }

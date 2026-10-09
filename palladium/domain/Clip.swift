@@ -26,6 +26,8 @@ nonisolated struct Clip {
     var colorLabel: ColorLabel?
     /// 밝기·대비·채도(#61). 영상·이미지 클립에만 그린다.
     var colorAdjustment = ColorAdjustment()
+    /// 화면에서 잘라낼 만큼(#85, 클립 편집 창의 크롭). 위치·크기는 잘린 화면을 기준으로 한다.
+    var crop = ClipCrop()
 
     init?(id: UUID = UUID(), assetID: MediaAsset.ID, sourceRange: CMTimeRange, timelineStart: CMTime) {
         guard sourceRange.start.isNumeric, sourceRange.duration.isNumeric, sourceRange.duration > .zero, timelineStart.isNumeric, timelineStart >= .zero else { return nil }

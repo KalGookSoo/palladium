@@ -23,6 +23,8 @@ nonisolated struct CompositionLayer {
     var fade: Fade?
     /// 밝기·대비·채도(#61). 화면에 놓기 전 원본 이미지에 적용한다.
     var colorAdjustment = ColorAdjustment()
+    /// 잘라낼 화면(#85). 영상 층에만 쓴다. 위치·크기(`transform`)는 잘린 화면을 기준으로 한다.
+    var crop = ClipCrop()
 }
 
 /// 시퀀스 구간 하나와 그 구간에 그릴 층들. 빈 구간은 층이 없어 검은 화면이다.
@@ -104,9 +106,10 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
                 naturalSize: naturalSize,
                 preferredTransform: preferredTransform,
                 clipTransform: layer.transform,
+                crop: layer.crop,
                 renderSize: renderSize
             )
-            placed = Self.applying(layer.colorAdjustment, to: CIImage(cvPixelBuffer: buffer)).transformed(by: transform)
+            placed = Self.cropping(Self.applying(layer.colorAdjustment, to: CIImage(cvPixelBuffer: buffer)).transformed(by: transform), by: layer.crop)
         case let .image(source):
             let adjusted = Self.applying(layer.colorAdjustment, to: source)
             placed = adjusted.transformed(by: Self.imageTransform(imageSize: source.extent.size, clipTransform: layer.transform, renderSize: renderSize))
@@ -128,15 +131,17 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
 
     /// 영상 프레임(회전 전 원본)을 화면 위 클립 사각형으로 옮기는 Core Image 좌표 변환.
     /// AVFoundation의 회전 정보와 클립 사각형은 왼쪽 위 원점이라, 원본과 화면의 세로축을 뒤집어 맞춘다.
+    /// 크롭(#85)이 있으면 잘린 화면이 클립 사각형에 오도록 원본 전체를 그만큼 크게·비켜 놓는다(바깥은 `cropping`이 잘라낸다).
     static func videoTransform(
         naturalSize: CGSize,
         preferredTransform: CGAffineTransform,
         clipTransform: ClipTransform,
+        crop: ClipCrop = ClipCrop(),
         renderSize: CGSize
     ) -> CGAffineTransform {
         let displayed = CGRect(origin: .zero, size: naturalSize).applying(preferredTransform)
         guard displayed.width > 0, displayed.height > 0 else { return .identity }
-        let frame = clipTransform.frame(contentSize: displayed.size, in: renderSize)
+        let frame = crop.fullFrame(forCroppedFrame: clipTransform.frame(contentSize: crop.croppedSize(of: displayed.size), in: renderSize))
         let topLeft = preferredTransform
             .concatenating(CGAffineTransform(translationX: -displayed.minX, y: -displayed.minY))
             .concatenating(CGAffineTransform(scaleX: frame.width / displayed.width, y: frame.height / displayed.height))
@@ -144,6 +149,20 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
         let flipSource = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: naturalSize.height)
         let flipRender = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: renderSize.height)
         return flipSource.concatenating(topLeft).concatenating(flipRender)
+    }
+
+    /// 화면에 놓은 원본 전체(`image.extent`)에서 잘린 화면 바깥을 잘라낸다(#85). Core Image는 왼쪽 아래 원점이라 아래 비율부터 잰다.
+    /// 크롭이 없으면 그대로 둔다.
+    private static func cropping(_ image: CIImage, by crop: ClipCrop) -> CIImage {
+        guard !crop.isDefault else { return image }
+        let full = image.extent
+        let visible = crop.visibleRect
+        return image.cropped(to: CGRect(
+            x: full.minX + crop.left * full.width,
+            y: full.minY + crop.bottom * full.height,
+            width: visible.width * full.width,
+            height: visible.height * full.height
+        ))
     }
 
     /// 이미지를 화면 위 클립 사각형으로 옮기는 Core Image 좌표 변환(이미지는 이미 바로 선 방향이다).

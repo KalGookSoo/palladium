@@ -17,6 +17,8 @@ nonisolated struct MediaAsset {
     var usedRange: CMTimeRange? = nil
     /// 파생 항목(트림 시트의 "새 항목으로 저장"·"자르기"로 만든 항목)이면 처음 원본의 `mediaKey`. 썸네일·파형·프록시를 같은 파일끼리 같이 쓰는 데 쓴다.
     var sourceAssetID: UUID? = nil
+    /// 파생 항목이 잘라낼 화면(#85, 크롭). 타임라인에 놓으면 클립이 이 크롭을 갖는다. 원본 항목에는 두지 않는다.
+    var crop = ClipCrop()
 }
 
 nonisolated enum MediaKind: String {

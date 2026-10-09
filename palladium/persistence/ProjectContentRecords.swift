@@ -26,6 +26,11 @@ final class MediaAssetRecord {
     var usedDurationTimescale: Int32 = 600
     /// 파생 항목이면 처음 원본의 캐시 키.
     var sourceAssetID: UUID?
+    /// 파생 항목의 크롭(#85, 원본 화면 대비 비율). 모두 `nil`이면 자르지 않는다. 기존 저장소가 열리도록 옵셔널로 둔다.
+    var cropTop: Double?
+    var cropBottom: Double?
+    var cropLeft: Double?
+    var cropRight: Double?
     var project: ProjectRecord?
     var backup: ProjectBackupRecord?
 
@@ -143,6 +148,11 @@ final class ClipRecord {
     var brightness: Double = 0
     var contrast: Double = 1
     var saturation: Double = 1
+    /// 크롭(#85, 원본 화면 대비 비율). 모두 `nil`이면 자르지 않는다. 기존 저장소가 열리도록 옵셔널로 둔다.
+    var cropTop: Double?
+    var cropBottom: Double?
+    var cropLeft: Double?
+    var cropRight: Double?
     var track: TrackRecord?
 
     init(

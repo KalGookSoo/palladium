@@ -40,7 +40,8 @@ struct PreviewPlayerView: View {
                         if let transformTarget, let targetContentSize {
                             TransformHandlesView(
                                 transform: transformTarget.clip.transform,
-                                contentSize: targetContentSize,
+                                // 위치·크기는 잘린 화면(#85)을 기준으로 한다.
+                                contentSize: transformTarget.clip.crop.croppedSize(of: targetContentSize),
                                 renderSize: renderSize
                             ) { setTransform(transformTarget.clip.id, $0) }
                         }

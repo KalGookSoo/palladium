@@ -45,5 +45,12 @@ struct palladiumApp: App {
                 DebugCommands()
             #endif
         }
+
+        // 클립 편집 창(#85). 프로젝트마다 하나이고 프로젝트 창이 닫히면 함께 닫힌다. 프로젝트 창이 없으면 쓸 수 없어 복원하지 않는다.
+        WindowGroup("클립 편집", id: SceneID.clipEdit, for: ClipEditWindowValue.self) { $value in
+            ClipEditWindowView(value: value)
+        }
+        .defaultSize(width: 960, height: 680)
+        .restorationBehavior(.disabled)
     }
 }

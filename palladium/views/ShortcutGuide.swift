@@ -62,8 +62,9 @@ enum ShortcutGuide {
     static let toggleClipSelection = ShortcutGuideEntry(title: "선택에 더하기/빼기", summary: "클립을 하나씩 더 고르거나 뺍니다", keys: "⌘ 클릭")
     static let extendClipSelection = ShortcutGuideEntry(title: "범위 선택", summary: "같은 트랙에서 고른 클립까지 사이를 모두 고릅니다", keys: "⇧ 클릭")
     static let rename = ShortcutGuideEntry(title: "이름 변경", summary: "타임라인에서 고른 클립의 별칭을, 미디어 패널에 포커스가 있으면 고른 원본의 이름을 바꿉니다", keys: "F2")
-    static let trimSheet = ShortcutGuideEntry(title: "트림…", summary: "고른 클립(미디어 패널에 포커스가 있으면 항목)을 트림 창에서 원본 전체를 보며 줄이고 늘리고 자릅니다", keys: "⌘T")
-    static let trimNudge = ShortcutGuideEntry(title: "트림 구간 미세 조정", summary: "트림 창에서 마지막으로 잡은 손잡이를 0.1초씩, ⇧와 함께 1초씩 옮깁니다", keys: "↑/↓ (트림 창)")
+    static let clipEditor = ShortcutGuideEntry(title: "클립 편집…", summary: "고른 클립(미디어 패널에 포커스가 있으면 항목)을 클립 편집 창에서 엽니다 — 트림 탭에서 원본 전체를 보며 줄이고 늘리고 자르고, 크롭 탭에서 화면을 잘라냅니다", keys: "⌘T")
+    static let trimNudge = ShortcutGuideEntry(title: "트림 구간 미세 조정", summary: "클립 편집 창 트림 탭에서 마지막으로 잡은 손잡이를 0.1초씩, ⇧와 함께 1초씩 옮깁니다", keys: "↑/↓ (클립 편집 창)")
+    static let cropKeepRatio = ShortcutGuideEntry(title: "크롭 비율 유지", summary: "클립 편집 창 크롭 탭에서 ⇧를 누른 채 손잡이를 끌면 지금 비율을 지킵니다", keys: "⇧ 끌기 (클립 편집 창)")
     static let deleteAsset = ShortcutGuideEntry(title: "원본 삭제", summary: "미디어 패널에서 고른 원본을 프로젝트에서 뺍니다(쓰는 클립도 함께, 원본 파일은 남음)", keys: "⌫ (미디어 패널)")
     static let filterMedia = ShortcutGuideEntry(title: "필터", summary: "색상 레이블로 원본을 거릅니다", keys: nil)
 
@@ -75,7 +76,7 @@ enum ShortcutGuide {
         ("파일", [openProjectList, newProject, save, close, importMedia, export, batchExport]),
         ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline]),
         ("재생", [playPause, previousFrame, nextFrame, narration]),
-        ("편집", [undo, redo, rename, trimSheet, trimNudge, deleteAsset]),
+        ("편집", [undo, redo, rename, clipEditor, trimNudge, cropKeepRatio, deleteAsset]),
         ("타임라인", [deleteClips, rippleDeleteClips, cutClips, copyClips, pasteClips, duplicateClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect, addMarker, addSubtitle, moveSubtitle, preciseTrim, rollTrim, slipTrim, slideTrim]),
         ("도움말", [showHelp, showShortcuts]),
     ]

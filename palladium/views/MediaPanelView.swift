@@ -14,8 +14,8 @@ struct MediaPanelView: View {
     var importFiles: ([URL]) -> Void = { _ in }
     /// 목록에 포커스가 있는지. 편집 창이 ⌫를 타임라인 클립 삭제로 가로채지 않게 알린다.
     var isListFocused: Binding<Bool> = .constant(false)
-    /// 항목을 트림 시트로 연다(#81).
-    var openTrimSheet: (MediaAsset.ID) -> Void = { _ in }
+    /// 항목을 클립 편집 창으로 연다(#81·#85).
+    var openClipEditor: (MediaAsset.ID) -> Void = { _ in }
     @State private var filter = MediaFilter()
     @FocusState private var listHasFocus: Bool
     /// 클립이 쓰고 있어 확인을 기다리는 삭제(#60).
@@ -90,10 +90,10 @@ struct MediaPanelView: View {
                 assetMenu(for: assetIDs)
             }
         } primaryAction: { assetIDs in
-            // 두 번 누르면 영상·오디오는 트림 시트를, 이미지는 훑어보기(Quick Look)를 연다(#81).
+            // 두 번 누르면 영상·오디오는 클립 편집 창을, 이미지는 훑어보기(Quick Look)를 연다(#81).
             if let assetID = assetIDs.first {
                 if editor.asset(id: assetID)?.isTrimmable == true {
-                    openTrimSheet(assetID)
+                    openClipEditor(assetID)
                 } else {
                     openAsset(assetID)
                 }
@@ -293,9 +293,9 @@ struct MediaPanelView: View {
         }
         // 이름과 태그는 원본마다 다르므로 하나를 골랐을 때만 편집한다.
         if assetIDs.count == 1, let assetID = assetIDs.first, let asset = editor.asset(id: assetID), asset.isTrimmable {
-            Button(ShortcutGuide.trimSheet.title) { openTrimSheet(assetID) }
+            Button(ShortcutGuide.clipEditor.title) { openClipEditor(assetID) }
                 .keyboardShortcut("t", modifiers: .command)
-            // 두 번 누르기가 트림 시트를 열므로 원본 파일 전체는 여기서 훑어본다.
+            // 두 번 누르기가 클립 편집 창을 열므로 원본 파일 전체는 여기서 훑어본다.
             Button("훑어보기") { openAsset(assetID) }
             Divider()
         }

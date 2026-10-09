@@ -48,8 +48,6 @@ struct MainWindowView: View {
     @State private var selectedSubtitleID: Subtitle.ID?
     /// 마스크 레인에서 고른 마스크(#59). 클립·자막 선택과 함께 있지 않는다.
     @State private var selectedMaskID: Mask.ID?
-    /// 열린 트림 시트(#81).
-    @State private var trimTarget: TrimTarget?
     /// `true`면 인스펙터 이름 칸에 포커스를 준다(F2·우클릭 > 이름 변경, #78). 인스펙터가 포커스를 준 뒤 되돌린다.
     @State private var isClipNameFocusRequested = false
     /// 타임라인에서 클립·원본을 끄는 중인지. Esc로 끌기를 취소할 때 쓴다.
@@ -64,6 +62,8 @@ struct MainWindowView: View {
     /// 내레이션을 녹음하지 못했을 때의 안내.
     @State private var narrationMessage: String?
     @Environment(\.undoManager) private var undoManager
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
 
     var body: some View {
         let project = editor.project
@@ -138,7 +138,7 @@ struct MainWindowView: View {
             .focusedSceneValue(\.importSubtitles) { chooseSubtitleFile() }
             .focusedSceneValue(\.exportSubtitles, exportSubtitlesAction)
             .focusedSceneValue(\.splitClips, splitAction)
-            .focusedSceneValue(\.openTrimSheet, trimSheetAction)
+            .focusedSceneValue(\.openClipEditor, clipEditorAction)
             .focusedSceneValue(\.duplicateClips, selectedClipIDs.isEmpty ? nil : { timelineActions.duplicateClips(selectedClipIDs) })
             .focusedSceneValue(\.renameSelectedClip, selectedClip.map { clip in { beginRenamingClip(clip.id) } })
             .focusedSceneValue(\.isTimelineVisible, $isTimelineVisible)
@@ -183,9 +183,6 @@ struct MainWindowView: View {
             .sheet(item: $export) { job in
                 ExportProgressView(job: job)
             }
-            .sheet(item: $trimTarget) { target in
-                TrimSheetView(editor: editor, target: target)
-            }
             .sheet(isPresented: $isBatchExportPresented) {
                 BatchExportView(
                     sequences: editor.project.sequences,
@@ -202,6 +199,7 @@ struct MainWindowView: View {
                     aspectRatio = preset
                 }
             }
+            .onDisappear { closeClipEditor() }
             .frame(minHeight: 600)
             .navigationTitle(project.name)
             .background {
@@ -361,7 +359,7 @@ struct MainWindowView: View {
                     selectedClipIDs = duplicated
                 }
             },
-            openTrimSheet: { clipID in trimTarget = TrimTarget(kind: .clip(clipID)) },
+            openClipEditor: { clipID in openClipEditor(.clip(clipID)) },
             paste: paste,
             openAsset: quickLook,
             revealAsset: { assetID in selectedAssetID = assetID },
@@ -412,7 +410,7 @@ struct MainWindowView: View {
                 openAsset: quickLook,
                 importFiles: importMedia(from:),
                 isListFocused: $isMediaPanelFocused,
-                openTrimSheet: { assetID in trimTarget = TrimTarget(kind: .asset(assetID)) }
+                openClipEditor: { assetID in openClipEditor(.asset(assetID)) }
             )
             // 놓을 곳을 창 전체로 잡으면 분할 뷰 경계를 덮어 크기 조절 커서가 나타나지 않으므로,
             // Finder에서 끌어온 파일은 미디어 패널과 미리보기에 놓을 때만 가져온다.
@@ -878,15 +876,27 @@ struct MainWindowView: View {
         isClipNameFocusRequested = true
     }
 
-    /// 편집 > 트림…(⌘T, #81). 미디어 패널에 포커스가 있으면 고른 항목을, 아니면 고른 클립 하나를 연다. 이미지는 열지 않는다.
-    private var trimSheetAction: (() -> Void)? {
+    /// 편집 > 클립 편집…(⌘T, #81·#85). 미디어 패널에 포커스가 있으면 고른 항목을, 아니면 고른 클립 하나를 연다. 이미지는 열지 않는다.
+    private var clipEditorAction: (() -> Void)? {
         if isMediaPanelFocused, let selectedAssetID, editor.asset(id: selectedAssetID)?.isTrimmable == true {
-            return { trimTarget = TrimTarget(kind: .asset(selectedAssetID)) }
+            return { openClipEditor(.asset(selectedAssetID)) }
         }
         guard selectedClipIDs.count == 1, let clipID = selectedClipIDs.first,
               let clip = editor.currentSequence.clip(id: clipID), editor.asset(id: clip.assetID)?.isTrimmable == true
         else { return nil }
-        return { trimTarget = TrimTarget(kind: .clip(clipID)) }
+        return { openClipEditor(.clip(clipID)) }
+    }
+
+    /// 이 프로젝트의 클립 편집 창(#85)에 `target`을 열고 앞으로 가져온다. 다른 대상을 고치던 중이면 그 창이 먼저 묻는다.
+    private func openClipEditor(_ target: ClipEditTarget) {
+        ClipEditSessions.shared.session(for: editor).open(target)
+        openWindow(id: SceneID.clipEdit, value: ClipEditWindowValue(projectID: editor.project.id))
+    }
+
+    /// 프로젝트 창이 닫히면 클립 편집 창도 닫는다(#85).
+    private func closeClipEditor() {
+        dismissWindow(id: SceneID.clipEdit, value: ClipEditWindowValue(projectID: editor.project.id))
+        ClipEditSessions.shared.remove(editor.project.id)
     }
 
     /// 편집 > 클립 분할(⌘B). 재생 헤드에서 나눌 클립이 없으면 `nil`이라 메뉴가 비활성화된다.

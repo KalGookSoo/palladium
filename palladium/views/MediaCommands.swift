@@ -10,8 +10,8 @@ extension FocusedValues {
     @Entry var splitClips: (() -> Void)?
     /// 타임라인에서 클립을 골랐을 때만 값이 있다(#62).
     @Entry var duplicateClips: (() -> Void)?
-    /// 트림할 수 있는 항목(미디어 패널 포커스)이나 클립 하나를 골랐을 때만 값이 있다(#81).
-    @Entry var openTrimSheet: (() -> Void)?
+    /// 트림할 수 있는 항목(미디어 패널 포커스)이나 클립 하나를 골랐을 때만 값이 있다(#81·#85).
+    @Entry var openClipEditor: (() -> Void)?
 }
 
 extension KeyEquivalent {
@@ -23,7 +23,7 @@ struct MediaCommands: Commands {
     @FocusedValue(\.renameSelectedClip) private var renameSelectedClip
     @FocusedValue(\.splitClips) private var splitClips
     @FocusedValue(\.duplicateClips) private var duplicateClips
-    @FocusedValue(\.openTrimSheet) private var openTrimSheet
+    @FocusedValue(\.openClipEditor) private var openClipEditor
 
     var body: some Commands {
         CommandGroup(after: .pasteboard) {
@@ -50,11 +50,11 @@ struct MediaCommands: Commands {
             .keyboardShortcut("d", modifiers: .command)
             .disabled(duplicateClips == nil)
 
-            Button(ShortcutGuide.trimSheet.title) {
-                openTrimSheet?()
+            Button(ShortcutGuide.clipEditor.title) {
+                openClipEditor?()
             }
             .keyboardShortcut("t", modifiers: .command)
-            .disabled(openTrimSheet == nil)
+            .disabled(openClipEditor == nil)
         }
     }
 }

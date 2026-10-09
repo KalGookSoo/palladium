@@ -85,6 +85,7 @@ private extension SequenceRecord {
                 .withTransitions(of: clip)
                 .withLabels(of: clip)
                 .withColorAdjustment(of: clip)
+                .withCrop(of: clip)
             }
             return trackRecord
         }
@@ -136,6 +137,7 @@ private extension MediaAssetRecord {
         usedDurationValue = asset.usedRange?.duration.value ?? 0
         usedDurationTimescale = asset.usedRange?.duration.timescale ?? standardTimescale
         sourceAssetID = asset.sourceAssetID
+        (cropTop, cropBottom, cropLeft, cropRight) = asset.crop.storedValues
         return self
     }
 
@@ -156,7 +158,8 @@ private extension MediaAssetRecord {
             colorLabel: colorLabelRawValue.flatMap(ColorLabel.init(rawValue:)),
             tags: tags,
             usedRange: usedRange,
-            sourceAssetID: sourceAssetID
+            sourceAssetID: sourceAssetID,
+            crop: ClipCrop(storedTop: cropTop, bottom: cropBottom, left: cropLeft, right: cropRight)
         )
     }
 
@@ -232,6 +235,11 @@ private extension ClipRecord {
         return self
     }
 
+    func withCrop(of clip: Clip) -> ClipRecord {
+        (cropTop, cropBottom, cropLeft, cropRight) = clip.crop.storedValues
+        return self
+    }
+
     func makeClip() -> Clip? {
         let sourceRange = CMTimeRange(
             start: CMTime(value: sourceStartValue, timescale: sourceStartTimescale),
@@ -256,10 +264,24 @@ private extension ClipRecord {
         var adjustment = ColorAdjustment(brightness: brightness, contrast: contrast, saturation: saturation)
         adjustment.clamp()
         clip?.colorAdjustment = adjustment
+        clip?.crop = ClipCrop(storedTop: cropTop, bottom: cropBottom, left: cropLeft, right: cropRight)
         if clip == nil {
             let clipID = id
             Logger.project.error("Clip 불변식을 어기는 저장값이라 건너뜀: \(clipID, privacy: .public)")
         }
         return clip
+    }
+}
+
+private extension ClipCrop {
+    /// 저장할 값. 자르지 않았으면 모두 `nil`로 둔다.
+    var storedValues: (Double?, Double?, Double?, Double?) {
+        isDefault ? (nil, nil, nil, nil) : (top, bottom, left, right)
+    }
+
+    /// 저장된 값으로 만든 크롭. 없는 값은 0이고, 범위를 벗어난 값은 범위로 맞춘다.
+    init(storedTop top: Double?, bottom: Double?, left: Double?, right: Double?) {
+        self.init(top: top ?? 0, bottom: bottom ?? 0, left: left ?? 0, right: right ?? 0)
+        clamp()
     }
 }
