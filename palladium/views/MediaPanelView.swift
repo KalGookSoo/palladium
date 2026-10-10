@@ -36,7 +36,7 @@ struct MediaPanelView: View {
 
     var body: some View {
         let project = editor.project
-        let folderSections = project.folders.map { folder in
+        let folderSections = project.foldersByName.map { folder in
             (folder: folder, assets: project.assets(in: folder).filter(filter.matches))
         }
         let unfiledAssets = project.unfiledAssets.filter(filter.matches)
@@ -84,7 +84,7 @@ struct MediaPanelView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
                         .dropDestination(for: String.self) { items, _ in
-                            moveDroppedAssets(items, toFolder: nil, before: nil)
+                            moveDroppedAssets(items, toFolder: nil)
                         }
                 }
             }
@@ -211,13 +211,13 @@ struct MediaPanelView: View {
         return "이 원본을 쓰는 클립 \(usage.clipCount)개(시퀀스 \(sequences))도 함께 지워집니다. 클립이 있던 자리는 빈 채로 남습니다. 원본 파일은 디스크에 그대로 남고, 실행 취소(⌘Z)로 되돌릴 수 있습니다."
     }
 
-    /// 타임라인에 놓으면 클립이 되고, 다른 원본 위에 놓으면 그 원본이 있는 폴더의 그 자리로 옮긴다. 원본 ID만 문자열로 보낸다.
+    /// 타임라인에 놓으면 클립이 되고, 다른 원본 위에 놓으면 그 원본이 있는 폴더로 옮긴다(목록은 이름순이라 자리는 정하지 않는다). 원본 ID만 문자열로 보낸다.
     private func assetRow(_ asset: MediaAsset, folderID: MediaFolder.ID?) -> some View {
         MediaAssetRow(asset: asset) { nameView(for: asset) }
             // 고른 원본 중 하나를 끌면 고른 원본 전체를 고른 순서대로, 고르지 않은 원본을 끌면 그 원본만 끈다(#86).
             .draggable(AssetDragPayload.encode(draggedAssetIDs(startingAt: asset.id)))
             .dropDestination(for: String.self) { items, _ in
-                moveDroppedAssets(items, toFolder: folderID, before: folderID == nil ? nil : asset.id)
+                moveDroppedAssets(items, toFolder: folderID)
             }
     }
 
@@ -227,7 +227,7 @@ struct MediaPanelView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .dropDestination(for: String.self) { items, _ in
-                moveDroppedAssets(items, toFolder: folder.id, before: nil)
+                moveDroppedAssets(items, toFolder: folder.id)
             }
             .contextMenu {
                 Button("폴더 이름 변경…") {
@@ -253,19 +253,19 @@ struct MediaPanelView: View {
     /// 메뉴가 받은 원본들을 고른 순서대로(순서를 모르면 목록 순서).
     private func ordered(_ assetIDs: Set<MediaAsset.ID>) -> [MediaAsset.ID] {
         let project = editor.project
-        let listOrder = project.folders.flatMap { project.assets(in: $0).map(\.id) } + project.unfiledAssets.map(\.id)
+        let listOrder = project.foldersByName.flatMap { project.assets(in: $0).map(\.id) } + project.unfiledAssets.map(\.id)
         return AssetSelectionOrder.ordered(assetIDs, by: selectionOrder, listOrder: listOrder)
     }
 
-    private func moveDroppedAssets(_ items: [String], toFolder folderID: MediaFolder.ID?, before beforeAssetID: MediaAsset.ID?) -> Bool {
+    private func moveDroppedAssets(_ items: [String], toFolder folderID: MediaFolder.ID?) -> Bool {
         let fileURLs = items.compactMap(URL.init(string:)).filter(\.isFileURL)
         if !fileURLs.isEmpty {
             importFiles(fileURLs)
             return true
         }
-        let assetIDs = items.flatMap(AssetDragPayload.decode).filter { $0 != beforeAssetID }
+        let assetIDs = items.flatMap(AssetDragPayload.decode)
         guard !assetIDs.isEmpty else { return false }
-        editor.moveAssets(assetIDs, toFolder: folderID, before: beforeAssetID)
+        editor.moveAssets(assetIDs, toFolder: folderID)
         return true
     }
 
@@ -353,7 +353,7 @@ struct MediaPanelView: View {
         Menu("폴더로 이동") {
             Button("분류 안 됨") { editor.moveAssets(ordered(assetIDs), toFolder: nil) }
             Divider()
-            ForEach(editor.project.folders) { folder in
+            ForEach(editor.project.foldersByName) { folder in
                 Button(folder.name) { editor.moveAssets(ordered(assetIDs), toFolder: folder.id) }
             }
         }

@@ -42,16 +42,27 @@ nonisolated extension Project {
 // MARK: - Queries
 
 nonisolated extension Project {
-    /// 프로젝트에 없는 원본을 가리키는 ID는 건너뛴다.
+    /// 폴더 안 원본을 이름 오름차순으로(Finder처럼 숫자는 크기대로, "2" < "10"). 프로젝트에 없는 원본을 가리키는 ID는 건너뛴다.
     func assets(in folder: MediaFolder) -> [MediaAsset] {
         folder.assetIDs.compactMap { assetID in
             assets.first { $0.id == assetID }
         }
+        .sorted(by: Self.isOrderedByName)
     }
 
+    /// 어느 폴더에도 없는 원본을 이름 오름차순으로.
     var unfiledAssets: [MediaAsset] {
         let filedAssetIDs = Set(folders.flatMap(\.assetIDs))
-        return assets.filter { !filedAssetIDs.contains($0.id) }
+        return assets.filter { !filedAssetIDs.contains($0.id) }.sorted(by: Self.isOrderedByName)
+    }
+
+    /// 미디어 패널에 보이는 폴더 순서(이름 오름차순).
+    var foldersByName: [MediaFolder] {
+        folders.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private static func isOrderedByName(_ lhs: MediaAsset, _ rhs: MediaAsset) -> Bool {
+        lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
     }
 
     func summary(createdAt: Date, modifiedAt: Date) -> ProjectSummary {

@@ -1,3 +1,4 @@
+import CoreMedia
 import Foundation
 @testable import palladium
 import Testing
@@ -19,11 +20,13 @@ struct ProjectTests {
         #expect(project.sequences.first?.tracks.isEmpty == true)
     }
 
-    @Test("폴더의 원본은 폴더에 담긴 순서대로 돌려준다")
-    func assetsInFolderFollowFolderOrder() {
+    @Test("폴더의 원본은 담긴 순서와 상관없이 이름 오름차순으로 돌려준다")
+    func assetsInFolderFollowNameOrder() {
         let project = SampleData.project
         let folderAssets = project.assets(in: SampleData.footageFolder)
-        #expect(folderAssets == [SampleData.introVideo, SampleData.bRollVideo])
+        // 폴더에는 intro → b-roll 순서로 담겨 있다.
+        #expect(SampleData.footageFolder.assetIDs == [SampleData.introVideo.id, SampleData.bRollVideo.id])
+        #expect(folderAssets == [SampleData.bRollVideo, SampleData.introVideo])
     }
 
     @Test("프로젝트에 없는 원본 ID는 폴더 조회에서 건너뛴다")
@@ -111,6 +114,27 @@ struct ProjectFolderCommandTests {
         project.moveAssets([SampleData.introVideo.id], toFolder: nil)
         #expect(project.unfiledAssets.map(\.id).contains(SampleData.introVideo.id))
         #expect(project.folders.first { $0.id == footageID }?.assetIDs == [SampleData.bRollVideo.id])
+    }
+
+    @Test("미디어 패널은 폴더·원본을 이름 오름차순으로 보이고, 숫자는 크기대로(2 < 10) 놓는다")
+    func listsByName() {
+        func asset(_ name: String) -> MediaAsset {
+            MediaAsset(id: UUID(), name: name, sourceURL: URL(filePath: "/tmp/\(name)"), kind: .video, duration: CMTime(value: 1, timescale: 1))
+        }
+        let clip10 = asset("clip-10.mov")
+        let clip2 = asset("clip-2.mov")
+        let beta = asset("Beta.mov")
+        let alpha = asset("alpha.mov")
+        var project = SampleData.project
+        project.assets = [clip10, beta, clip2, alpha]
+        project.folders = []
+        let zebraID = project.addFolder(named: "Zebra")
+        let appleID = project.addFolder(named: "apple")
+        project.moveAssets([clip10.id, clip2.id], toFolder: zebraID)
+
+        #expect(project.foldersByName.map(\.id) == [appleID, zebraID])
+        #expect(project.assets(in: project.folders[0]).map(\.name) == ["clip-2.mov", "clip-10.mov"])
+        #expect(project.unfiledAssets.map(\.name) == ["alpha.mov", "Beta.mov"])
     }
 
     @Test("같은 원본이 여러 번 와도 폴더에는 처음 나온 순서로 한 번씩만 들어간다")
