@@ -44,6 +44,8 @@ struct MainWindowView: View {
     @State private var selectedClipIDs: Set<Clip.ID> = []
     /// 미디어 패널 목록에 포커스가 있으면 ⌫는 원본 삭제(#60)라 타임라인 삭제로 가로채지 않는다.
     @State private var isMediaPanelFocused = false
+    /// ⌘S로 저장한 뒤 잠깐 띄우는 알림(#96).
+    @State private var toast: ToastMessage?
     /// 미리보기·타임라인을 누르면 키보드 포커스를 그쪽으로 가져온다(#98). 그래야 미디어 패널 목록이 포커스를 잃어
     /// ⌫·⌘A·⌘C 같은 키가 마지막으로 누른 패널에 동작한다.
     @FocusState private var focusedEditingPane: EditingPane?
@@ -72,7 +74,8 @@ struct MainWindowView: View {
         let project = editor.project
         let hasUnsavedChanges = editor.hasUnsavedChanges
         // 저장할 변경이 없으면 nil을 넘겨 파일 > 저장 메뉴를 비활성화한다.
-        let saveAction: SaveCommand? = hasUnsavedChanges ? SaveCommand(title: "저장") { _ = saveProject() } : nil
+        // ⌘S로 저장하면 "저장됨"을 잠깐 띄운다(#96). 닫기·종료 확인의 저장과 자동 백업은 띄우지 않는다.
+        let saveAction: SaveCommand? = hasUnsavedChanges ? SaveCommand(title: "저장") { saveFromMenu() } : nil
         let isShowingSaveError = Binding<Bool>(
             get: { saveErrorMessage != nil },
             set: {
@@ -435,6 +438,7 @@ struct MainWindowView: View {
                 // 가운데 영역은 0까지 줄어들 수 있게 해 양쪽 패널 폭을 먼저 지키고, 넘치는 내용은 잘라낸다.
                 .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
+                .toast($toast)
         }
         .inspector(isPresented: $isInspectorPresented) {
             InspectorView(
@@ -915,6 +919,13 @@ struct MainWindowView: View {
         let clipIDs = selectedClipIDs.isEmpty ? nil : selectedClipIDs
         guard editor.currentSequence.canSplit(at: playheadTime, clipIDs: clipIDs) else { return nil }
         return { timelineActions.splitClips(selectedClipIDs) }
+    }
+
+    /// 파일 > 저장(⌘S). 실패하면 `saveProject`가 오류 창을 띄운다.
+    private func saveFromMenu() {
+        if saveProject() {
+            toast = ToastMessage(text: "저장됨")
+        }
     }
 
     /// 저장에 성공하면 `true`. 닫기·종료 확인 창은 실패하면 창을 닫지 않는다.

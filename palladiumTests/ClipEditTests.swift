@@ -311,9 +311,17 @@ struct ClipEditTests {
         #expect(command.title == "적용")
         command.perform()
         #expect(saved == 1)
+        // ⌘S로 적용하면 "적용됨"을 잠깐 띄운다(#96).
+        #expect(session.toast?.text == "적용됨")
+        let firstToast = session.toast
+        command.perform()
+        #expect(session.toast?.text == "적용됨")
+        #expect(session.toast != firstToast)
 
         session.closePrompt = UnsavedChangesPrompt(message: "", saveTitle: "새 항목으로 저장", discardTitle: "저장 안 함")
         #expect(session.saveCommand?.title == "새 항목으로 저장")
+        #expect(session.saveCommand?.doneMessage == "새 항목으로 저장됨")
+        #expect(SaveCommand(title: "저장", perform: {}).doneMessage == "저장됨")
     }
 
     @Test("닫기 확인 장치가 같은 창에 여러 번 붙어도 서로를 원래 delegate로 삼지 않고 원래 delegate로 넘긴다(#91 멈춤)")

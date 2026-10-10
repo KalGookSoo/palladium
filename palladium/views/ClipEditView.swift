@@ -40,12 +40,18 @@ final class ClipEditSession {
     var applyChanges: () -> Void = {}
     /// 파일 > ⌘S(#92). 적용하되 창은 열어 둔다. 창이 넣어 준다.
     var saveFromMenu: () -> Void = {}
+    /// ⌘S로 적용한 뒤 창 위쪽에 잠깐 띄우는 알림(#96). 원본 항목에서 새 항목으로 바뀌어 창 내용이 새로 그려져도 남도록 여기 둔다.
+    var toast: ToastMessage?
 
     /// 클립 편집 창이 앞에 있을 때 ⌘S 자리의 항목. 이름은 닫기 확인의 기본 버튼과 같다("적용"·"새 항목으로 저장").
     /// 적용하지 않은 변경이 없으면 `nil`이라 메뉴가 꺼진다.
     var saveCommand: SaveCommand? {
         guard hasUnappliedChanges else { return nil }
-        return SaveCommand(title: closePrompt.saveTitle, perform: saveFromMenu)
+        let title = closePrompt.saveTitle
+        return SaveCommand(title: title) { [self] in
+            saveFromMenu()
+            toast = ToastMessage(text: SaveCommand(title: title, perform: {}).doneMessage)
+        }
     }
 
     init(editor: ProjectEditor) {
@@ -127,6 +133,8 @@ struct ClipEditWindowView: View {
                     .navigationTitle("클립 편집")
             }
         }
+        // ⌘S로 적용하면 "적용됨"을 잠깐 띄운다(#96).
+        .toast(Binding(get: { session?.toast }, set: { session?.toast = $0 }))
         // 클립 편집 창이 앞에 있으면 ⌘S는 프로젝트 저장이 아니라 적용이다(#92).
         .focusedSceneValue(\.saveCommand, session?.saveCommand)
         .onAppear { session?.isWindowOpen = true }

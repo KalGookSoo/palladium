@@ -6,6 +6,11 @@ import SwiftUI
 struct SaveCommand {
     let title: String
     let perform: () -> Void
+
+    /// 해낸 뒤 잠깐 띄울 알림 문구(#96). 예: "저장됨", "적용됨", "새 항목으로 저장됨".
+    var doneMessage: String {
+        "\(title)됨"
+    }
 }
 
 extension FocusedValues {
