@@ -56,6 +56,15 @@ nonisolated extension ClipCrop {
         self == ClipCrop()
     }
 
+    /// 인스펙터 영상 탭의 크롭 요약(#90). 예: "위 0% · 아래 0% · 왼쪽 34% · 오른쪽 34%". 자르지 않았으면 "자르지 않음".
+    var summary: String {
+        guard !isDefault else { return "자르지 않음" }
+        func percent(_ value: Double) -> String {
+            "\(Int((value * 100).rounded()))%"
+        }
+        return "위 \(percent(top)) · 아래 \(percent(bottom)) · 왼쪽 \(percent(left)) · 오른쪽 \(percent(right))"
+    }
+
     /// 남는 영역(원본 화면 비율 좌표, 왼쪽 위 원점).
     var visibleRect: CGRect {
         CGRect(x: left, y: top, width: 1 - left - right, height: 1 - top - bottom)

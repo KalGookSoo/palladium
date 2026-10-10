@@ -89,6 +89,13 @@ struct ClipCropTests {
         #expect(crop.dragging(.bottomRight, to: CGPoint(x: 0.6, y: 1), aspectRatio: 9.0 / 16, contentSize: landscape) == crop)
     }
 
+    @Test("인스펙터 크롭 요약: 자르지 않았으면 \"자르지 않음\", 잘랐으면 네 변을 반올림한 %로 보인다(#90)")
+    func summary() {
+        #expect(ClipCrop().summary == "자르지 않음")
+        #expect(ClipCrop(top: 0, bottom: 0, left: 0.3375, right: 0.344).summary == "위 0% · 아래 0% · 왼쪽 34% · 오른쪽 34%")
+        #expect(ClipCrop(top: 0.104, bottom: 0.2, left: 0, right: 0).summary == "위 10% · 아래 20% · 왼쪽 0% · 오른쪽 0%")
+    }
+
     @Test("옮기기는 크기를 지키고 원본 밖으로 나가지 않는다")
     func move() {
         let crop = ClipCrop(top: 0.25, bottom: 0.25, left: 0.25, right: 0.25)
@@ -243,6 +250,28 @@ struct ClipEditTests {
         session.open(third)
         #expect(session.target == second)
         #expect(session.pendingTarget == third)
+    }
+
+    @Test("인스펙터에서 열면 크롭 탭, ⌘T는 트림 탭으로 열고, 묻는 창을 거쳐 열어도 요청한 탭을 지킨다(#90)")
+    func opensRequestedTab() throws {
+        let session = try ClipEditSession(editor: makeEditor())
+        let first = ClipEditTarget.clip(UUID())
+        let second = ClipEditTarget.clip(UUID())
+
+        session.open(first, tab: .crop)
+        #expect(session.target == first)
+        #expect(session.tab == .crop)
+        session.isWindowOpen = true
+        // 같은 대상을 ⌘T로 다시 열면 탭만 트림으로 바뀐다.
+        session.open(first)
+        #expect(session.tab == .trim)
+
+        session.hasUnappliedChanges = true
+        session.open(second, tab: .crop)
+        #expect(session.tab == .trim)
+        session.resolvePendingTarget(applying: false)
+        #expect(session.target == second)
+        #expect(session.tab == .crop)
     }
 
     @Test("묻는 창에서 적용하고 열면 적용한 뒤 새 대상을, 취소하면 고치던 대상과 변경을 그대로 둔다(#91)")

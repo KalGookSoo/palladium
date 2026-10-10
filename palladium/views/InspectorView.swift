@@ -25,6 +25,8 @@ struct InspectorView: View {
     var maximumTransitionDuration = CMTime.zero
     var setTransition: (Clip.ID, ClipTransition?) -> Void = { _, _ in }
     var setAudioCrossfade: (Clip.ID, CMTime?) -> Void = { _, _ in }
+    /// 영상 탭 크롭 섹션의 "클립 편집 열기…". 그 클립을 클립 편집 창의 크롭 탭으로 연다(#90).
+    var openClipEditor: (Clip.ID) -> Void = { _ in }
     /// 자막 트랙에서 고른 자막. 있으면 클립 대신 자막 속성을 보여준다.
     var subtitle: Subtitle?
     var updateSubtitle: (Subtitle.ID, String, SubtitleStyle) -> Void = { _, _, _ in }
@@ -39,7 +41,15 @@ struct InspectorView: View {
     var updateMask: (Mask) -> Void = { _ in }
     var setMaskRange: (Mask.ID, CMTime, CMTime) -> Void = { _, _, _ in }
     var deleteMask: (Mask.ID) -> Void = { _ in }
-    @State private var selectedTab: InspectorTab = .trim
+    /// 사용자가 마지막으로 고른 탭. 고른 클립에 해당하지 않는 탭이면 클립 종류의 기본 탭을 보여준다(#90).
+    @State private var chosenTab: InspectorTab = .video
+    /// 해당하지 않는 탭을 직접 누른 클립. 그 클립에서만 빈 상태 안내를 보여준다.
+    @State private var emptyTabClipID: Clip.ID?
+    /// 영상 탭 섹션을 접고 편 상태. 클립을 바꿔도 유지한다.
+    @State private var isCropExpanded = true
+    @State private var isTransformExpanded = true
+    @State private var isEffectExpanded = true
+    @State private var isTransitionExpanded = true
 
     var body: some View {
         if let subtitle {
@@ -60,11 +70,18 @@ struct InspectorView: View {
                 delete: { deleteMask(mask.id) }
             )
         } else if let clip {
+            // 머리글·탭은 위에 고정하고, 탭 내용이 남은 높이를 채워 빈 상태 안내는 그 가운데에 놓는다(#87).
             VStack(alignment: .leading, spacing: 0) {
                 InspectorHeader(clip: clip, asset: asset, isNameFocusRequested: isNameFocusRequested, rename: renameClip)
                     .padding()
 
-                Picker("속성", selection: $selectedTab) {
+                Picker("속성", selection: Binding(
+                    get: { shownTab(for: clip) },
+                    set: { tab in
+                        chosenTab = tab
+                        emptyTabClipID = tab.applies(to: asset?.kind) ? nil : clip.id
+                    }
+                )) {
                     ForEach(InspectorTab.allCases) { tab in
                         Text(tab.title).tag(tab)
                     }
@@ -75,44 +92,10 @@ struct InspectorView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal)
 
-                switch selectedTab {
-                case .trim:
-                    TrimInspectorView(
-                        clip: clip,
-                        sourceDuration: asset?.trimmableDuration,
-                        setSource: { start, end in setClipSource(clip.id, start, end) },
-                        setSpeed: asset?.kind == .image ? nil : { setClipSpeed(clip.id, $0) }
-                    )
-                case .audio:
-                    if asset?.kind == .image {
-                        ContentUnavailableView("이미지 클립", systemImage: "photo", description: Text("이미지 클립에는 소리가 없습니다"))
-                    } else {
-                        AudioInspectorView(clip: clip) { volume, isMuted in setClipAudio(clip.id, volume, isMuted) }
-                    }
-                case .effect:
-                    if asset?.kind == .audio {
-                        ContentUnavailableView("오디오 클립", systemImage: "waveform", description: Text("오디오 클립에는 영상 이펙트가 없습니다"))
-                    } else {
-                        EffectInspectorView(adjustment: clip.colorAdjustment, setAdjustment: setColorAdjustment)
-                    }
-                case .transform:
-                    // 소리만 있는 클립은 화면에 그리지 않는다.
-                    if asset?.kind == .audio {
-                        ContentUnavailableView("오디오 클립", systemImage: "waveform", description: Text("오디오 클립은 화면에 그리지 않습니다"))
-                    } else {
-                        TransformInspectorView(transform: clip.transform) { setTransform(clip.id, $0) }
-                    }
-                case .transition:
-                    TransitionInspectorView(
-                        clip: clip,
-                        hasPicture: asset?.kind != .audio,
-                        hasSound: asset?.kind != .image,
-                        maximumDuration: maximumTransitionDuration,
-                        setTransition: { setTransition(clip.id, $0) },
-                        setAudioCrossfade: { setAudioCrossfade(clip.id, $0) }
-                    )
-                }
+                tabContent(shownTab(for: clip), clip: clip)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxHeight: .infinity, alignment: .top)
         } else {
             if selectedClipCount > 1 {
                 // 여러 클립은 색감을 맞출 수 있도록 이펙트만 보여준다(#61).
@@ -125,12 +108,21 @@ struct InspectorView: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding()
-                    if let multipleSelectionAdjustment {
-                        EffectInspectorView(adjustment: multipleSelectionAdjustment, appliesToMultipleClips: true, setAdjustment: setColorAdjustment)
-                    } else {
-                        ContentUnavailableView("오디오 클립", systemImage: "waveform", description: Text("오디오 클립에는 영상 이펙트가 없습니다"))
+                    Group {
+                        if let multipleSelectionAdjustment {
+                            Form {
+                                Section("이펙트") {
+                                    EffectInspectorView(adjustment: multipleSelectionAdjustment, appliesToMultipleClips: true, setAdjustment: setColorAdjustment)
+                                }
+                            }
+                            .formStyle(.grouped)
+                        } else {
+                            ContentUnavailableView("오디오 클립", systemImage: "waveform", description: Text("오디오 클립에는 영상 이펙트가 없습니다"))
+                        }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                .frame(maxHeight: .infinity, alignment: .top)
             } else {
                 ContentUnavailableView(
                     "선택한 클립 없음",
@@ -140,14 +132,96 @@ struct InspectorView: View {
             }
         }
     }
+
+    /// 사용자가 고른 탭이 이 클립에 해당하면 그 탭을, 아니면 클립 종류의 기본 탭을 보여준다.
+    /// 해당하지 않는 탭을 이 클립에서 직접 눌렀으면 그 탭(빈 상태 안내)을 보여준다.
+    private func shownTab(for clip: Clip) -> InspectorTab {
+        if chosenTab.applies(to: asset?.kind) || emptyTabClipID == clip.id {
+            return chosenTab
+        }
+        return asset?.kind == .audio ? .audio : .video
+    }
+
+    @ViewBuilder
+    private func tabContent(_ tab: InspectorTab, clip: Clip) -> some View {
+        switch tab {
+        case .clip:
+            Form {
+                TrimInspectorView(
+                    clip: clip,
+                    sourceDuration: asset?.trimmableDuration,
+                    setSource: { start, end in setClipSource(clip.id, start, end) },
+                    setSpeed: asset?.kind == .image ? nil : { setClipSpeed(clip.id, $0) }
+                )
+            }
+            .formStyle(.grouped)
+        case .video:
+            if asset?.kind == .audio {
+                ContentUnavailableView("오디오 클립", systemImage: "waveform", description: Text("오디오 클립은 화면에 그리지 않습니다"))
+            } else {
+                videoTab(clip: clip)
+            }
+        case .audio:
+            if asset?.kind == .image {
+                ContentUnavailableView("이미지 클립", systemImage: "photo", description: Text("이미지 클립에는 소리가 없습니다"))
+            } else {
+                Form {
+                    AudioInspectorView(clip: clip) { volume, isMuted in setClipAudio(clip.id, volume, isMuted) }
+                    Section("크로스페이드") {
+                        TransitionInspectorView(
+                            part: .audio,
+                            clip: clip,
+                            maximumDuration: maximumTransitionDuration,
+                            setTransition: { setTransition(clip.id, $0) },
+                            setAudioCrossfade: { setAudioCrossfade(clip.id, $0) }
+                        )
+                    }
+                }
+                .formStyle(.grouped)
+            }
+        }
+    }
+
+    /// 영상 탭: 크롭(읽기 요약)·트랜스폼·이펙트·영상 전환을 접을 수 있는 섹션으로 둔다.
+    private func videoTab(clip: Clip) -> some View {
+        Form {
+            // 크롭은 클립 편집 창에서만 고친다. 이미지는 클립 편집 창을 열 수 없어 크롭이 없다.
+            if asset?.kind == .video {
+                Section("크롭", isExpanded: $isCropExpanded) {
+                    Text(clip.crop.summary)
+                        .monospacedDigit()
+                    Button("클립 편집 열기…") { openClipEditor(clip.id) }
+                        .help("클립 편집 창의 크롭 탭에서 화면을 잘라냅니다")
+                }
+            }
+            Section("트랜스폼", isExpanded: $isTransformExpanded) {
+                TransformInspectorView(transform: clip.transform) { setTransform(clip.id, $0) }
+            }
+            Section("이펙트", isExpanded: $isEffectExpanded) {
+                EffectInspectorView(adjustment: clip.colorAdjustment, setAdjustment: setColorAdjustment)
+            }
+            Section("전환", isExpanded: $isTransitionExpanded) {
+                TransitionInspectorView(
+                    part: .video,
+                    clip: clip,
+                    maximumDuration: maximumTransitionDuration,
+                    setTransition: { setTransition(clip.id, $0) },
+                    setAudioCrossfade: { setAudioCrossfade(clip.id, $0) }
+                )
+            }
+        }
+        .formStyle(.grouped)
+    }
 }
 
+/// 인스펙터 탭(#90). 매체별로 나눈다(Final Cut 인스펙터처럼). 새 속성은 새 탭이 아니라 이 탭들의 섹션으로 넣는다.
 private enum InspectorTab: CaseIterable, Identifiable {
-    case trim
+    /// 트림·재생 속도.
+    case clip
+    /// 크롭 요약·트랜스폼·이펙트·영상 전환.
+    case video
+    /// 음량·음소거·크로스페이드.
     case audio
-    case effect
-    case transform
-    case transition
 
     var id: Self {
         self
@@ -155,11 +229,18 @@ private enum InspectorTab: CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .trim: "트림"
+        case .clip: "클립"
+        case .video: "영상"
         case .audio: "오디오"
-        case .effect: "이펙트"
-        case .transform: "트랜스폼"
-        case .transition: "전환"
+        }
+    }
+
+    /// 이 종류의 클립에 보여줄 내용이 있는지. 오디오 클립에는 영상 탭이, 이미지 클립에는 오디오 탭이 해당하지 않는다.
+    func applies(to kind: MediaKind?) -> Bool {
+        switch self {
+        case .clip: true
+        case .video: kind != .audio
+        case .audio: kind != .image
         }
     }
 }

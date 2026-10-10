@@ -451,6 +451,7 @@ struct MainWindowView: View {
                 } ?? .zero,
                 setTransition: { clipID, transition in editor.setTransition(transition, forClip: clipID) },
                 setAudioCrossfade: { clipID, duration in editor.setAudioCrossfade(duration, forClip: clipID) },
+                openClipEditor: { clipID in openClipEditor(.clip(clipID), tab: .crop) },
                 subtitle: currentSequence.subtitles.first { $0.id == selectedSubtitleID },
                 updateSubtitle: { subtitleID, text, style in editor.updateSubtitle(subtitleID, text: text, style: style) },
                 setSubtitlePosition: { subtitleID, centerX, centerY in editor.setSubtitlePosition(subtitleID, centerX: centerX, centerY: centerY) },
@@ -892,9 +893,9 @@ struct MainWindowView: View {
         return { openClipEditor(.clip(clipID)) }
     }
 
-    /// 이 프로젝트의 클립 편집 창(#85)에 `target`을 열고 앞으로 가져온다. 다른 대상을 고치던 중이면 그 창이 먼저 묻는다.
-    private func openClipEditor(_ target: ClipEditTarget) {
-        ClipEditSessions.shared.session(for: editor).open(target)
+    /// 이 프로젝트의 클립 편집 창(#85)에 `target`을 `tab` 탭으로 열고 앞으로 가져온다. 다른 대상을 고치던 중이면 그 창이 먼저 묻는다.
+    private func openClipEditor(_ target: ClipEditTarget, tab: ClipEditTab = .trim) {
+        ClipEditSessions.shared.session(for: editor).open(target, tab: tab)
         openWindow(id: SceneID.clipEdit, value: ClipEditWindowValue(projectID: editor.project.id))
     }
 

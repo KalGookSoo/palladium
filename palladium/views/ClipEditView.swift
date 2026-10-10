@@ -26,6 +26,10 @@ final class ClipEditSession {
     private(set) var openID = UUID()
     /// 적용하지 않은 변경이 있을 때 다른 대상으로 열려고 하면 여기 두고, 창이 버릴지 묻는다.
     var pendingTarget: ClipEditTarget?
+    /// 창에 보일 탭. ⌘T는 트림 탭으로, 인스펙터의 "클립 편집 열기…"는 크롭 탭으로 연다(#90).
+    var tab = ClipEditTab.trim
+    /// `pendingTarget`을 열 때 보일 탭.
+    private var pendingTab = ClipEditTab.trim
     /// 창에 적용하지 않은 변경이 있는지. 창이 알려 준다.
     var hasUnappliedChanges = false
     /// 창이 열려 있는지. 창이 알려 준다.
@@ -48,15 +52,18 @@ final class ClipEditSession {
         self.editor = editor
     }
 
-    /// `newTarget`을 연다. 창에 같은 대상이 열려 있으면 그대로 두고, 다른 대상을 고치던 중이면 창이 먼저 묻는다.
-    func open(_ newTarget: ClipEditTarget) {
-        guard isWindowOpen else { return show(newTarget) }
+    /// `newTarget`을 `tab` 탭으로 연다. 창에 같은 대상이 열려 있으면 고치던 값은 그대로 두고 탭만 바꾸며,
+    /// 다른 대상을 고치던 중이면 창이 먼저 묻는다.
+    func open(_ newTarget: ClipEditTarget, tab: ClipEditTab = .trim) {
+        guard isWindowOpen else { return show(newTarget, tab: tab) }
         if newTarget == target {
             pendingTarget = nil
+            self.tab = tab
         } else if hasUnappliedChanges {
             pendingTarget = newTarget
+            pendingTab = tab
         } else {
-            show(newTarget)
+            show(newTarget, tab: tab)
         }
     }
 
@@ -67,12 +74,13 @@ final class ClipEditSession {
         if applying {
             applyChanges()
         }
-        show(pendingTarget)
+        show(pendingTarget, tab: pendingTab)
     }
 
-    /// 고치던 값을 버리고 `newTarget`을 연다.
-    func show(_ newTarget: ClipEditTarget) {
+    /// 고치던 값을 버리고 `newTarget`을 `tab` 탭으로 연다.
+    func show(_ newTarget: ClipEditTarget, tab: ClipEditTab = .trim) {
         target = newTarget
+        self.tab = tab
         pendingTarget = nil
         hasUnappliedChanges = false
         openID = UUID()
@@ -140,7 +148,7 @@ struct ClipEditWindowView: View {
 }
 
 /// 클립 편집 창의 탭.
-private enum ClipEditTab {
+enum ClipEditTab {
     /// 시간 자르기(#81).
     case trim
     /// 화면 자르기(#85).
@@ -164,7 +172,6 @@ struct ClipEditView: View {
     @State private var crop: ClipCrop
     /// 대상이 마지막으로 가진 값. 고치는 값과 다르면 적용하지 않은 변경이 있다.
     @State private var committed: ClipEditValues?
-    @State private var tab = ClipEditTab.trim
     @State private var cropAspect = CropAspect.free
     /// 원본 화면 크기(회전 반영). 크롭 테두리와 비율 계산에 쓴다.
     @State private var contentSize: CGSize?
@@ -202,7 +209,7 @@ struct ClipEditView: View {
         VStack(alignment: .leading, spacing: 12) {
             if let asset {
                 if asset.kind == .video {
-                    Picker("", selection: $tab) {
+                    Picker("", selection: Binding(get: { session.tab }, set: { session.tab = $0 })) {
                         Text("트림").tag(ClipEditTab.trim)
                         Text("크롭").tag(ClipEditTab.crop)
                     }
@@ -212,7 +219,7 @@ struct ClipEditView: View {
                     .frame(maxWidth: .infinity)
                 }
                 picture(for: asset)
-                if tab == .crop, asset.kind == .video {
+                if session.tab == .crop, asset.kind == .video {
                     cropControls
                 } else {
                     HStack(spacing: 12) {
@@ -290,7 +297,7 @@ struct ClipEditView: View {
             if asset.kind == .video, let player {
                 PlayerSurfaceView(player: player.player)
                     .overlay {
-                        if tab == .crop, let contentSize {
+                        if session.tab == .crop, let contentSize {
                             CropOverlayView(crop: $crop, contentSize: contentSize, aspect: cropAspect)
                         }
                     }
@@ -373,7 +380,7 @@ struct ClipEditView: View {
     private func actions(for asset: MediaAsset) -> some View {
         let playhead = player?.currentTime ?? range.start
         HStack {
-            if tab == .trim || asset.kind != .video {
+            if session.tab == .trim || asset.kind != .video {
                 Button("자르기") { split(at: playhead) }
                     .disabled(!TrimRange.canSplit(range, at: playhead))
                     .help("재생 위치에서 둘로 자릅니다. 옮겨 둔 손잡이 구간과 크롭도 함께 반영합니다")
@@ -468,7 +475,7 @@ struct ClipEditView: View {
         case .space:
             togglePlayback()
         default:
-            guard tab == .trim || asset.kind != .video else { return .ignored }
+            guard session.tab == .trim || asset.kind != .video else { return .ignored }
             let step = press.modifiers.contains(.shift) ? TrimRange.largeStep : TrimRange.smallStep
             let delta = press.key == .upArrow ? step : CMTime.zero - step
             range = TrimRange.nudging(range, edge: activeEdge, by: delta, sourceDuration: asset.duration)
