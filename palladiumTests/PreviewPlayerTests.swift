@@ -85,3 +85,43 @@ struct PreviewPlayerTests {
         player.pause()
     }
 }
+
+/// 클립 편집 창 플레이어(#95). 끄는 동안 멈추고, 연달아 찾아도 마지막 위치를 보여준다.
+@MainActor
+struct TrimPlayerTests {
+    private func seconds(_ value: Double) -> CMTime {
+        CMTime(seconds: value, preferredTimescale: standardTimescale)
+    }
+
+    private func waitUntil(timeout: Double = 5, _ condition: () -> Bool) async throws {
+        let deadline = Date.now.addingTimeInterval(timeout)
+        while !condition() {
+            guard Date.now < deadline else {
+                Issue.record("기다리던 상태가 \(timeout)초 안에 오지 않았다")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    @Test("재생 중에 끌기 시작하면 멈추고, 연달아 위치를 옮기면 마지막 위치를 보여준다")
+    func scrubbingPausesAndChasesLastSeek() async throws {
+        let url = try await TestMedia.makeVideo(red: 0, green: 0, blue: 255, seconds: 2)
+        let player = TrimPlayer(url: url)
+        try await waitUntil { player.player.currentItem?.status == .readyToPlay }
+
+        player.play(CMTimeRange(start: .zero, duration: seconds(2)))
+        #expect(player.isPlaying)
+        player.beginScrubbing()
+        #expect(!player.isPlaying)
+
+        for step in 1 ... 10 {
+            player.seek(to: seconds(Double(step) * 0.1))
+        }
+        #expect(player.currentTime == seconds(1))
+        try await waitUntil { abs(player.player.currentTime().seconds - 1) < 0.05 }
+        #expect(player.currentTime == seconds(1))
+        #expect(!player.isPlaying)
+        player.stop()
+    }
+}

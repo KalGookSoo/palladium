@@ -64,6 +64,10 @@ enum ShortcutGuide {
     static let rename = ShortcutGuideEntry(title: "이름 변경", summary: "타임라인에서 고른 클립의 별칭을, 미디어 패널에 포커스가 있으면 고른 원본의 이름을 바꿉니다", keys: "F2")
     static let clipEditor = ShortcutGuideEntry(title: "클립 편집…", summary: "고른 클립(미디어 패널에 포커스가 있으면 항목)을 클립 편집 창에서 엽니다 — 트림 탭에서 원본 전체를 보며 줄이고 늘리고 자르고, 크롭 탭에서 화면을 잘라냅니다", keys: "⌘T")
     static let trimNudge = ShortcutGuideEntry(title: "트림 구간 미세 조정", summary: "클립 편집 창 트림 탭에서 마지막으로 잡은 손잡이를 0.1초씩, ⇧와 함께 1초씩 옮깁니다", keys: "↑/↓ (클립 편집 창)")
+    static let zoomInTrimBar = ShortcutGuideEntry(title: "필름스트립 확대", summary: "클립 편집 창의 필름스트립 막대를 더 자세히 봅니다(핀치로도 됩니다)", keys: "⌘= (클립 편집 창)")
+    static let zoomOutTrimBar = ShortcutGuideEntry(title: "필름스트립 축소", summary: "클립 편집 창의 필름스트립 막대를 더 넓게 봅니다", keys: "⌘- (클립 편집 창)")
+    static let fitTrimBar = ShortcutGuideEntry(title: "필름스트립 전체 맞춤", summary: "클립 편집 창의 필름스트립 막대에 원본 전체가 보이게 합니다", keys: "⌘0 (클립 편집 창)")
+    static let preciseTrimBar = ShortcutGuideEntry(title: "클립 편집 정밀 끌기", summary: "클립 편집 창에서 손잡이·재생 위치를 끌 때 이동량을 5분의 1로 줄입니다", keys: "⌥ 끌기 (클립 편집 창)")
     static let cropKeepRatio = ShortcutGuideEntry(title: "크롭 비율 유지", summary: "클립 편집 창 크롭 탭에서 ⇧를 누른 채 손잡이를 끌면 지금 비율을 지킵니다", keys: "⇧ 끌기 (클립 편집 창)")
     static let deleteAsset = ShortcutGuideEntry(title: "원본 삭제", summary: "미디어 패널에서 고른 원본을 프로젝트에서 뺍니다(쓰는 클립도 함께, 원본 파일은 남음)", keys: "⌫ (미디어 패널)")
     static let filterMedia = ShortcutGuideEntry(title: "필터", summary: "색상 레이블로 원본을 거릅니다", keys: nil)
@@ -76,7 +80,7 @@ enum ShortcutGuide {
         ("파일", [openProjectList, newProject, save, close, importMedia, export, batchExport]),
         ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline]),
         ("재생", [playPause, previousFrame, nextFrame, narration]),
-        ("편집", [undo, redo, rename, clipEditor, trimNudge, cropKeepRatio, deleteAsset]),
+        ("편집", [undo, redo, rename, clipEditor, trimNudge, preciseTrimBar, zoomInTrimBar, zoomOutTrimBar, fitTrimBar, cropKeepRatio, deleteAsset]),
         ("타임라인", [deleteClips, rippleDeleteClips, cutClips, copyClips, pasteClips, duplicateClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect, addMarker, addSubtitle, moveSubtitle, preciseTrim, rollTrim, slipTrim, slideTrim]),
         ("도움말", [showHelp, showShortcuts]),
     ]

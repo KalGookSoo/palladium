@@ -178,6 +178,10 @@ struct ClipEditView: View {
     /// 방향키가 옮기는 손잡이. 마지막으로 잡은 쪽이다.
     @State private var activeEdge = ClipEdge.end
     @State private var player: TrimPlayer?
+    /// 필름스트립 막대 배율과 스크롤(#97). 트림·크롭 탭이 함께 쓴다.
+    @State private var barZoom = TrimBarZoom()
+    @State private var barScrollPosition = ScrollPosition(x: 0)
+    @State private var barViewport = TrimBarViewport()
     @FocusState private var isFocused: Bool
     @Environment(\.dismiss) private var dismiss
     /// 시간 글자(분:초.소수 첫째 자리)를 만드는 데만 쓴다.
@@ -219,28 +223,35 @@ struct ClipEditView: View {
                     .frame(maxWidth: .infinity)
                 }
                 picture(for: asset)
-                if session.tab == .crop, asset.kind == .video {
+                if isCropping(asset) {
                     cropControls
-                } else {
-                    HStack(spacing: 12) {
-                        Button {
-                            togglePlayback()
-                        } label: {
-                            Image(systemName: player?.isPlaying == true ? "pause.fill" : "play.fill")
-                                .frame(width: 20)
-                        }
-                        .help("고른 구간 재생/일시정지 (Space)")
-                        TrimBarView(
-                            asset: asset,
-                            range: range,
-                            playhead: player?.currentTime ?? range.start,
-                            activeEdge: activeEdge,
-                            moveEdge: moveEdge,
-                            scrub: { player?.seek(to: $0) }
-                        )
-                    }
-                    timeSummary
                 }
+                // 재생 버튼·재생 위치 막대·시간 요약은 두 탭 모두에 둔다(#89). 크롭 탭에서는 구간 손잡이를 감춘다.
+                HStack(spacing: 12) {
+                    Button {
+                        togglePlayback()
+                    } label: {
+                        Image(systemName: player?.isPlaying == true ? "pause.fill" : "play.fill")
+                            .frame(width: 20)
+                    }
+                    .help("고른 구간 재생/일시정지 (Space)")
+                    TrimBarView(
+                        asset: asset,
+                        range: range,
+                        playhead: player?.currentTime ?? range.start,
+                        activeEdge: activeEdge,
+                        allowsRangeEditing: !isCropping(asset),
+                        zoom: barZoom,
+                        scrollPosition: $barScrollPosition,
+                        viewport: $barViewport,
+                        setZoom: setBarZoom,
+                        beginScrubbing: { player?.beginScrubbing() },
+                        moveEdge: moveEdge,
+                        scrub: { player?.seek(to: $0) }
+                    )
+                    zoomButtons(for: asset)
+                }
+                timeSummary(for: asset)
                 actions(for: asset)
             } else {
                 ContentUnavailableView("대상이 없습니다", systemImage: "scissors", description: Text("원본이나 클립이 지워졌습니다"))
@@ -250,6 +261,8 @@ struct ClipEditView: View {
         .padding()
         .frame(minWidth: 720, minHeight: 540)
         .navigationTitle(windowTitle)
+        // 이 창이 앞에 있으면 보기 메뉴의 확대·축소는 필름스트립 막대가 대상이다(#97).
+        .focusedSceneValue(\.zoomCommand, barZoomCommand)
         .focusable()
         .focusEffectDisabled()
         .focused($isFocused)
@@ -313,15 +326,57 @@ struct ClipEditView: View {
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
-    private var timeSummary: some View {
+    private func timeSummary(for asset: MediaAsset) -> some View {
         HStack {
-            Text("시작 \(labelScale.timeLabel(for: range.start)) · 끝 \(labelScale.timeLabel(for: range.end)) · 길이 \(labelScale.timeLabel(for: range.duration))")
-                .monospacedDigit()
-            Spacer()
-            Text("↑/↓ \(activeEdge == .start ? "시작" : "끝")을 0.1초씩, ⇧와 함께 1초씩")
-                .foregroundStyle(.secondary)
+            if isCropping(asset) {
+                Text("재생 위치 \(labelScale.timeLabel(for: player?.currentTime ?? range.start)) · 구간 \(labelScale.timeLabel(for: range.start))–\(labelScale.timeLabel(for: range.end))")
+                    .monospacedDigit()
+                Spacer()
+                Text("막대를 눌러 다른 장면으로 옮깁니다. 구간은 트림 탭에서 바꿉니다")
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("시작 \(labelScale.timeLabel(for: range.start)) · 끝 \(labelScale.timeLabel(for: range.end)) · 길이 \(labelScale.timeLabel(for: range.duration))")
+                    .monospacedDigit()
+                Spacer()
+                Text("↑/↓ \(activeEdge == .start ? "시작" : "끝")을 0.1초씩, ⇧와 함께 1초씩 · ⌥ 끌기로 정밀하게")
+                    .foregroundStyle(.secondary)
+            }
         }
         .font(.callout)
+    }
+
+    /// 크롭 탭을 보고 있는지. 크롭은 영상에만 있다.
+    private func isCropping(_ asset: MediaAsset) -> Bool {
+        session.tab == .crop && asset.kind == .video
+    }
+
+    /// 막대 확대·축소·전체 맞춤 버튼(#97). 보기 메뉴(⌘=/⌘-/⌘0)와 같은 동작이다.
+    private func zoomButtons(for asset: MediaAsset) -> some View {
+        HStack(spacing: 2) {
+            Button {
+                zoomBar(by: 1 / TrimBarZoom.stepFactor)
+            } label: {
+                Label("축소", systemImage: "minus.magnifyingglass")
+            }
+            .disabled(!barZoom.canZoomOut)
+            .help(ShortcutGuide.zoomOutTrimBar.helpText)
+            Button {
+                zoomBar(by: TrimBarZoom.stepFactor)
+            } label: {
+                Label("확대", systemImage: "plus.magnifyingglass")
+            }
+            .disabled(!barZoom.canZoomIn(duration: asset.duration, visibleWidth: barViewport.visibleWidth))
+            .help(ShortcutGuide.zoomInTrimBar.helpText)
+            Button {
+                setBarZoom(TrimBarZoom())
+            } label: {
+                Label("전체 맞춤", systemImage: "arrow.left.and.right")
+            }
+            .disabled(barZoom.isFit)
+            .help(ShortcutGuide.fitTrimBar.helpText)
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.borderless)
     }
 
     /// 비율 프리셋, 위·아래·왼쪽·오른쪽 자르기 값(%), 초기화.
@@ -461,6 +516,39 @@ struct ClipEditView: View {
         }
     }
 
+    private func zoomBar(by factor: Double) {
+        guard let asset else { return }
+        setBarZoom(barZoom.zoomed(by: factor, duration: asset.duration, visibleWidth: barViewport.visibleWidth))
+    }
+
+    /// 막대 배율을 바꾼다. 재생 위치가 보이고 있으면 그 자리에, 아니면 가운데에 오도록 스크롤한다.
+    private func setBarZoom(_ newZoom: TrimBarZoom) {
+        guard let asset, barViewport.visibleWidth > 0 else { return }
+        let duration = asset.duration
+        let width = barViewport.visibleWidth
+        let zoom = newZoom.zoomed(by: 1, duration: duration, visibleWidth: width)
+        guard zoom != barZoom else { return }
+        let anchor = player?.currentTime ?? range.start
+        let anchorX = barZoom.x(for: anchor, duration: duration, visibleWidth: width) - barViewport.offset
+        let viewX = (0 ... width).contains(anchorX) ? anchorX : width / 2
+        barZoom = zoom
+        let offset = zoom.scrollOffset(keeping: anchor, atViewX: viewX, duration: duration, visibleWidth: width)
+        barViewport.offset = offset
+        // 막대 폭이 새 배율로 바뀐 뒤에 스크롤해야 새 폭 안에서 맞춰진다.
+        Task { @MainActor in barScrollPosition.scrollTo(x: offset) }
+    }
+
+    /// 보기 메뉴 확대·축소·전체 맞춤(⌘=/⌘-/⌘0). 대상이 없으면 `nil`이라 타임라인 메뉴도 보이지 않는다.
+    private var barZoomCommand: ZoomCommand? {
+        guard let asset else { return nil }
+        return ZoomCommand(
+            target: "필름스트립",
+            zoomIn: barZoom.canZoomIn(duration: asset.duration, visibleWidth: barViewport.visibleWidth) ? { zoomBar(by: TrimBarZoom.stepFactor) } : nil,
+            zoomOut: barZoom.canZoomOut ? { zoomBar(by: 1 / TrimBarZoom.stepFactor) } : nil,
+            fit: barZoom.isFit ? nil : { setBarZoom(TrimBarZoom()) }
+        )
+    }
+
     private func moveEdge(_ edge: ClipEdge, to time: CMTime) {
         guard let asset else { return }
         activeEdge = edge
@@ -476,6 +564,7 @@ struct ClipEditView: View {
             togglePlayback()
         default:
             guard session.tab == .trim || asset.kind != .video else { return .ignored }
+            player?.beginScrubbing()
             let step = press.modifiers.contains(.shift) ? TrimRange.largeStep : TrimRange.smallStep
             let delta = press.key == .upArrow ? step : CMTime.zero - step
             range = TrimRange.nudging(range, edge: activeEdge, by: delta, sourceDuration: asset.duration)
@@ -741,71 +830,154 @@ private extension CropHandle {
 
 // MARK: - Bar
 
+/// 필름스트립 막대가 보이는 폭과 스크롤 위치(#97). 막대가 알려 주고, 창이 확대할 때 기준점을 잡는 데 쓴다.
+private struct TrimBarViewport: Equatable {
+    var visibleWidth = 0.0
+    var offset = 0.0
+}
+
 /// 원본 전체 필름스트립(오디오는 파형) 위에 고른 구간을 노란 테두리로, 바깥은 어둡게 보여준다.
-/// 양 끝 손잡이를 끌어 구간을 바꾸고, 띠를 누르거나 끌어 재생 위치를 옮긴다.
+/// 양 끝 손잡이를 끌어 구간을 바꾸고(트림 탭), 띠를 누르거나 끌어 재생 위치를 옮긴다.
+/// 확대하면 가로로 스크롤되고, 손잡이를 가장자리까지 끌면 그쪽으로 스크롤한다(#97). ⌥를 누르고 끌면 5분의 1만 옮긴다.
+/// 끌기 시작하면 재생을 멈춘다(#95).
 private struct TrimBarView: View {
     let asset: MediaAsset
     let range: CMTimeRange
     let playhead: CMTime
     let activeEdge: ClipEdge
+    /// 크롭 탭에서는 구간 손잡이를 감추고 재생 위치만 옮긴다(#89).
+    let allowsRangeEditing: Bool
+    let zoom: TrimBarZoom
+    @Binding var scrollPosition: ScrollPosition
+    @Binding var viewport: TrimBarViewport
+    /// 핀치로 바꾼 배율. 창이 기준점을 지키며 반영한다.
+    let setZoom: (TrimBarZoom) -> Void
+    let beginScrubbing: () -> Void
     let moveEdge: (ClipEdge, CMTime) -> Void
     let scrub: (CMTime) -> Void
-    private static let height = TimelineMetrics.trackHeight - TimelineMetrics.clipVerticalInset * 2
+    @State private var lastDrag: (x: Double, time: CMTime)?
+    @State private var autoScroll: AutoScroll?
+    @State private var pinchStart: TrimBarZoom?
+    static let height = TimelineMetrics.trackHeight - TimelineMetrics.clipVerticalInset * 2
     private static let handleWidth = 12.0
     private static let space = "trimBar"
+    /// 필름스트립을 이 폭 단위로 나눠, 보이는 부분 근처만 그린다(크게 확대해도 썸네일을 다 만들지 않게).
+    private static let segmentWidth = 512.0
+    /// 손잡이를 이 거리 안까지 끌면 그쪽으로 스크롤한다.
+    private static let autoScrollZone = 24.0
+    private static let autoScrollStep = 12.0
+
+    /// 손잡이를 막대 가장자리까지 끌어 스크롤하는 중. 포인터는 보이는 폭 안 `viewX`에 머문다.
+    private struct AutoScroll: Equatable {
+        let edge: ClipEdge
+        let direction: Double
+        var viewX: Double
+    }
 
     var body: some View {
         GeometryReader { geometry in
-            let width = geometry.size.width
-            let x = { (time: CMTime) in asset.duration.seconds > 0 ? time.seconds / asset.duration.seconds * width : 0 }
-            let time = { (x: Double) in CMTime(seconds: min(max(x, 0), width) / max(width, 1) * asset.duration.seconds, preferredTimescale: standardTimescale) }
-            let startX = x(range.start)
-            let endX = x(range.end)
-
-            ZStack(alignment: .topLeading) {
-                content(width: width)
-                    .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space)).onChanged { scrub(time($0.location.x)) })
-                // 고르지 않은 바깥은 어둡게.
-                Color.black.opacity(0.55)
-                    .frame(width: max(startX, 0))
-                    .allowsHitTesting(false)
-                Color.black.opacity(0.55)
-                    .frame(width: max(width - endX, 0))
-                    .offset(x: endX)
-                    .allowsHitTesting(false)
-                RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(.yellow, lineWidth: 3)
-                    .frame(width: max(endX - startX, 6))
-                    .offset(x: startX)
-                    .allowsHitTesting(false)
-                handle(.start, x: startX, time: time)
-                handle(.end, x: endX - Self.handleWidth, time: time)
-                Rectangle()
-                    .fill(.white)
-                    .frame(width: 2)
-                    .shadow(radius: 1)
-                    .offset(x: x(playhead) - 1)
-                    .allowsHitTesting(false)
+            let visibleWidth = geometry.size.width
+            ScrollView(.horizontal) {
+                bar(visibleWidth: visibleWidth)
             }
-            .coordinateSpace(.named(Self.space))
+            .scrollIndicators(zoom.isFit ? .hidden : .automatic)
+            .scrollPosition($scrollPosition)
+            .onScrollGeometryChange(for: Double.self) { $0.contentOffset.x } action: { _, offset in
+                viewport.offset = offset
+            }
+            .onChange(of: visibleWidth, initial: true) {
+                viewport.visibleWidth = visibleWidth
+            }
         }
         .frame(height: Self.height)
+        .gesture(
+            MagnifyGesture()
+                .onChanged { value in
+                    let start = pinchStart ?? zoom
+                    pinchStart = start
+                    setZoom(start.zoomed(by: value.magnification, duration: asset.duration, visibleWidth: viewport.visibleWidth))
+                }
+                .onEnded { _ in pinchStart = nil }
+        )
+        .task(id: autoScroll.map { "\($0.edge)\($0.direction)" }) {
+            await runAutoScroll()
+        }
     }
 
-    private func content(width: Double) -> some View {
-        let fullClip = Clip(assetID: asset.id, sourceRange: CMTimeRange(start: .zero, duration: asset.duration), timelineStart: .zero)
-        return Group {
-            if let fullClip {
-                ClipContentView(asset: asset, clip: fullClip, width: width, showsFilmstrip: true, showsWaveform: asset.kind == .audio)
+    private func bar(visibleWidth: Double) -> some View {
+        let duration = asset.duration
+        let contentWidth = zoom.contentWidth(visibleWidth: visibleWidth)
+        let x = { (time: CMTime) in zoom.x(for: time, duration: duration, visibleWidth: visibleWidth) }
+        let startX = x(range.start)
+        let endX = x(range.end)
+
+        return ZStack(alignment: .topLeading) {
+            filmstrip(contentWidth: contentWidth, visibleWidth: visibleWidth)
+                .gesture(scrubGesture(visibleWidth: visibleWidth))
+            // 고르지 않은 바깥은 어둡게.
+            Color.black.opacity(0.55)
+                .frame(width: max(startX, 0))
+                .allowsHitTesting(false)
+            Color.black.opacity(0.55)
+                .frame(width: max(contentWidth - endX, 0))
+                .offset(x: endX)
+                .allowsHitTesting(false)
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(.yellow, lineWidth: 3)
+                .frame(width: max(endX - startX, 6))
+                .offset(x: startX)
+                .allowsHitTesting(false)
+            if allowsRangeEditing {
+                handle(.start, x: startX, visibleWidth: visibleWidth)
+                handle(.end, x: endX - Self.handleWidth, visibleWidth: visibleWidth)
+            }
+            Rectangle()
+                .fill(.white)
+                .frame(width: 2)
+                .shadow(radius: 1)
+                .offset(x: x(playhead) - 1)
+                .allowsHitTesting(false)
+        }
+        .frame(width: contentWidth, height: Self.height, alignment: .topLeading)
+        .coordinateSpace(.named(Self.space))
+    }
+
+    /// 보이는 부분과 그 양옆 한 화면만 조각으로 그린다. 조각마다 그 구간의 필름스트립(오디오는 파형)을 만든다.
+    private func filmstrip(contentWidth: Double, visibleWidth: Double) -> some View {
+        let duration = asset.duration
+        let segmentCount = max(Int((contentWidth / Self.segmentWidth).rounded(.up)), 1)
+        let first = max(Int((viewport.offset - visibleWidth) / Self.segmentWidth), 0)
+        let last = min(Int((viewport.offset + visibleWidth * 2) / Self.segmentWidth), segmentCount - 1)
+        return ZStack(alignment: .topLeading) {
+            ForEach(first ... max(first, last), id: \.self) { index in
+                let minX = Double(index) * Self.segmentWidth
+                let width = min(Self.segmentWidth, contentWidth - minX)
+                let start = zoom.time(forX: minX, duration: duration, visibleWidth: visibleWidth)
+                let end = zoom.time(forX: minX + width, duration: duration, visibleWidth: visibleWidth)
+                // 같은 조각이면 같은 ID라 다시 그릴 때 썸네일을 다시 만들지 않는다.
+                if width > 0, let clip = Clip(id: asset.id, assetID: asset.id, sourceRange: CMTimeRange(start: start, end: end), timelineStart: .zero) {
+                    ClipContentView(asset: asset, clip: clip, width: width, showsFilmstrip: true, showsWaveform: asset.kind == .audio)
+                        .frame(width: width, height: Self.height)
+                        .offset(x: minX)
+                }
             }
         }
-        .frame(width: width, height: Self.height)
+        .frame(width: contentWidth, height: Self.height, alignment: .topLeading)
         .background(.quaternary)
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .contentShape(Rectangle())
     }
 
-    private func handle(_ edge: ClipEdge, x: Double, time: @escaping (Double) -> CMTime) -> some View {
+    private func scrubGesture(visibleWidth: Double) -> some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
+            .onChanged { value in
+                let time = draggedTime(to: value.location.x, from: playhead, visibleWidth: visibleWidth)
+                scrub(time)
+            }
+            .onEnded { _ in lastDrag = nil }
+    }
+
+    private func handle(_ edge: ClipEdge, x: Double, visibleWidth: Double) -> some View {
         RoundedRectangle(cornerRadius: 3)
             .fill(.yellow)
             .overlay {
@@ -824,9 +996,67 @@ private struct TrimBarView: View {
             .pointerStyle(.columnResize)
             .highPriorityGesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
-                    .onChanged { moveEdge(edge, time($0.location.x)) }
+                    .onChanged { value in
+                        let current = edge == .start ? range.start : range.end
+                        moveEdge(edge, draggedTime(to: value.location.x, from: current, visibleWidth: visibleWidth))
+                        updateAutoScroll(edge: edge, viewX: value.location.x - viewport.offset)
+                    }
+                    .onEnded { _ in
+                        lastDrag = nil
+                        autoScroll = nil
+                    }
             )
-            .help(edge == .start ? "시작 손잡이 — 끌어서 시작을 바꿉니다" : "끝 손잡이 — 끌어서 끝을 바꿉니다")
+            .help(edge == .start ? "시작 손잡이 — 끌어서 시작을 바꿉니다(⌥를 누르면 정밀하게)" : "끝 손잡이 — 끌어서 끝을 바꿉니다(⌥를 누르면 정밀하게)")
+    }
+
+    /// 끌기 첫 이벤트에 재생을 멈추고, ⌥를 누르고 있으면 직전 위치에서 움직인 거리의 5분의 1만 옮긴다.
+    private func draggedTime(to x: Double, from currentTime: CMTime, visibleWidth: Double) -> CMTime {
+        if lastDrag == nil {
+            beginScrubbing()
+        }
+        let previous = lastDrag ?? (x, currentTime)
+        let time = zoom.draggedTime(
+            to: x,
+            from: previous.x,
+            previousTime: previous.time,
+            isPrecise: NSEvent.modifierFlags.contains(.option),
+            duration: asset.duration,
+            visibleWidth: visibleWidth
+        )
+        lastDrag = (x, time)
+        return time
+    }
+
+    private func updateAutoScroll(edge: ClipEdge, viewX: Double) {
+        let width = viewport.visibleWidth
+        let direction: Double? = zoom.isFit ? nil : viewX < Self.autoScrollZone ? -1 : viewX > width - Self.autoScrollZone ? 1 : nil
+        if let direction {
+            let clampedX = min(max(viewX, 0), width)
+            if autoScroll?.edge == edge, autoScroll?.direction == direction {
+                autoScroll?.viewX = clampedX
+            } else {
+                autoScroll = AutoScroll(edge: edge, direction: direction, viewX: clampedX)
+            }
+        } else if autoScroll != nil {
+            autoScroll = nil
+        }
+    }
+
+    /// 손잡이를 가장자리에 대고 있는 동안 조금씩 스크롤하며 손잡이를 포인터 아래 시각으로 옮긴다.
+    private func runAutoScroll() async {
+        while let current = autoScroll, !Task.isCancelled {
+            let width = viewport.visibleWidth
+            let maximumOffset = max(zoom.contentWidth(visibleWidth: width) - width, 0)
+            let offset = min(max(viewport.offset + current.direction * Self.autoScrollStep, 0), maximumOffset)
+            guard offset != viewport.offset else { return }
+            viewport.offset = offset
+            scrollPosition.scrollTo(x: offset)
+            let x = offset + current.viewX
+            let time = zoom.time(forX: x, duration: asset.duration, visibleWidth: width)
+            moveEdge(current.edge, time)
+            lastDrag = (x, time)
+            try? await Task.sleep(for: .milliseconds(16))
+        }
     }
 }
 
@@ -839,6 +1069,9 @@ final class TrimPlayer {
     private(set) var currentTime: CMTime = .zero
     private(set) var isPlaying = false
     @ObservationIgnored private var timeObserver: Any?
+    /// 탐색이 끝나기 전에 들어온 다음 위치(#95). 앞 탐색이 끝나면 마지막 위치 하나만 이어서 찾는다("chase seek").
+    @ObservationIgnored private var isSeeking = false
+    @ObservationIgnored private var pendingSeekTime: CMTime?
 
     init(url: URL) {
         let item = AVPlayerItem(url: url)
@@ -846,15 +1079,43 @@ final class TrimPlayer {
         player.replaceCurrentItem(with: item)
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 30), queue: .main) { [weak self] time in
             MainActor.assumeIsolated {
-                self?.currentTime = time
-                self?.isPlaying = self?.player.rate != 0
+                guard let self else { return }
+                // 탐색 중에는 옛 위치가 들어와 재생 위치 표시가 되돌아가지 않게 한다.
+                if !self.isSeeking {
+                    self.currentTime = time
+                }
+                self.isPlaying = self.player.rate != 0
             }
         }
     }
 
+    /// `time`의 프레임을 보여준다. 끄는 동안 이벤트마다 불려도, 앞 탐색이 끝난 뒤 마지막 위치로만 이어 찾아
+    /// 화면이 포인터를 늦게 따라오거나 건너뛰지 않는다(#95).
     func seek(to time: CMTime) {
         currentTime = time
-        player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+        guard !isSeeking else {
+            pendingSeekTime = time
+            return
+        }
+        isSeeking = true
+        player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+            Task { @MainActor in self?.seekFinished() }
+        }
+    }
+
+    private func seekFinished() {
+        isSeeking = false
+        if let next = pendingSeekTime {
+            pendingSeekTime = nil
+            seek(to: next)
+        }
+    }
+
+    /// 손잡이·재생 위치를 끌거나 ↑/↓로 옮기기 시작할 때. 재생을 멈추고 손을 떼도 멈춘 채 둔다(#95).
+    func beginScrubbing() {
+        if isPlaying || player.rate != 0 {
+            pause()
+        }
     }
 
     /// 고른 구간만 재생하고 끝에서 멈춘다. 재생 위치가 구간 밖이거나 끝이면 처음부터.
