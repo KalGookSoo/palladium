@@ -34,6 +34,15 @@ final class ClipEditSession {
     var closePrompt = UnsavedChangesPrompt(message: "")
     /// 닫기 확인에서 "적용"(원본 항목이면 "새 항목으로 저장")을 고르면 창의 기본 버튼과 같은 일을 한다. 창이 넣어 준다.
     var applyChanges: () -> Void = {}
+    /// 파일 > ⌘S(#92). 적용하되 창은 열어 둔다. 창이 넣어 준다.
+    var saveFromMenu: () -> Void = {}
+
+    /// 클립 편집 창이 앞에 있을 때 ⌘S 자리의 항목. 이름은 닫기 확인의 기본 버튼과 같다("적용"·"새 항목으로 저장").
+    /// 적용하지 않은 변경이 없으면 `nil`이라 메뉴가 꺼진다.
+    var saveCommand: SaveCommand? {
+        guard hasUnappliedChanges else { return nil }
+        return SaveCommand(title: closePrompt.saveTitle, perform: saveFromMenu)
+    }
 
     init(editor: ProjectEditor) {
         self.editor = editor
@@ -110,6 +119,8 @@ struct ClipEditWindowView: View {
                     .navigationTitle("클립 편집")
             }
         }
+        // 클립 편집 창이 앞에 있으면 ⌘S는 프로젝트 저장이 아니라 적용이다(#92).
+        .focusedSceneValue(\.saveCommand, session?.saveCommand)
         .onAppear { session?.isWindowOpen = true }
         .onDisappear { session?.isWindowOpen = false }
         // 적용하지 않은 채 닫으면(닫기 버튼·⌘W·앱 종료·프로젝트 창 닫기) 묻는다. 창이 살아 있는 동안 바뀌지 않는 이 뷰에 둔다.
@@ -260,6 +271,7 @@ struct ClipEditView: View {
         .onChange(of: closePrompt.message + closePrompt.saveTitle, initial: true) {
             session.closePrompt = closePrompt
             session.applyChanges = { applyDefault() }
+            session.saveFromMenu = { saveKeepingWindow() }
         }
         // 닫기 확인과 같은 문구·버튼으로 묻는다(앱 공통 규칙, #91).
         .alert(closePrompt.message, isPresented: isAskingToSwitch) {
@@ -477,6 +489,24 @@ struct ClipEditView: View {
     private func saveAsNewItem(_ asset: MediaAsset) {
         editor.addTrimmedAsset(from: asset.id, start: range.start, end: range.end, crop: cropToApply ?? ClipCrop())
         close()
+    }
+
+    /// 파일 > ⌘S: 기본 버튼처럼 적용하되 창은 열어 둔다(#92). 원본 항목은 새 파생 항목을 만들고 창이 그 항목을 보여준다
+    /// — 원본에 머물면 ⌘S를 누를 때마다 같은 항목이 또 생기기 때문이다(자르기 뒤와 같은 방식).
+    private func saveKeepingWindow() {
+        guard let asset else { return }
+        if case .asset = kind, !asset.isDerived {
+            guard let newID = editor.addTrimmedAsset(from: asset.id, start: range.start, end: range.end, crop: cropToApply ?? ClipCrop()) else { return }
+            kind = .asset(newID)
+            session.target = kind
+            if let current = Self.currentValues(of: kind, in: editor) {
+                committed = current
+                range = current.range
+                crop = current.crop
+            }
+        } else {
+            applyDefault()
+        }
     }
 
     /// 기본 버튼이 하는 일: 클립·파생 항목은 고친 구간·크롭을 적용하고, 원본 항목은 새 파생 항목으로 저장한다(원본은 바꾸지 않는다).

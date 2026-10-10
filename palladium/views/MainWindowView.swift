@@ -69,7 +69,7 @@ struct MainWindowView: View {
         let project = editor.project
         let hasUnsavedChanges = editor.hasUnsavedChanges
         // 저장할 변경이 없으면 nil을 넘겨 파일 > 저장 메뉴를 비활성화한다.
-        let saveAction: (() -> Void)? = hasUnsavedChanges ? { _ = saveProject() } : nil
+        let saveAction: SaveCommand? = hasUnsavedChanges ? SaveCommand(title: "저장") { _ = saveProject() } : nil
         let isShowingSaveError = Binding<Bool>(
             get: { saveErrorMessage != nil },
             set: {
@@ -130,7 +130,7 @@ struct MainWindowView: View {
                 }
             }
         let withCommands = window
-            .focusedSceneValue(\.saveProject, saveAction)
+            .focusedSceneValue(\.saveCommand, saveAction)
             .focusedSceneValue(\.importMedia) { isImporterPresented = true }
             .focusedSceneValue(\.exportSequence, exportAction)
             .focusedSceneValue(\.batchExport, batchExportAction)

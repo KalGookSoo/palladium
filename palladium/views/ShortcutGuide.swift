@@ -20,7 +20,7 @@ struct ShortcutGuideEntry: Identifiable {
 enum ShortcutGuide {
     static let openProjectList = ShortcutGuideEntry(title: "프로젝트 목록 열기", summary: "시작 창을 엽니다", keys: "⇧⌘1")
     static let newProject = ShortcutGuideEntry(title: "새 프로젝트 만들기", summary: "이름을 정해 새 프로젝트를 만듭니다(시작 창)", keys: "⌘N")
-    static let save = ShortcutGuideEntry(title: "저장", summary: "저장하지 않은 변경을 저장합니다", keys: "⌘S")
+    static let save = ShortcutGuideEntry(title: "저장", summary: "프로젝트 창에서는 저장하지 않은 변경을 저장하고, 클립 편집 창에서는 고친 트림·크롭을 적용합니다(창은 열어 둠)", keys: "⌘S")
     static let close = ShortcutGuideEntry(title: "닫기", summary: "편집 창을 닫습니다", keys: "⌘W")
     static let importMedia = ShortcutGuideEntry(title: "가져오기", summary: "영상·오디오·이미지 파일을 프로젝트로 가져옵니다", keys: "⌘I")
     static let export = ShortcutGuideEntry(title: "내보내기", summary: "편집한 영상을 파일로 내보냅니다", keys: "⌘E")

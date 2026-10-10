@@ -269,6 +269,24 @@ struct ClipEditTests {
         #expect(!session.hasUnappliedChanges)
     }
 
+    @Test("클립 편집 창의 ⌘S는 적용하지 않은 변경이 있을 때만 켜지고, 이름은 확인 창의 기본 버튼과 같으며 메뉴 저장 동작을 부른다(#92)")
+    func saveCommandFollowsUnappliedChanges() throws {
+        let session = try ClipEditSession(editor: makeEditor())
+        var saved = 0
+        session.saveFromMenu = { saved += 1 }
+        session.closePrompt = UnsavedChangesPrompt(message: "", saveTitle: "적용", discardTitle: "적용 안 함")
+        #expect(session.saveCommand == nil)
+
+        session.hasUnappliedChanges = true
+        let command = try #require(session.saveCommand)
+        #expect(command.title == "적용")
+        command.perform()
+        #expect(saved == 1)
+
+        session.closePrompt = UnsavedChangesPrompt(message: "", saveTitle: "새 항목으로 저장", discardTitle: "저장 안 함")
+        #expect(session.saveCommand?.title == "새 항목으로 저장")
+    }
+
     @Test("닫기 확인 장치가 같은 창에 여러 번 붙어도 서로를 원래 delegate로 삼지 않고 원래 delegate로 넘긴다(#91 멈춤)")
     func guardCoordinatorsDoNotChain() {
         final class RecordingDelegate: NSObject, NSWindowDelegate {
