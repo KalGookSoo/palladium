@@ -113,6 +113,17 @@ struct ProjectFolderCommandTests {
         #expect(project.folders.first { $0.id == footageID }?.assetIDs == [SampleData.bRollVideo.id])
     }
 
+    @Test("같은 원본이 여러 번 와도 폴더에는 처음 나온 순서로 한 번씩만 들어간다")
+    func moveAssetsIgnoresDuplicates() {
+        var project = SampleData.project
+        let musicID = project.addFolder(named: "음악")
+        let intro = SampleData.introVideo.id
+        let bRoll = SampleData.bRollVideo.id
+
+        project.moveAssets([bRoll, intro, bRoll, intro], toFolder: musicID)
+        #expect(project.folders.first { $0.id == musicID }?.assetIDs == [bRoll, intro])
+    }
+
     @Test("같은 폴더 안에서 다른 원본 앞으로 옮기면 순서가 바뀐다")
     func reorderWithinFolder() {
         var project = SampleData.project

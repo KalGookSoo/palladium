@@ -109,7 +109,9 @@ nonisolated extension Project {
     /// 원본을 폴더로 옮긴다. 원본은 한 폴더에만 속하므로 다른 폴더에서는 빠진다. `folderID`가 `nil`이면 "분류 안 됨"으로 뺀다.
     /// `beforeAssetID`가 같은 폴더에 있으면 그 앞에, 아니면 폴더 끝에 넣는다(폴더 안 순서 바꾸기에도 쓴다).
     mutating func moveAssets(_ assetIDs: [MediaAsset.ID], toFolder folderID: MediaFolder.ID?, before beforeAssetID: MediaAsset.ID? = nil) {
-        let movingIDs = assetIDs.filter { assetID in assets.contains { $0.id == assetID } }
+        // 여러 줄을 함께 끌면 줄마다 같은 원본 목록이 와서 ID가 겹친다(#86). 처음 나온 순서로 하나씩만 옮긴다.
+        var seen = Set<MediaAsset.ID>()
+        let movingIDs = assetIDs.filter { assetID in assets.contains { $0.id == assetID } && seen.insert(assetID).inserted }
         for index in folders.indices {
             folders[index].assetIDs.removeAll { movingIDs.contains($0) }
         }
