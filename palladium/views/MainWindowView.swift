@@ -44,6 +44,9 @@ struct MainWindowView: View {
     @State private var selectedClipIDs: Set<Clip.ID> = []
     /// 미디어 패널 목록에 포커스가 있으면 ⌫는 원본 삭제(#60)라 타임라인 삭제로 가로채지 않는다.
     @State private var isMediaPanelFocused = false
+    /// 미리보기·타임라인을 누르면 키보드 포커스를 그쪽으로 가져온다(#98). 그래야 미디어 패널 목록이 포커스를 잃어
+    /// ⌫·⌘A·⌘C 같은 키가 마지막으로 누른 패널에 동작한다.
+    @FocusState private var focusedEditingPane: EditingPane?
     /// 자막 트랙에서 고른 자막. 클립 선택과 함께 있지 않는다.
     @State private var selectedSubtitleID: Subtitle.ID?
     /// 마스크 레인에서 고른 마스크(#59). 클립·자막 선택과 함께 있지 않는다.
@@ -277,6 +280,7 @@ struct MainWindowView: View {
                     toggleNarration: toggleNarration
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .takesKeyboardFocus(on: .preview, focus: $focusedEditingPane)
                 .dropDestination(for: URL.self) { urls, _ in
                     importMedia(from: urls)
                     return true
@@ -315,6 +319,7 @@ struct MainWindowView: View {
                     )
                     .frame(maxWidth: .infinity)
                     .frame(height: min(timelineHeight, maxTimelineHeight))
+                    .takesKeyboardFocus(on: .timeline, focus: $focusedEditingPane)
                 }
             }
         }
@@ -1062,4 +1067,27 @@ private struct EditorKeyHandling: ViewModifier {
         configurations: ModelConfiguration(isStoredInMemoryOnly: true)
     )
     MainWindowView(editor: ProjectEditor(project: SampleData.project, repository: SwiftDataProjectRepository(modelContext: container.mainContext)))
+}
+
+/// 키보드 포커스를 가져가는 편집 영역(#98). 미디어 패널 목록과 구분하기만 하면 되어 값은 따로 쓰지 않는다.
+private enum EditingPane: Hashable {
+    case preview
+    case timeline
+}
+
+private extension View {
+    /// 이 영역을 누르거나 끌기 시작하면 키보드 포커스를 가져온다. 포커스 테두리는 그리지 않는다.
+    /// 안쪽 클립·손잡이의 제스처는 그대로 동작하도록 함께(simultaneous) 듣는다.
+    func takesKeyboardFocus(on pane: EditingPane, focus: FocusState<EditingPane?>.Binding) -> some View {
+        focusable()
+            .focusEffectDisabled()
+            .focused(focus, equals: pane)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0).onChanged { _ in
+                    if focus.wrappedValue != pane {
+                        focus.wrappedValue = pane
+                    }
+                }
+            )
+    }
 }
