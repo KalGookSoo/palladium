@@ -30,7 +30,7 @@ extension ProjectContentRecords {
             .withTrim(of: asset)
         }
         folders = project.folders.enumerated().map { index, folder in
-            MediaFolderRecord(id: folder.id, sortIndex: index, name: folder.name, assetIDs: folder.assetIDs)
+            MediaFolderRecord(id: folder.id, sortIndex: index, name: folder.name, assetIDs: folder.assetIDs, parentID: folder.parentID)
         }
         sequences = project.sequences.enumerated().map { index, sequence in
             SequenceRecord.make(from: sequence, sortIndex: index)
@@ -114,7 +114,7 @@ extension ProjectContentRecords {
             name: name,
             assets: assets.sorted { $0.sortIndex < $1.sortIndex }.compactMap { $0.makeAsset() },
             folders: folders.sorted { $0.sortIndex < $1.sortIndex }.map {
-                MediaFolder(id: $0.id, name: $0.name, assetIDs: $0.assetIDs)
+                MediaFolder(id: $0.id, name: $0.name, assetIDs: $0.assetIDs, parentID: $0.parentID)
             },
             sequences: sequences.sorted { $0.sortIndex < $1.sortIndex }.map { $0.makeSequence() }
         ) else {

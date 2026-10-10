@@ -61,6 +61,63 @@ nonisolated extension Project {
         folders.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
+    /// `parentID` 폴더 바로 안의 폴더(#93, `nil`이면 맨 위 단계)를 이름 오름차순으로.
+    func subfolders(of parentID: MediaFolder.ID?) -> [MediaFolder] {
+        foldersByName.filter { $0.parentID == parentID }
+    }
+
+    /// 미디어 패널 트리를 위에서부터 펼친 순서. 폴더마다 하위 폴더를 먼저, 각각 이름순이다. 깊이는 맨 위가 0.
+    var folderTree: [(folder: MediaFolder, depth: Int)] {
+        func walk(_ parentID: MediaFolder.ID?, depth: Int) -> [(folder: MediaFolder, depth: Int)] {
+            subfolders(of: parentID).flatMap { [($0, depth)] + walk($0.id, depth: depth + 1) }
+        }
+        return walk(nil, depth: 0)
+    }
+
+    /// 가장 깊은 폴더의 깊이(맨 위 폴더가 1, 폴더가 없으면 0). 사이드바 최대 폭을 정하는 데 쓴다.
+    var maximumFolderDepth: Int {
+        folderTree.map { $0.depth + 1 }.max() ?? 0
+    }
+
+    /// 미디어 패널 목록에 보이는 원본 순서(폴더 트리를 펼친 순서 + 맨 위 원본).
+    var assetListOrder: [MediaAsset.ID] {
+        folderTree.flatMap { assets(in: $0.folder).map(\.id) } + unfiledAssets.map(\.id)
+    }
+
+    /// "촬영본 / 1일차"처럼 맨 위부터 이 폴더까지의 이름.
+    func folderPath(_ folderID: MediaFolder.ID) -> String {
+        ancestors(of: folderID).reversed().map(\.name).joined(separator: " / ")
+    }
+
+    /// `folderID` 자신부터 맨 위까지 담은 폴더들(자신 포함). 고리가 생겨도 멈춘다.
+    private func ancestors(of folderID: MediaFolder.ID) -> [MediaFolder] {
+        var result: [MediaFolder] = []
+        var current = folders.first { $0.id == folderID }
+        while let folder = current, !result.contains(where: { $0.id == folder.id }) {
+            result.append(folder)
+            current = folder.parentID.flatMap { parentID in folders.first { $0.id == parentID } }
+        }
+        return result
+    }
+
+    /// 원본이 든 폴더와 그 위 폴더들(#93). 맨 위 원본이면 빈 배열. "미디어 패널에서 원본 보기"가 접힌 폴더를 펼치는 데 쓴다.
+    func folderIDs(containing assetID: MediaAsset.ID) -> [MediaFolder.ID] {
+        guard let folder = folders.first(where: { $0.assetIDs.contains(assetID) }) else { return [] }
+        return ancestors(of: folder.id).map(\.id)
+    }
+
+    /// `folderID`가 `ancestorID` 자신이거나 그 아래에 있는지.
+    func isFolder(_ folderID: MediaFolder.ID, inside ancestorID: MediaFolder.ID) -> Bool {
+        ancestors(of: folderID).contains { $0.id == ancestorID }
+    }
+
+    /// `folderID`와 그 아래 어딘가에 거르기에 맞는 원본이 있는지(검색 중 보일 폴더를 고른다).
+    func folderContainsAsset(_ folderID: MediaFolder.ID, matching matches: (MediaAsset) -> Bool) -> Bool {
+        folders.contains { folder in
+            isFolder(folder.id, inside: folderID) && assets(in: folder).contains(where: matches)
+        }
+    }
+
     private static func isOrderedByName(_ lhs: MediaAsset, _ rhs: MediaAsset) -> Bool {
         lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
     }
@@ -96,13 +153,25 @@ nonisolated extension Project {
         sequences[index].name = trimmedName
     }
 
-    /// 미디어 패널에 빈 폴더를 끝에 추가한다. 이름이 비어 있으면 "새 폴더". 폴더 안에 폴더는 두지 않는다(한 단계).
+    /// 미디어 패널에 빈 폴더를 추가한다. 이름이 비어 있으면 "새 폴더". `parentID` 폴더 안에 만들고(#93), 없는 폴더면 맨 위에 만든다.
     @discardableResult
-    mutating func addFolder(named name: String) -> MediaFolder.ID {
+    mutating func addFolder(named name: String, in parentID: MediaFolder.ID? = nil) -> MediaFolder.ID {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let folder = MediaFolder(id: UUID(), name: trimmedName.isEmpty ? "새 폴더" : trimmedName, assetIDs: [])
+        let parent = parentID.flatMap { parentID in folders.first { $0.id == parentID }?.id }
+        let folder = MediaFolder(id: UUID(), name: trimmedName.isEmpty ? "새 폴더" : trimmedName, assetIDs: [], parentID: parent)
         folders.append(folder)
         return folder.id
+    }
+
+    /// 폴더를 다른 폴더 안(`nil`이면 맨 위)으로 옮긴다(#93). 자기 자신이나 자기 아래 폴더로는 옮기지 않는다. 옮겼으면 `true`.
+    @discardableResult
+    mutating func moveFolder(_ folderID: MediaFolder.ID, into parentID: MediaFolder.ID?) -> Bool {
+        guard let index = folders.firstIndex(where: { $0.id == folderID }), folders[index].parentID != parentID else { return false }
+        if let parentID {
+            guard folders.contains(where: { $0.id == parentID }), !isFolder(parentID, inside: folderID) else { return false }
+        }
+        folders[index].parentID = parentID
+        return true
     }
 
     /// 앞뒤 공백을 빼고, 비어 있으면 바꾸지 않는다.
@@ -112,12 +181,19 @@ nonisolated extension Project {
         folders[index].name = trimmedName
     }
 
-    /// 폴더만 지운다. 안에 있던 원본은 프로젝트에 남아 "분류 안 됨"으로 돌아간다.
+    /// 폴더만 지운다. 안에 있던 원본과 하위 폴더는 한 단계 위로 올라간다(#93, 맨 위 폴더면 맨 위로).
     mutating func deleteFolder(_ folderID: MediaFolder.ID) {
+        guard let folder = folders.first(where: { $0.id == folderID }) else { return }
+        for index in folders.indices where folders[index].parentID == folderID {
+            folders[index].parentID = folder.parentID
+        }
+        if let parentID = folder.parentID, let parentIndex = folders.firstIndex(where: { $0.id == parentID }) {
+            folders[parentIndex].assetIDs.append(contentsOf: folder.assetIDs)
+        }
         folders.removeAll { $0.id == folderID }
     }
 
-    /// 원본을 폴더로 옮긴다. 원본은 한 폴더에만 속하므로 다른 폴더에서는 빠진다. `folderID`가 `nil`이면 "분류 안 됨"으로 뺀다.
+    /// 원본을 폴더로 옮긴다. 원본은 한 폴더에만 속하므로 다른 폴더에서는 빠진다. `folderID`가 `nil`이면 맨 위(폴더 밖)로 뺀다.
     /// `beforeAssetID`가 같은 폴더에 있으면 그 앞에, 아니면 폴더 끝에 넣는다(폴더 안 순서 바꾸기에도 쓴다).
     mutating func moveAssets(_ assetIDs: [MediaAsset.ID], toFolder folderID: MediaFolder.ID?, before beforeAssetID: MediaAsset.ID? = nil) {
         // 여러 줄을 함께 끌면 줄마다 같은 원본 목록이 와서 ID가 겹친다(#86). 처음 나온 순서로 하나씩만 옮긴다.

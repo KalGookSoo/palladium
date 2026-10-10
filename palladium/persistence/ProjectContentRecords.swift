@@ -66,14 +66,17 @@ final class MediaFolderRecord {
     var name: String
     /// 폴더 안 원본 순서가 그대로 보존되도록 배열 값으로 저장한다.
     var assetIDs: [UUID]
+    /// 담은 폴더(#93). 옵셔널이라 한 단계 폴더만 있던 기존 저장소도 그대로 열리고, 그 폴더들은 맨 위 폴더가 된다.
+    var parentID: UUID?
     var project: ProjectRecord?
     var backup: ProjectBackupRecord?
 
-    init(id: UUID, sortIndex: Int, name: String, assetIDs: [UUID]) {
+    init(id: UUID, sortIndex: Int, name: String, assetIDs: [UUID], parentID: UUID? = nil) {
         self.id = id
         self.sortIndex = sortIndex
         self.name = name
         self.assetIDs = assetIDs
+        self.parentID = parentID
     }
 }
 

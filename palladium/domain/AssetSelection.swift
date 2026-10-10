@@ -32,3 +32,18 @@ nonisolated enum AssetDragPayload {
         text.split(whereSeparator: \.isNewline).compactMap { UUID(uuidString: String($0)) }
     }
 }
+
+/// 미디어 패널에서 끄는 폴더(#93). 원본 ID와 섞이지 않게 앞에 표시를 붙인다(원본 ID로 읽히지 않아 타임라인은 무시한다).
+nonisolated enum FolderDragPayload {
+    private static let prefix = "palladium-folder:"
+
+    static func encode(_ folderID: MediaFolder.ID) -> String {
+        prefix + folderID.uuidString
+    }
+
+    static func decode(_ text: String) -> [MediaFolder.ID] {
+        text.split(whereSeparator: \.isNewline).compactMap { line in
+            line.hasPrefix(prefix) ? UUID(uuidString: String(line.dropFirst(prefix.count))) : nil
+        }
+    }
+}

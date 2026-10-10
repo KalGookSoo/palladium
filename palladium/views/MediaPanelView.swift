@@ -4,7 +4,8 @@ import SwiftUI
 
 /// 프리미어 프로의 프로젝트 패널처럼 한 번 클릭은 선택만 하고, 더블클릭하면 원본을 미리보기(소스 모니터)에서 연다.
 /// 포토샵 레이어처럼 원본 이름을 목록에서 바로 바꿔 정리한다(F2 또는 우클릭 > 이름 변경).
-/// 폴더(한 단계)를 만들어 원본을 끌어다 넣거나 우클릭 > 폴더로 이동으로 분류한다. 원본은 한 폴더에만 속한다.
+/// 폴더 트리(#93)로 원본을 분류한다. 폴더 안에 폴더를 두고, 폴더마다 접고 편다. 맨 위 단계에는 폴더와 어느 폴더에도 없는 원본이 함께 보인다.
+/// 원본·폴더를 끌어다 다른 폴더 안이나 맨 위로 옮긴다. 원본은 한 폴더에만 속한다. 폴더·원본은 각각 이름순이고 폴더가 먼저다(#94).
 struct MediaPanelView: View {
     /// 원본 정리(이름·색상 레이블·태그)는 편집기 커맨드로 한다.
     let editor: ProjectEditor
@@ -33,16 +34,19 @@ struct MediaPanelView: View {
     /// 이름을 바꾸는 중인 폴더.
     @State private var renamingFolderID: MediaFolder.ID?
     @State private var folderNameText = ""
+    /// 접어 둔 폴더(#93). 앱을 다시 켜도 유지한다.
+    @AppStorage(AppPreferences.collapsedMediaFoldersKey) private var collapsedFolderText = ""
+    /// 끄는 중 포인터가 머문 접힌 폴더. 잠시 머물면 펼친다.
+    @State private var dropHoverFolderID: MediaFolder.ID?
+    private static let dropHoverExpandDelay = Duration.milliseconds(700)
 
     var body: some View {
         let project = editor.project
-        let folderSections = project.foldersByName.map { folder in
-            (folder: folder, assets: project.assets(in: folder).filter(filter.matches))
-        }
-        let unfiledAssets = project.unfiledAssets.filter(filter.matches)
-        let hasNoResults = folderSections.allSatisfy(\.assets.isEmpty) && unfiledAssets.isEmpty
-        // 거르는 중이 아니면 빈 폴더와 빈 "분류 안 됨"도 보여 원본을 끌어다 놓을 수 있게 한다.
         let isFiltering = filter != MediaFilter()
+        // 거르는 중이면 그 아래 어딘가에 맞는 원본이 있는 폴더만 보이고, 아니면 빈 폴더도 보여 놓을 곳이 된다.
+        let rootFolders = project.subfolders(of: nil).filter(isVisible)
+        let rootAssets = project.unfiledAssets.filter(filter.matches)
+        let hasNoResults = !project.assets.contains(where: filter.matches)
         let isRenamingFolder = Binding<Bool>(
             get: { renamingFolderID != nil },
             set: {
@@ -60,33 +64,25 @@ struct MediaPanelView: View {
             }
         )
 
-        let listOrder = folderSections.flatMap(\.assets).map(\.id) + unfiledAssets.map(\.id)
+        let listOrder = project.assetListOrder
 
         List(selection: $selectedAssetIDs) {
-            ForEach(folderSections, id: \.folder.id) { section in
-                if !section.assets.isEmpty || !isFiltering {
-                    Section {
-                        ForEach(section.assets) { asset in
-                            assetRow(asset, folderID: section.folder.id)
-                        }
-                    } header: {
-                        folderHeader(section.folder)
-                    }
-                }
+            ForEach(rootFolders) { folder in
+                folderNode(folder)
             }
-            if !unfiledAssets.isEmpty || (!isFiltering && !project.folders.isEmpty) {
-                Section {
-                    ForEach(unfiledAssets) { asset in
-                        assetRow(asset, folderID: nil)
-                    }
-                } header: {
-                    Text("분류 안 됨")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .dropDestination(for: String.self) { items, _ in
-                            moveDroppedAssets(items, toFolder: nil)
-                        }
-                }
+            ForEach(rootAssets) { asset in
+                assetRow(asset, folderID: nil)
+            }
+        }
+        // 행이 없는 빈 곳에 놓으면 맨 위로 옮긴다.
+        .dropDestination(for: String.self) { items, _ in
+            moveDropped(items, toFolder: nil)
+        }
+        .task(id: dropHoverFolderID) {
+            guard let folderID = dropHoverFolderID else { return }
+            try? await Task.sleep(for: Self.dropHoverExpandDelay)
+            if !Task.isCancelled, dropHoverFolderID == folderID {
+                setExpanded(true, folderID)
             }
         }
         .listStyle(.sidebar)
@@ -108,10 +104,9 @@ struct MediaPanelView: View {
         // 검색창 바로 아래에 색상 레이블 필터를 둔다.
         .safeAreaInset(edge: .top) {
             MediaFilterBar(filter: $filter) {
-                let folderID = editor.addFolder(named: "")
-                // 만들자마자 이름을 정하게 한다.
-                folderNameText = editor.project.folders.first { $0.id == folderID }?.name ?? ""
-                renamingFolderID = folderID
+                // 원본 하나를 골랐으면 그 원본이 있는 폴더 안에, 아니면 맨 위에 만든다.
+                let parentID = singleSelection.flatMap { assetID in editor.project.folders.first { $0.assetIDs.contains(assetID) }?.id }
+                addFolder(in: parentID)
             }
         }
         .overlay {
@@ -143,6 +138,10 @@ struct MediaPanelView: View {
         .focusedSceneValue(\.renameSelectedAsset, listHasFocus ? singleSelection.map { assetID in { beginRenaming(assetID) } } : nil)
         .onChange(of: selectedAssetIDs, initial: true) { _, selection in
             selectionOrder = AssetSelectionOrder.updated(selectionOrder, selection: selection, listOrder: listOrder)
+            // 타임라인의 "미디어 패널에서 원본 보기"처럼 접힌 폴더 안 원본이 골라지면 그 폴더들을 펼쳐 보이게 한다.
+            for folderID in selection.flatMap(project.folderIDs(containing:)) where collapsedFolderIDs.contains(folderID) {
+                setExpanded(true, folderID)
+            }
         }
         .focused($listHasFocus)
         .onChange(of: listHasFocus, initial: true) {
@@ -217,24 +216,97 @@ struct MediaPanelView: View {
             // 고른 원본 중 하나를 끌면 고른 원본 전체를 고른 순서대로, 고르지 않은 원본을 끌면 그 원본만 끈다(#86).
             .draggable(AssetDragPayload.encode(draggedAssetIDs(startingAt: asset.id)))
             .dropDestination(for: String.self) { items, _ in
-                moveDroppedAssets(items, toFolder: folderID)
+                moveDropped(items, toFolder: folderID)
             }
     }
 
-    /// 폴더 머리. 원본을 끌어다 놓으면 폴더 끝에 넣고, 우클릭으로 이름을 바꾸거나 지운다.
+    /// 폴더 한 칸: 머리(펼침 삼각형)와 안의 하위 폴더·원본. 하위 폴더도 같은 모양이라 스스로를 부른다.
+    private func folderNode(_ folder: MediaFolder) -> AnyView {
+        let project = editor.project
+        let subfolders = project.subfolders(of: folder.id).filter(isVisible)
+        let assets = project.assets(in: folder).filter(filter.matches)
+        return AnyView(
+            DisclosureGroup(isExpanded: expansion(of: folder.id)) {
+                ForEach(subfolders) { subfolder in
+                    folderNode(subfolder)
+                }
+                ForEach(assets) { asset in
+                    assetRow(asset, folderID: folder.id)
+                }
+            } label: {
+                folderHeader(folder)
+            }
+        )
+    }
+
+    private func isVisible(_ folder: MediaFolder) -> Bool {
+        filter == MediaFilter() || editor.project.folderContainsAsset(folder.id, matching: filter.matches)
+    }
+
+    // MARK: - Expansion
+
+    private var collapsedFolderIDs: Set<MediaFolder.ID> {
+        Set(collapsedFolderText.split(separator: ",").compactMap { UUID(uuidString: String($0)) })
+    }
+
+    /// 거르는 중에는 맞는 원본이 보이도록 모두 펼친다(접힌 상태는 그대로 기억한다).
+    private func expansion(of folderID: MediaFolder.ID) -> Binding<Bool> {
+        Binding(
+            get: { filter != MediaFilter() || !collapsedFolderIDs.contains(folderID) },
+            set: { isExpanded in
+                if filter == MediaFilter() {
+                    setExpanded(isExpanded, folderID)
+                }
+            }
+        )
+    }
+
+    private func setExpanded(_ isExpanded: Bool, _ folderID: MediaFolder.ID) {
+        var collapsed = collapsedFolderIDs
+        if isExpanded {
+            collapsed.remove(folderID)
+        } else {
+            collapsed.insert(folderID)
+        }
+        collapsedFolderText = collapsed.map(\.uuidString).sorted().joined(separator: ",")
+    }
+
+    /// 새 폴더를 `parentID` 안(`nil`이면 맨 위)에 만들고 그 폴더가 보이게 펼친 뒤 바로 이름을 정하게 한다.
+    private func addFolder(in parentID: MediaFolder.ID?) {
+        let folderID = editor.addFolder(named: "", in: parentID)
+        if let parentID {
+            setExpanded(true, parentID)
+        }
+        folderNameText = editor.project.folders.first { $0.id == folderID }?.name ?? ""
+        renamingFolderID = folderID
+    }
+
+    /// 폴더 머리. 원본·폴더를 끌어다 놓으면 이 폴더 안으로 넣고, 끄는 동안 잠시 머물면 펼친다.
+    /// 머리를 끌면 폴더째 옮기고, 우클릭으로 하위 폴더를 만들거나 이름을 바꾸거나 지운다.
     private func folderHeader(_ folder: MediaFolder) -> some View {
         Label(folder.name, systemImage: "folder")
+            .lineLimit(1)
+            .truncationMode(.middle)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
+            .draggable(FolderDragPayload.encode(folder.id))
             .dropDestination(for: String.self) { items, _ in
-                moveDroppedAssets(items, toFolder: folder.id)
+                dropHoverFolderID = nil
+                return moveDropped(items, toFolder: folder.id)
+            } isTargeted: { isTargeted in
+                if isTargeted {
+                    dropHoverFolderID = folder.id
+                } else if dropHoverFolderID == folder.id {
+                    dropHoverFolderID = nil
+                }
             }
             .contextMenu {
+                Button("새 폴더") { addFolder(in: folder.id) }
                 Button("폴더 이름 변경…") {
                     folderNameText = folder.name
                     renamingFolderID = folder.id
                 }
-                // 안의 원본은 "분류 안 됨"으로 돌아가고, 실행 취소(⌘Z)로 되돌릴 수 있어 확인 창을 띄우지 않는다.
+                // 안의 원본과 하위 폴더는 한 단계 위로 올라가고, 실행 취소(⌘Z)로 되돌릴 수 있어 확인 창을 띄우지 않는다.
                 Button("폴더 삭제") { editor.deleteFolder(folder.id) }
             }
     }
@@ -252,21 +324,29 @@ struct MediaPanelView: View {
 
     /// 메뉴가 받은 원본들을 고른 순서대로(순서를 모르면 목록 순서).
     private func ordered(_ assetIDs: Set<MediaAsset.ID>) -> [MediaAsset.ID] {
-        let project = editor.project
-        let listOrder = project.foldersByName.flatMap { project.assets(in: $0).map(\.id) } + project.unfiledAssets.map(\.id)
-        return AssetSelectionOrder.ordered(assetIDs, by: selectionOrder, listOrder: listOrder)
+        AssetSelectionOrder.ordered(assetIDs, by: selectionOrder, listOrder: editor.project.assetListOrder)
     }
 
-    private func moveDroppedAssets(_ items: [String], toFolder folderID: MediaFolder.ID?) -> Bool {
+    /// 놓은 원본·폴더를 `folderID` 폴더 안(`nil`이면 맨 위)으로 옮긴다. Finder에서 끈 파일은 가져온다.
+    /// 폴더를 자기 자신이나 자기 아래로 놓으면 옮기지 않는다.
+    private func moveDropped(_ items: [String], toFolder folderID: MediaFolder.ID?) -> Bool {
         let fileURLs = items.compactMap(URL.init(string:)).filter(\.isFileURL)
         if !fileURLs.isEmpty {
             importFiles(fileURLs)
             return true
         }
+        let folderIDs = items.flatMap(FolderDragPayload.decode)
+        for draggedFolderID in Set(folderIDs) {
+            editor.moveFolder(draggedFolderID, into: folderID)
+        }
+        if let folderID, !folderIDs.isEmpty {
+            setExpanded(true, folderID)
+        }
         let assetIDs = items.flatMap(AssetDragPayload.decode)
-        guard !assetIDs.isEmpty else { return false }
-        editor.moveAssets(assetIDs, toFolder: folderID)
-        return true
+        if !assetIDs.isEmpty {
+            editor.moveAssets(assetIDs, toFolder: folderID)
+        }
+        return !folderIDs.isEmpty || !assetIDs.isEmpty
     }
 
     @ViewBuilder
@@ -351,10 +431,11 @@ struct MediaPanelView: View {
             .keyboardShortcut(.delete, modifiers: [])
         Divider()
         Menu("폴더로 이동") {
-            Button("분류 안 됨") { editor.moveAssets(ordered(assetIDs), toFolder: nil) }
+            Button("맨 위(폴더 밖)") { editor.moveAssets(ordered(assetIDs), toFolder: nil) }
             Divider()
-            ForEach(editor.project.foldersByName) { folder in
-                Button(folder.name) { editor.moveAssets(ordered(assetIDs), toFolder: folder.id) }
+            // 트리 순서대로, 하위 폴더는 "촬영본 / 1일차"처럼 경로로 보인다.
+            ForEach(editor.project.folderTree, id: \.folder.id) { node in
+                Button(editor.project.folderPath(node.folder.id)) { editor.moveAssets(ordered(assetIDs), toFolder: node.folder.id) }
             }
         }
     }
@@ -409,7 +490,7 @@ private struct MediaFilterBar: View {
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.borderless)
-            .help("새 폴더 — 원본을 분류할 폴더를 만듭니다")
+            .help("새 폴더 — 원본을 분류할 폴더를 만듭니다(원본 하나를 골랐으면 그 원본이 있는 폴더 안에). 폴더 우클릭 > 새 폴더로 하위 폴더를 만듭니다")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 4)

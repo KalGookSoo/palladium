@@ -9,6 +9,8 @@ enum AppPreferences {
     static let exportResolutionKey = "exportResolution"
     static let timelineShowsFilmstripKey = "timelineShowsFilmstrip"
     static let timelineShowsWaveformKey = "timelineShowsWaveform"
+    /// 미디어 패널에서 접어 둔 폴더 ID들(#93). 프로젝트 내용이 아니라 보기 상태라 저장하지 않은 변경·실행 취소를 남기지 않는다.
+    static let collapsedMediaFoldersKey = "collapsedMediaFolders"
 }
 
 /// palladium > 설정…(⌘,)에서 여는 환경설정 창. 바꾸면 바로 저장된다(별도 저장 버튼 없음).

@@ -516,9 +516,9 @@ final class ProjectEditor {
     }
 
     @discardableResult
-    func addFolder(named name: String) -> MediaFolder.ID {
+    func addFolder(named name: String, in parentID: MediaFolder.ID? = nil) -> MediaFolder.ID {
         var folderID = UUID()
-        perform("새 폴더") { folderID = $0.addFolder(named: name) }
+        perform("새 폴더") { folderID = $0.addFolder(named: name, in: parentID) }
         return folderID
     }
 
@@ -532,6 +532,11 @@ final class ProjectEditor {
     }
 
     /// `folderID`가 `nil`이면 "분류 안 됨"으로 뺀다. `beforeAssetID`가 주어지면 그 원본 앞에 넣는다.
+    /// 폴더를 다른 폴더 안(`nil`이면 맨 위)으로 옮긴다(#93). 자기 아래로는 옮기지 않아 편집이 남지 않는다.
+    func moveFolder(_ folderID: MediaFolder.ID, into parentID: MediaFolder.ID?) {
+        perform("폴더 이동") { $0.moveFolder(folderID, into: parentID) }
+    }
+
     func moveAssets(_ assetIDs: [MediaAsset.ID], toFolder folderID: MediaFolder.ID?, before beforeAssetID: MediaAsset.ID? = nil) {
         perform("폴더로 이동") { $0.moveAssets(assetIDs, toFolder: folderID, before: beforeAssetID) }
     }

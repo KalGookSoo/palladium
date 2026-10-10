@@ -13,12 +13,22 @@ enum MainWindowMetrics {
     static let sidebarMinWidth = 200.0
     static let sidebarIdealWidth = 240.0
     static let sidebarMaxWidth = 320.0
+    /// 폴더 한 단계마다 늘리는 사이드바 최대 폭(#93, 목록의 들여쓰기 폭쯤).
+    static let sidebarFolderIndent = 20.0
+    /// 폴더가 아무리 깊어도 사이드바 최대 폭은 이보다 넓어지지 않는다(가운데 영역을 지키려고).
+    static let sidebarMaxWidthLimit = 560.0
     static let inspectorMinWidth = 240.0
     static let inspectorIdealWidth = 280.0
     static let inspectorMaxWidth = 320.0
     static let previewMinHeight = 240.0
     static let timelineMinHeight = 160.0
     static let timelineIdealHeight = 240.0
+
+    /// 폴더 트리가 깊어 들여쓰기가 쌓이면 이름이 잘리지 않게 사이드바를 더 넓힐 수 있게 한다(#93).
+    /// 맨 위 폴더만 있으면(깊이 1) 지금과 같고, 한 단계마다 들여쓰기 폭만큼 늘어 상한에서 멈춘다. 폭은 저절로 바뀌지 않는다.
+    static func sidebarMaxWidth(folderDepth: Int) -> Double {
+        min(sidebarMaxWidth + Double(max(folderDepth - 1, 0)) * sidebarFolderIndent, sidebarMaxWidthLimit)
+    }
 }
 
 struct MainWindowView: View {
@@ -431,7 +441,7 @@ struct MainWindowView: View {
             .navigationSplitViewColumnWidth(
                 min: MainWindowMetrics.sidebarMinWidth,
                 ideal: MainWindowMetrics.sidebarIdealWidth,
-                max: MainWindowMetrics.sidebarMaxWidth
+                max: MainWindowMetrics.sidebarMaxWidth(folderDepth: editor.project.maximumFolderDepth)
             )
         } detail: {
             editorArea(currentSequence: currentSequence)

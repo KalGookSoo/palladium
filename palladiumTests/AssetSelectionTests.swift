@@ -37,6 +37,14 @@ struct AssetSelectionOrderTests {
         #expect(AssetDragPayload.decode(a.uuidString) == [a])
         #expect(AssetDragPayload.decode("file:///tmp/x.mov") == [])
     }
+
+    @Test("끄는 폴더는 원본 ID와 섞이지 않게 담아, 원본으로는 읽히지 않고 폴더로만 읽힌다(#93)")
+    func folderPayload() {
+        let text = FolderDragPayload.encode(a)
+        #expect(FolderDragPayload.decode(text) == [a])
+        #expect(AssetDragPayload.decode(text) == [])
+        #expect(FolderDragPayload.decode(AssetDragPayload.encode([b])) == [])
+    }
 }
 
 /// 여러 원본을 타임라인에 차례로 이어 놓기(#86).
