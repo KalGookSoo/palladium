@@ -169,6 +169,29 @@ final class ProjectEditor {
         return clip.id
     }
 
+    /// 여러 원본을 `time`부터 고른 순서대로 이어 놓는다(#86). 영상·이미지는 영상 트랙에, 오디오는 오디오 트랙에 각각 이어 붙이고,
+    /// 트랙은 `preferredTracks`(놓은 높이에서 가장 가까운 그 종류 트랙)를 쓰되 없으면 그 종류의 첫 트랙, 그것도 없을 때만 새로 만든다.
+    /// 실행 취소 한 번으로 모두 되돌린다. 반환값은 놓은 클립 ID다.
+    @discardableResult
+    func placeAssets(_ assetIDs: [MediaAsset.ID], preferredTracks: [TrackKind: Track.ID] = [:], at time: CMTime) -> [Clip.ID] {
+        let items = assetIDs.compactMap { id -> (clip: Clip, kind: TrackKind)? in
+            guard let asset = asset(id: id), let clip = asset.makeClip(at: time) else { return nil }
+            return (clip, asset.trackKind)
+        }
+        guard !items.isEmpty else { return [] }
+        var placed: [Clip.ID] = []
+        editCurrentSequence("클립 배치") { sequence in
+            var trackIDs: [TrackKind: Track.ID] = [:]
+            for kind in Set(items.map(\.kind)) {
+                trackIDs[kind] = preferredTracks[kind].flatMap { id in sequence.tracks.first { $0.id == id && $0.kind == kind }?.id }
+                    ?? sequence.tracks.first { $0.kind == kind }?.id
+                    ?? sequence.addTrack(kind: kind)
+            }
+            placed = sequence.placeInOrder(items, trackIDs: trackIDs)
+        }
+        return placed
+    }
+
     /// 녹음한 내레이션 파일을 가져와 `time`에 오디오 클립으로 놓는다(#10). 그 구간이 비어 있는 첫 오디오 트랙에 넣고,
     /// 없으면 오디오 트랙을 새로 만들어 기존 클립을 밀지 않는다. 가져오지 못하면 `nil`.
     @discardableResult

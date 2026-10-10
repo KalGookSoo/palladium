@@ -17,8 +17,9 @@ enum TimelineMetrics {
 
 /// 타임라인에서 일어난 편집 요청. 실제 편집은 상위가 편집기(`ProjectEditor`) 커맨드로 한다.
 struct TimelineActions {
-    /// 미디어 패널에서 원본을 끌어다 놓았을 때. 트랙이 `nil`이면 트랙 밖(빈 곳)에 놓은 것이다.
-    var dropAsset: (MediaAsset.ID, Track.ID?, CMTime) -> Void = { _, _, _ in }
+    /// 미디어 패널에서 원본(여러 개면 고른 순서대로, #86)을 끌어다 놓았을 때. 트랙은 종류별로 놓은 높이에서 가장 가까운 트랙이고,
+    /// 그 종류 트랙이 없으면 빠져 있다(편집기가 첫 트랙을 쓰거나 새로 만든다).
+    var dropAssets: ([MediaAsset.ID], [TrackKind: Track.ID], CMTime) -> Void = { _, _, _ in }
     var moveClip: (Clip.ID, Track.ID, CMTime) -> Void = { _, _, _ in }
     var trimClip: (Clip.ID, ClipEdge, CMTime) -> Void = { _, _, _ in }
     /// 롤·슬립·슬라이드 트림(#58).
@@ -111,7 +112,7 @@ struct TimelineEditorView: View {
     /// 타임라인 안에서 끄는 클립과 끈 거리. 원래 행에서 포인터를 따라 반투명하게 그린다.
     @State private var draggedClip: (clip: Clip, translation: CGSize)?
     /// 미디어 패널에서 끌어와 타임라인 위에 있는 원본.
-    @State private var hoveringAssetID: MediaAsset.ID?
+    @State private var hoveringAssetIDs: [MediaAsset.ID] = []
     @State private var isDragCancelled = false
 
     var body: some View {
@@ -175,8 +176,9 @@ struct TimelineEditorView: View {
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
                 .dropDestination(for: String.self) { items, _ in
-                    guard let assetID = items.compactMap(UUID.init(uuidString:)).first else { return false }
-                    actions.dropAsset(assetID, nil, .zero)
+                    let assetIDs = items.flatMap(AssetDragPayload.decode)
+                    guard !assetIDs.isEmpty else { return false }
+                    actions.dropAssets(assetIDs, [:], .zero)
                     return true
                 }
             } else {
@@ -186,7 +188,7 @@ struct TimelineEditorView: View {
         .simultaneousGesture(pinch)
         .onChange(of: dragCancelCount) {
             // 옮기기·트림은 마우스를 놓을 때 끝나므로, 그때 결과를 반영하지 않도록 표시해 둔다.
-            isDragCancelled = dragPreview != nil && hoveringAssetID == nil
+            isDragCancelled = dragPreview != nil && hoveringAssetIDs.isEmpty
             clearDrag()
         }
         .alert("마커 이름 변경", isPresented: Binding(
@@ -345,7 +347,7 @@ struct TimelineEditorView: View {
                 // 놓은 높이로 트랙을, 가로 위치로 시각을 정한다. 트랙 아래 빈 곳에 놓으면 새 트랙을 만든다.
                 .contentShape(Rectangle())
                 .onDrop(of: [.utf8PlainText, .plainText], delegate: AssetDropDelegate(
-                    loadAssetID: { hoveringAssetID = $0 },
+                    loadAssetIDs: { hoveringAssetIDs = $0 },
                     update: { location in previewAssetDrop(at: location) },
                     exit: clearDrag,
                     perform: { location in performAssetDrop(at: location) }
@@ -535,33 +537,49 @@ struct TimelineEditorView: View {
         }
     }
 
-    /// 놓을 트랙과 시각. 놓은 높이에서 가장 가까운 같은 종류의 트랙에 넣고, 새 트랙은 만들지 않는다(트랙 머리 우클릭으로 직접 만든다).
-    /// 같은 종류의 트랙이 하나도 없을 때만 `nil`(새 트랙)이다. 행 위치는 미리보기가 아닌 원래 시퀀스 기준이라 미리보기가 위치 판단을 바꾸지 않는다.
-    private func assetDropTarget(at location: CGPoint, asset: MediaAsset) -> (trackID: Track.ID?, time: CMTime) {
+    /// 놓을 트랙과 시각. 원본 종류마다 놓은 높이에서 가장 가까운 같은 종류의 트랙에 넣고, 새 트랙은 만들지 않는다(트랙 머리 우클릭으로 직접 만든다).
+    /// 그 종류 트랙이 하나도 없으면 빠진다(편집기가 그때만 새로 만든다). 시각은 첫 원본 길이로 경계에 붙인다.
+    /// 행 위치는 미리보기가 아닌 원래 시퀀스 기준이라 미리보기가 위치 판단을 바꾸지 않는다.
+    private func assetDropTarget(at location: CGPoint, assets dropped: [MediaAsset]) -> (trackIDs: [TrackKind: Track.ID], time: CMTime) {
         let rowIndex = Int(((location.y - TimelineMetrics.rulerHeight - TimelineMetrics.rangeLaneHeight * 2) / TimelineMetrics.trackHeight).rounded(.down))
-        let trackID = sequence.nearestTrackID(kind: asset.trackKind, toRow: rowIndex)
-        return (trackID, snappedStart(scale.time(forX: location.x), duration: asset.placementDuration, excluding: nil))
+        var trackIDs: [TrackKind: Track.ID] = [:]
+        for kind in Set(dropped.map(\.trackKind)) {
+            trackIDs[kind] = sequence.nearestTrackID(kind: kind, toRow: rowIndex)
+        }
+        let firstDuration = dropped.first?.placementDuration ?? .zero
+        return (trackIDs, snappedStart(scale.time(forX: location.x), duration: firstDuration, excluding: nil))
     }
 
+    /// 끄는 원본들(고른 순서).
+    private var hoveringAssets: [MediaAsset] {
+        hoveringAssetIDs.compactMap { id in assets.first { $0.id == id } }
+    }
+
+    /// 놓았을 때와 같은 결과(고른 순서대로 이어 붙이고 뒤 클립을 민 모습)를 미리 보여준다.
     private func previewAssetDrop(at location: CGPoint) {
-        guard let asset = assets.first(where: { $0.id == hoveringAssetID }) else { return }
-        let target = assetDropTarget(at: location, asset: asset)
-        if let dragPreview, target.trackID == nil || dragPreview.trackID == target.trackID, dragPreview.time == target.time {
+        let dropped = hoveringAssets
+        guard let first = dropped.first else { return }
+        let target = assetDropTarget(at: location, assets: dropped)
+        if let dragPreview, target.trackIDs[first.trackKind] == nil || dragPreview.trackID == target.trackIDs[first.trackKind], dragPreview.time == target.time {
             return
         }
-        guard let clip = asset.makeClip(at: target.time) else { return }
         var preview = sequence
-        let trackID = target.trackID ?? preview.addTrack(kind: asset.trackKind)
-        preview.place(clip, onTrack: trackID)
+        var trackIDs = target.trackIDs
+        for kind in Set(dropped.map(\.trackKind)) where trackIDs[kind] == nil {
+            trackIDs[kind] = preview.addTrack(kind: kind)
+        }
+        let clips = dropped.compactMap { asset in asset.makeClip(at: target.time).map { (clip: $0, kind: asset.trackKind) } }
+        guard let firstClipID = preview.placeInOrder(clips, trackIDs: trackIDs).first, let firstTrackID = trackIDs[first.trackKind] else { return }
         isDragging = true
-        dragPreview = DragPreview(sequence: preview, placeholderID: clip.id, trackID: trackID, time: target.time)
+        dragPreview = DragPreview(sequence: preview, placeholderID: firstClipID, trackID: firstTrackID, time: target.time)
     }
 
     private func performAssetDrop(at location: CGPoint) -> Bool {
         defer { clearDrag() }
-        guard let asset = assets.first(where: { $0.id == hoveringAssetID }) else { return false }
-        let target = assetDropTarget(at: location, asset: asset)
-        actions.dropAsset(asset.id, target.trackID, target.time)
+        let dropped = hoveringAssets
+        guard !dropped.isEmpty else { return false }
+        let target = assetDropTarget(at: location, assets: dropped)
+        actions.dropAssets(dropped.map(\.id), target.trackIDs, target.time)
         return true
     }
 
@@ -569,7 +587,7 @@ struct TimelineEditorView: View {
     /// 놓기 처리가 먼저 끝나도록 한 박자 뒤에 정리한다.
     private func finishDrag() {
         DispatchQueue.main.async {
-            guard hoveringAssetID == nil else { return }
+            guard hoveringAssetIDs.isEmpty else { return }
             isDragCancelled = false
             clearDrag()
         }
@@ -578,14 +596,15 @@ struct TimelineEditorView: View {
     private func clearDrag() {
         dragPreview = nil
         draggedClip = nil
-        hoveringAssetID = nil
+        hoveringAssetIDs = []
         isDragging = false
     }
 }
 
 /// 미디어 패널에서 끌어온 원본(문자열로 된 원본 ID)을 받는다. 끄는 동안 위치를 알려 들어갈 자리를 미리 보여준다.
 private struct AssetDropDelegate: DropDelegate {
-    let loadAssetID: (MediaAsset.ID) -> Void
+    /// 끄는 원본들(고른 순서, #86).
+    let loadAssetIDs: ([MediaAsset.ID]) -> Void
     let update: (CGPoint) -> Void
     let exit: () -> Void
     let perform: (CGPoint) -> Bool
@@ -593,9 +612,11 @@ private struct AssetDropDelegate: DropDelegate {
     func dropEntered(info: DropInfo) {
         guard let provider = info.itemProviders(for: [.utf8PlainText, .plainText]).first else { return }
         _ = provider.loadObject(ofClass: NSString.self) { object, _ in
-            guard let text = object as? String, let assetID = UUID(uuidString: text) else { return }
+            guard let text = object as? String else { return }
+            let assetIDs = AssetDragPayload.decode(text)
+            guard !assetIDs.isEmpty else { return }
             DispatchQueue.main.async {
-                loadAssetID(assetID)
+                loadAssetIDs(assetIDs)
                 update(info.location)
             }
         }

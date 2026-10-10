@@ -38,7 +38,7 @@ struct MainWindowView: View {
     @State private var isBatchExportPresented = false
     @State private var importReport: MediaImportReport?
     /// 프리미어 프로처럼 미디어 패널 선택, 미리보기에 연 원본, 타임라인 클립 선택은 서로 독립이다.
-    @State private var selectedAssetID: MediaAsset.ID?
+    @State private var selectedAssetIDs: Set<MediaAsset.ID> = []
     /// 훑어보기(Quick Look) 창에 띄울 원본 파일.
     @State private var quickLookURL: URL?
     @State private var selectedClipIDs: Set<Clip.ID> = []
@@ -247,7 +247,7 @@ struct MainWindowView: View {
             let report = await editor.importMedia(from: urls)
             ProxyGenerator.shared.generateIfNeeded(for: report.imported, threshold: proxyThreshold)
             if let lastAssetID = report.imported.last?.id ?? report.duplicateIDs.last {
-                selectedAssetID = lastAssetID
+                selectedAssetIDs = [lastAssetID]
             }
             if report.summary != nil {
                 importReport = report
@@ -324,13 +324,14 @@ struct MainWindowView: View {
     private var timelineActions: TimelineActions {
         let paste: (() -> Void)? = editor.clipboard == nil ? nil : { pasteAtPlayhead() }
         return TimelineActions(
-            dropAsset: { assetID, trackID, time in
+            dropAssets: { assetIDs, trackIDs, time in
                 let hadPicture = editor.currentSequence.tracks.contains { $0.kind == .video && !$0.clips.isEmpty }
-                if let clipID = editor.placeAsset(assetID, onTrack: trackID, at: time) {
-                    selectedClipIDs = [clipID]
-                    if !hadPicture {
-                        matchAspectRatio(toAsset: assetID)
-                    }
+                let clipIDs = editor.placeAssets(assetIDs, preferredTracks: trackIDs, at: time)
+                guard !clipIDs.isEmpty else { return }
+                selectedClipIDs = Set(clipIDs)
+                // 처음 놓은 영상·이미지 방향으로 화면비를 맞춘다.
+                if !hadPicture, let firstPicture = assetIDs.first(where: { editor.asset(id: $0)?.kind != .audio }) {
+                    matchAspectRatio(toAsset: firstPicture)
                 }
             },
             moveClip: { clipID, trackID, time in
@@ -363,7 +364,7 @@ struct MainWindowView: View {
             openClipEditor: { clipID in openClipEditor(.clip(clipID)) },
             paste: paste,
             openAsset: quickLook,
-            revealAsset: { assetID in selectedAssetID = assetID },
+            revealAsset: { assetID in selectedAssetIDs = [assetID] },
             switchSequence: { sequenceID in
                 editor.switchToSequence(sequenceID)
                 selectedClipIDs = []
@@ -407,7 +408,7 @@ struct MainWindowView: View {
         NavigationSplitView {
             MediaPanelView(
                 editor: editor,
-                selectedAssetID: $selectedAssetID,
+                selectedAssetIDs: $selectedAssetIDs,
                 openAsset: quickLook,
                 importFiles: importMedia(from:),
                 isListFocused: $isMediaPanelFocused,
@@ -700,6 +701,8 @@ struct MainWindowView: View {
             guard !selectedClipIDs.isEmpty else { return false }
             timelineActions.deleteClips(selectedClipIDs, key == .rippleDeleteSelection)
         case .selectAll:
+            // 미디어 패널에 포커스가 있으면 ⌘A는 목록 전체 선택이다(#86).
+            guard !isMediaPanelFocused else { return false }
             selectedClipIDs = Set(editor.currentSequence.tracks.flatMap(\.clips).map(\.id))
         case .escape:
             return releaseOneLevel()
@@ -794,8 +797,8 @@ struct MainWindowView: View {
             selectedMaskID = nil
         } else if !selectedClipIDs.isEmpty {
             selectedClipIDs = []
-        } else if selectedAssetID != nil {
-            selectedAssetID = nil
+        } else if !selectedAssetIDs.isEmpty {
+            selectedAssetIDs = []
         } else {
             return false
         }
@@ -880,8 +883,8 @@ struct MainWindowView: View {
 
     /// 편집 > 클립 편집…(⌘T, #81·#85). 미디어 패널에 포커스가 있으면 고른 항목을, 아니면 고른 클립 하나를 연다. 이미지는 열지 않는다.
     private var clipEditorAction: (() -> Void)? {
-        if isMediaPanelFocused, let selectedAssetID, editor.asset(id: selectedAssetID)?.isTrimmable == true {
-            return { openClipEditor(.asset(selectedAssetID)) }
+        if isMediaPanelFocused, selectedAssetIDs.count == 1, let assetID = selectedAssetIDs.first, editor.asset(id: assetID)?.isTrimmable == true {
+            return { openClipEditor(.asset(assetID)) }
         }
         guard selectedClipIDs.count == 1, let clipID = selectedClipIDs.first,
               let clip = editor.currentSequence.clip(id: clipID), editor.asset(id: clip.assetID)?.isTrimmable == true

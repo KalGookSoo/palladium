@@ -8,7 +8,8 @@ import SwiftUI
 struct MediaPanelView: View {
     /// 원본 정리(이름·색상 레이블·태그)는 편집기 커맨드로 한다.
     let editor: ProjectEditor
-    @Binding var selectedAssetID: MediaAsset.ID?
+    /// 고른 원본들(#86). ⌘ 클릭·⇧ 클릭·⌘A로 여러 개를 고른다.
+    @Binding var selectedAssetIDs: Set<MediaAsset.ID>
     let openAsset: (MediaAsset.ID) -> Void
     /// 행·폴더 머리는 원본 ID를 받으려고 문자열 놓기를 받는데, Finder에서 끈 파일도 문자열(파일 URL)로 들어오므로 가져오기로 넘긴다.
     var importFiles: ([URL]) -> Void = { _ in }
@@ -17,6 +18,8 @@ struct MediaPanelView: View {
     /// 항목을 클립 편집 창으로 연다(#81·#85).
     var openClipEditor: (MediaAsset.ID) -> Void = { _ in }
     @State private var filter = MediaFilter()
+    /// 고른 순서(#86). 타임라인에 이어 붙이거나 폴더로 옮길 때 이 순서를 쓴다.
+    @State private var selectionOrder: [MediaAsset.ID] = []
     @FocusState private var listHasFocus: Bool
     /// 클립이 쓰고 있어 확인을 기다리는 삭제(#60).
     @State private var pendingDeletion: Set<MediaAsset.ID>?
@@ -57,7 +60,9 @@ struct MediaPanelView: View {
             }
         )
 
-        List(selection: $selectedAssetID) {
+        let listOrder = folderSections.flatMap(\.assets).map(\.id) + unfiledAssets.map(\.id)
+
+        List(selection: $selectedAssetIDs) {
             ForEach(folderSections, id: \.folder.id) { section in
                 if !section.assets.isEmpty || !isFiltering {
                     Section {
@@ -134,15 +139,19 @@ struct MediaPanelView: View {
             }
             Button("취소", role: .cancel) {}
         }
-        .focusedSceneValue(\.renameSelectedAsset, listHasFocus ? selectedAssetID.map { assetID in { beginRenaming(assetID) } } : nil)
+        // 이름 바꾸기는 하나만 골랐을 때만 한다.
+        .focusedSceneValue(\.renameSelectedAsset, listHasFocus ? singleSelection.map { assetID in { beginRenaming(assetID) } } : nil)
+        .onChange(of: selectedAssetIDs, initial: true) { _, selection in
+            selectionOrder = AssetSelectionOrder.updated(selectionOrder, selection: selection, listOrder: listOrder)
+        }
         .focused($listHasFocus)
         .onChange(of: listHasFocus, initial: true) {
             isListFocused.wrappedValue = listHasFocus
         }
         // 목록에 포커스가 있을 때 ⌫(편집 > 삭제)로 고른 원본을 지운다. 이름을 바꾸는 중에는 글자를 지운다.
         .onDeleteCommand {
-            if let selectedAssetID, renamingAssetID == nil {
-                requestDeletion([selectedAssetID])
+            if !selectedAssetIDs.isEmpty, renamingAssetID == nil {
+                requestDeletion(selectedAssetIDs)
             }
         }
         .confirmationDialog(
@@ -185,9 +194,7 @@ struct MediaPanelView: View {
             ProxyGenerator.shared.removeProxy(for: asset)
         }
         editor.deleteAssets(assetIDs)
-        if let selectedAssetID, assetIDs.contains(selectedAssetID) {
-            self.selectedAssetID = nil
-        }
+        selectedAssetIDs.subtract(assetIDs)
         pendingDeletion = nil
     }
 
@@ -207,7 +214,8 @@ struct MediaPanelView: View {
     /// 타임라인에 놓으면 클립이 되고, 다른 원본 위에 놓으면 그 원본이 있는 폴더의 그 자리로 옮긴다. 원본 ID만 문자열로 보낸다.
     private func assetRow(_ asset: MediaAsset, folderID: MediaFolder.ID?) -> some View {
         MediaAssetRow(asset: asset) { nameView(for: asset) }
-            .draggable(asset.id.uuidString)
+            // 고른 원본 중 하나를 끌면 고른 원본 전체를 고른 순서대로, 고르지 않은 원본을 끌면 그 원본만 끈다(#86).
+            .draggable(AssetDragPayload.encode(draggedAssetIDs(startingAt: asset.id)))
             .dropDestination(for: String.self) { items, _ in
                 moveDroppedAssets(items, toFolder: folderID, before: folderID == nil ? nil : asset.id)
             }
@@ -231,13 +239,31 @@ struct MediaPanelView: View {
             }
     }
 
+    /// 하나만 골랐을 때의 그 원본. 이름 바꾸기·태그·클립 편집처럼 원본 하나에만 하는 일에 쓴다.
+    private var singleSelection: MediaAsset.ID? {
+        selectedAssetIDs.count == 1 ? selectedAssetIDs.first : nil
+    }
+
+    /// `assetID`를 끌 때 함께 끌 원본들.
+    private func draggedAssetIDs(startingAt assetID: MediaAsset.ID) -> [MediaAsset.ID] {
+        guard selectedAssetIDs.contains(assetID), selectedAssetIDs.count > 1 else { return [assetID] }
+        return selectionOrder.filter(selectedAssetIDs.contains)
+    }
+
+    /// 메뉴가 받은 원본들을 고른 순서대로(순서를 모르면 목록 순서).
+    private func ordered(_ assetIDs: Set<MediaAsset.ID>) -> [MediaAsset.ID] {
+        let project = editor.project
+        let listOrder = project.folders.flatMap { project.assets(in: $0).map(\.id) } + project.unfiledAssets.map(\.id)
+        return AssetSelectionOrder.ordered(assetIDs, by: selectionOrder, listOrder: listOrder)
+    }
+
     private func moveDroppedAssets(_ items: [String], toFolder folderID: MediaFolder.ID?, before beforeAssetID: MediaAsset.ID?) -> Bool {
         let fileURLs = items.compactMap(URL.init(string:)).filter(\.isFileURL)
         if !fileURLs.isEmpty {
             importFiles(fileURLs)
             return true
         }
-        let assetIDs = items.compactMap(UUID.init(uuidString:)).filter { $0 != beforeAssetID }
+        let assetIDs = items.flatMap(AssetDragPayload.decode).filter { $0 != beforeAssetID }
         guard !assetIDs.isEmpty else { return false }
         editor.moveAssets(assetIDs, toFolder: folderID, before: beforeAssetID)
         return true
@@ -325,10 +351,10 @@ struct MediaPanelView: View {
             .keyboardShortcut(.delete, modifiers: [])
         Divider()
         Menu("폴더로 이동") {
-            Button("분류 안 됨") { editor.moveAssets(Array(assetIDs), toFolder: nil) }
+            Button("분류 안 됨") { editor.moveAssets(ordered(assetIDs), toFolder: nil) }
             Divider()
             ForEach(editor.project.folders) { folder in
-                Button(folder.name) { editor.moveAssets(Array(assetIDs), toFolder: folder.id) }
+                Button(folder.name) { editor.moveAssets(ordered(assetIDs), toFolder: folder.id) }
             }
         }
     }
@@ -505,7 +531,7 @@ private struct MediaThumbnailView: View {
     )
     MediaPanelView(
         editor: ProjectEditor(project: SampleData.project, repository: SwiftDataProjectRepository(modelContext: container.mainContext)),
-        selectedAssetID: .constant(nil),
+        selectedAssetIDs: .constant([]),
         openAsset: { _ in }
     )
 }

@@ -297,6 +297,26 @@ nonisolated extension EditSequence {
         tracks[index].insert(clip)
     }
 
+    /// 여러 클립을 같은 시각부터 종류별로 차례로 이어 놓는다(#86). 영상·이미지는 영상 트랙에, 오디오는 오디오 트랙에
+    /// 각각 앞 클립이 끝난 자리에 붙인다(삽입 규칙대로 뒤 클립을 민다). `trackIDs`에 그 종류 트랙이 없거나 없는 트랙이면 그 클립은 놓지 않는다.
+    /// 반환값은 실제로 놓은 클립 ID다(순서대로).
+    @discardableResult
+    mutating func placeInOrder(_ clips: [(clip: Clip, kind: TrackKind)], trackIDs: [TrackKind: Track.ID]) -> [Clip.ID] {
+        var cursor: [TrackKind: CMTime] = [:]
+        var placed: [Clip.ID] = []
+        for (clip, kind) in clips {
+            guard let trackID = trackIDs[kind], tracks.contains(where: { $0.id == trackID }) else { continue }
+            var next = clip
+            next.timelineStart = cursor[kind] ?? clip.timelineStart
+            place(next, onTrack: trackID)
+            // 삽입 규칙으로 경계에 옮겨졌을 수 있어 실제로 놓인 자리의 끝에서 다음 클립을 이어 붙인다.
+            guard let placedClip = self.clip(id: next.id) else { continue }
+            cursor[kind] = placedClip.timelineRange.end
+            placed.append(next.id)
+        }
+        return placed
+    }
+
     func clip(id: Clip.ID) -> Clip? {
         tracks.lazy.flatMap(\.clips).first { $0.id == id }
     }
