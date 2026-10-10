@@ -828,7 +828,8 @@ struct MainWindowView: View {
             do {
                 try await narration.start(at: startTime)
                 previewPlayer.setMutedForRecording(!AudioOutputRoute.isHeadphonesConnected())
-                previewPlayer.play()
+                // 녹음은 재생 헤드 시각에 놓이므로 끝에 있어도 처음으로 돌아가지 않는다.
+                previewPlayer.play(restartsAtEnd: false)
             } catch {
                 narrationMessage = error.localizedDescription
             }

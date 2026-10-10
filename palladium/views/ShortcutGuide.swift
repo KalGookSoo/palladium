@@ -31,7 +31,7 @@ enum ShortcutGuide {
     static let toggleTimeline = ShortcutGuideEntry(title: "타임라인 보기/가리기", summary: "미리보기 아래 타임라인을 열고 닫습니다", keys: "⌥⌘2")
     static let toggleInspector = ShortcutGuideEntry(title: "인스펙터 보기/가리기", summary: "오른쪽 인스펙터를 열고 닫습니다", keys: "⌥⌘I")
 
-    static let playPause = ShortcutGuideEntry(title: "재생/일시정지", summary: "미리보기를 재생하거나 멈춥니다", keys: "Space")
+    static let playPause = ShortcutGuideEntry(title: "재생/일시정지", summary: "미리보기를 재생하거나 멈춥니다(끝에서는 처음부터 다시 재생)", keys: "Space")
     static let previousFrame = ShortcutGuideEntry(title: "이전 프레임", summary: "한 프레임 뒤로 이동합니다", keys: "←")
     static let nextFrame = ShortcutGuideEntry(title: "다음 프레임", summary: "한 프레임 앞으로 이동합니다", keys: "→")
     static let narration = ShortcutGuideEntry(title: "내레이션 녹음 시작/정지", summary: "재생 헤드부터 영상을 재생하며 마이크로 내레이션을 녹음하고, 멈추면 오디오 트랙에 놓습니다", keys: "R")

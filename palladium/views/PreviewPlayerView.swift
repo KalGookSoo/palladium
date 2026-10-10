@@ -103,10 +103,14 @@ private struct PlaybackControls: View {
                 .help(ShortcutGuide.previousFrame.helpText)
 
                 Button(action: previewPlayer.togglePlayPause) {
-                    Label(
-                        previewPlayer.isPlaying ? "일시정지" : "재생",
-                        systemImage: previewPlayer.isPlaying ? "pause.fill" : "play.fill"
-                    )
+                    // 끝에서 멈춰 있으면 처음부터 다시 재생한다는 것을 아이콘으로 알린다(#88).
+                    if previewPlayer.isPlaying {
+                        Label("일시정지", systemImage: "pause.fill")
+                    } else if previewPlayer.isAtEnd {
+                        Label("다시 재생", systemImage: "arrow.counterclockwise")
+                    } else {
+                        Label("재생", systemImage: "play.fill")
+                    }
                 }
                 .help(ShortcutGuide.playPause.helpText)
 

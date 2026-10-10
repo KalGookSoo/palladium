@@ -21,6 +21,9 @@ final class PreviewPlayer {
     private(set) var isMutedForRecording = false
 
     @ObservationIgnored private var timeObserver: Any?
+    /// 재생이 실제로 멈췄는지 본다. 시퀀스 끝(`forwardPlaybackEndTime`)에서 멈추면 주기 관찰자가 더 불리지 않아
+    /// 재생 중으로 남는 것을 막는다(#88).
+    @ObservationIgnored private var statusObservation: NSKeyValueObservation?
 
     init() {
         let interval = CMTime(value: 1, timescale: 30)
@@ -30,6 +33,31 @@ final class PreviewPlayer {
                 self?.isPlaying = self?.player.rate != 0
             }
         }
+        statusObservation = player.observe(\.timeControlStatus) { [weak self] player, _ in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self, player.timeControlStatus == .paused else { return }
+                    self.isPlaying = false
+                    // 끝에서 멈췄을 때만 위치를 끝으로 맞춘다. 프레임 이동(멈춘 뒤 옮기기) 중에는 늦게 온 알림이
+                    // 옮긴 위치를 예전 위치로 되돌리지 않게 건드리지 않는다.
+                    let now = player.currentTime()
+                    if let end = player.currentItem?.forwardPlaybackEndTime, end.isNumeric,
+                       now >= end - CMTime(value: 1, timescale: 120)
+                    {
+                        self.currentTime = now
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Queries
+
+    /// 시퀀스 끝에 있는지(반 프레임 이내). 끝에서 재생하면 처음부터 다시 재생한다(#88).
+    var isAtEnd: Bool {
+        guard case let .ready(timeline) = loadState else { return false }
+        let halfFrame = CMTimeMultiplyByRatio(timeline.frameDuration ?? OutputFrameRate.defaultDuration, multiplier: 1, divisor: 2)
+        return currentTime >= timeline.duration - halfFrame
     }
 
     // MARK: - Commands
@@ -67,13 +95,13 @@ final class PreviewPlayer {
         seek(to: timeline.clamped(time))
     }
 
+    /// 재생 중이면 멈추고, 멈춰 있으면 재생한다. 끝에 있으면 처음부터 다시 재생한다(버튼·Space 공통).
     func togglePlayPause() {
         if player.rate == 0 {
-            player.play()
+            play()
         } else {
-            player.pause()
+            pause()
         }
-        isPlaying = player.rate != 0
     }
 
     func setMutedForRecording(_ muted: Bool) {
@@ -81,7 +109,11 @@ final class PreviewPlayer {
         player.isMuted = muted
     }
 
-    func play() {
+    /// 끝에 있으면 처음으로 옮긴 뒤 재생한다. 내레이션 녹음처럼 지금 위치를 지켜야 하면 `restartsAtEnd`를 끈다.
+    func play(restartsAtEnd: Bool = true) {
+        if restartsAtEnd, isAtEnd {
+            seek(to: .zero)
+        }
         player.play()
         isPlaying = true
     }
