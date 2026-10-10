@@ -51,6 +51,16 @@ final class ClipEditSession {
         }
     }
 
+    /// 다른 대상을 열지 묻는 창의 답. `applying`이면 고친 내용을 먼저 적용(원본 항목은 새 항목으로 저장)하고 연다.
+    /// 취소는 `pendingTarget`을 비우기만 한다(고치던 대상과 변경은 그대로).
+    func resolvePendingTarget(applying: Bool) {
+        guard let pendingTarget else { return }
+        if applying {
+            applyChanges()
+        }
+        show(pendingTarget)
+    }
+
     /// 고치던 값을 버리고 `newTarget`을 연다.
     func show(_ newTarget: ClipEditTarget) {
         target = newTarget
@@ -88,7 +98,9 @@ struct ClipEditWindowView: View {
         let session = value.flatMap { ClipEditSessions.shared.sessions[$0.projectID] }
         // 닫기 버튼의 변경 표시(점)가 바로 바뀌도록 이 값을 읽어 둔다(확인 장치는 닫는 순간 다시 읽는다).
         let _ = session?.hasUnappliedChanges
-        Group {
+        // `Group`에 붙인 수정자는 안쪽 화면마다 따로 붙어, 대상이 바뀔 때마다 창 열림 표시가 꺼지고(#91)
+        // 닫기 확인 장치가 새로 붙어 서로를 원래 delegate로 삼다 멈췄다. 대상이 바뀌어도 그대로인 `ZStack`에 단다.
+        ZStack {
             if let session, let target = session.target {
                 ClipEditView(session: session, target: target)
                     .id(session.openID)
@@ -249,15 +261,13 @@ struct ClipEditView: View {
             session.closePrompt = closePrompt
             session.applyChanges = { applyDefault() }
         }
-        .alert("적용하지 않은 변경이 있습니다", isPresented: isAskingToSwitch) {
-            Button("변경 버리기", role: .destructive) {
-                if let pendingTarget = session.pendingTarget {
-                    session.show(pendingTarget)
-                }
-            }
+        // 닫기 확인과 같은 문구·버튼으로 묻는다(앱 공통 규칙, #91).
+        .alert(closePrompt.message, isPresented: isAskingToSwitch) {
+            Button("\(closePrompt.saveTitle)하고 열기") { session.resolvePendingTarget(applying: true) }
+            Button(closePrompt.discardTitle, role: .destructive) { session.resolvePendingTarget(applying: false) }
             Button("취소", role: .cancel) { session.pendingTarget = nil }
         } message: {
-            Text("다른 대상을 열면 이 창에서 고친 트림·크롭이 사라집니다.")
+            Text("다른 대상을 열기 전에 정하세요. \(closePrompt.information)")
         }
     }
 

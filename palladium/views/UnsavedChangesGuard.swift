@@ -89,7 +89,13 @@ struct UnsavedChangesGuard: NSViewRepresentable {
         func attach(to window: NSWindow?) {
             guard let window else { return }
             if window.delegate !== self {
-                originalDelegate = window.delegate
+                // 이미 다른 확인 장치가 붙어 있으면 그 장치가 아니라 그 장치가 넘기던 원래 delegate를 이어받는다.
+                // 장치끼리 서로를 원래 delegate로 삼으면 위임 호출이 끝없이 돌다 앱이 멈춘다(#91).
+                if let other = window.delegate as? Coordinator {
+                    originalDelegate = other.originalDelegate
+                } else {
+                    originalDelegate = window.delegate
+                }
                 window.delegate = self
             }
             self.window = window

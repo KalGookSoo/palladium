@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import CoreGraphics
 import CoreMedia
@@ -218,6 +219,82 @@ struct ClipEditTests {
     }
 
     // MARK: - Helpers
+
+    @Test("창이 열려 있고 고친 내용이 있으면 다른 대상을 열 때 묻고, 대상을 바꾼 뒤에도 다시 묻는다(#91)")
+    func switchingTargetsAsksEveryTime() throws {
+        let session = try ClipEditSession(editor: makeEditor())
+        let first = ClipEditTarget.clip(UUID())
+        let second = ClipEditTarget.clip(UUID())
+        let third = ClipEditTarget.clip(UUID())
+        session.isWindowOpen = true
+        session.show(first)
+
+        session.hasUnappliedChanges = true
+        session.open(second)
+        #expect(session.target == first)
+        #expect(session.pendingTarget == second)
+
+        // 적용하지 않고 연다 → 새 대상. 다시 고친 뒤 또 다른 대상을 열면 또 묻는다.
+        session.resolvePendingTarget(applying: false)
+        #expect(session.target == second)
+        #expect(session.pendingTarget == nil)
+        #expect(!session.hasUnappliedChanges)
+        session.hasUnappliedChanges = true
+        session.open(third)
+        #expect(session.target == second)
+        #expect(session.pendingTarget == third)
+    }
+
+    @Test("묻는 창에서 적용하고 열면 적용한 뒤 새 대상을, 취소하면 고치던 대상과 변경을 그대로 둔다(#91)")
+    func resolvingPendingTarget() throws {
+        let session = try ClipEditSession(editor: makeEditor())
+        let first = ClipEditTarget.clip(UUID())
+        let second = ClipEditTarget.clip(UUID())
+        var appliedTarget: ClipEditTarget?
+        session.applyChanges = { appliedTarget = session.target }
+        session.isWindowOpen = true
+        session.show(first)
+        session.hasUnappliedChanges = true
+
+        session.open(second)
+        session.pendingTarget = nil // 취소
+        #expect(session.target == first)
+        #expect(session.hasUnappliedChanges)
+        #expect(appliedTarget == nil)
+
+        session.open(second)
+        session.resolvePendingTarget(applying: true)
+        #expect(appliedTarget == first)
+        #expect(session.target == second)
+        #expect(!session.hasUnappliedChanges)
+    }
+
+    @Test("닫기 확인 장치가 같은 창에 여러 번 붙어도 서로를 원래 delegate로 삼지 않고 원래 delegate로 넘긴다(#91 멈춤)")
+    func guardCoordinatorsDoNotChain() {
+        final class RecordingDelegate: NSObject, NSWindowDelegate {
+            var becameKey = 0
+            func windowDidBecomeKey(_: Notification) {
+                becameKey += 1
+            }
+        }
+        let window = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: true)
+        let original = RecordingDelegate()
+        window.delegate = original
+        let first = UnsavedChangesGuard.Coordinator()
+        let second = UnsavedChangesGuard.Coordinator()
+
+        // 대상이 바뀔 때처럼 두 장치가 번갈아 붙는다.
+        first.attach(to: window)
+        second.attach(to: window)
+        first.attach(to: window)
+
+        let selector = #selector(NSWindowDelegate.windowDidBecomeKey(_:))
+        #expect(window.delegate === first)
+        #expect((window.delegate as? NSObject)?.responds(to: selector) == true)
+        window.delegate?.windowDidBecomeKey?(Notification(name: NSWindow.didBecomeKeyNotification))
+        #expect(original.becameKey == 1)
+        withExtendedLifetime(second) {}
+    }
 
     private func makeEditor() throws -> ProjectEditor {
         let created = try repository.createProject(named: "샘플")
