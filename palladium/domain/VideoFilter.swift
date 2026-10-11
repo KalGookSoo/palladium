@@ -59,8 +59,8 @@ nonisolated extension [VideoFilter] {
 // MARK: - Clip
 
 nonisolated extension Clip {
-    /// 색보정(#61)이나 필터(#68)가 걸려 있는지. 타임라인 이름 옆 표시를 정한다.
+    /// 색보정(#61)·필터(#68)·크로마키(#70)가 걸려 있는지. 타임라인 이름 옆 표시를 정한다.
     var hasEffect: Bool {
-        !colorAdjustment.isDefault || !filters.isEmpty
+        !colorAdjustment.isDefault || !filters.isEmpty || chromaKey != nil
     }
 }

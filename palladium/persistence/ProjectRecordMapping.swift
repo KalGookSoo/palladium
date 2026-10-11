@@ -89,6 +89,7 @@ private extension SequenceRecord {
                 .withAnimation(of: clip)
                 .withTitle(of: clip)
                 .withFilters(of: clip)
+                .withChromaKey(of: clip)
             }
             return trackRecord
         }
@@ -288,6 +289,7 @@ private extension ClipRecord {
         clip?.animation = animationData.flatMap { try? JSONDecoder().decode(StoredClipAnimation.self, from: $0) }?.animation ?? ClipAnimation()
         clip?.title = titleData.flatMap { try? JSONDecoder().decode(StoredTitle.self, from: $0) }?.title
         clip?.filters = filtersData.flatMap { try? JSONDecoder().decode([StoredFilter].self, from: $0) }?.compactMap(\.filter) ?? []
+        clip?.chromaKey = chromaKeyData.flatMap { try? JSONDecoder().decode(StoredChromaKey.self, from: $0) }?.chromaKey
         if clip == nil {
             let clipID = id
             Logger.project.error("Clip 불변식을 어기는 저장값이라 건너뜀: \(clipID, privacy: .public)")
@@ -464,5 +466,40 @@ private struct StoredFilter: Codable {
         var filter = VideoFilter(id: id, kind: kind, intensity: intensity)
         filter.clamp()
         return filter
+    }
+}
+
+// MARK: - Chroma key (#70)
+
+private extension ClipRecord {
+    func withChromaKey(of clip: Clip) -> ClipRecord {
+        chromaKeyData = clip.chromaKey.flatMap { try? JSONEncoder().encode(StoredChromaKey($0)) }
+        return self
+    }
+}
+
+private struct StoredChromaKey: Codable {
+    let red: Double
+    let green: Double
+    let blue: Double
+    let tolerance: Double
+    let softness: Double
+    let spillSuppression: Double
+
+    init(_ key: ChromaKey) {
+        red = key.keyColor.red
+        green = key.keyColor.green
+        blue = key.keyColor.blue
+        tolerance = key.tolerance
+        softness = key.softness
+        spillSuppression = key.spillSuppression
+    }
+
+    var chromaKey: ChromaKey {
+        var key = ChromaKey(
+            keyColor: SubtitleRGB(red: red, green: green, blue: blue), tolerance: tolerance, softness: softness, spillSuppression: spillSuppression
+        )
+        key.clamp()
+        return key
     }
 }

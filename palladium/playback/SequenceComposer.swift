@@ -84,7 +84,7 @@ nonisolated enum SequenceComposer {
                 if let title = clip.title {
                     let layer = CompositionLayer(
                         content: .title(title), transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, animatedClip: animatedClip(clip),
-                        filters: clip.filters
+                        filters: clip.filters, chromaKey: clip.chromaKey
                     )
                     placedLayers.append((layerRange, layer, order))
                     continue
@@ -99,7 +99,7 @@ nonisolated enum SequenceComposer {
                             layerRange,
                             CompositionLayer(
                                 content: .image(image), transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, animatedClip: animatedClip(clip),
-                                filters: clip.filters
+                                filters: clip.filters, chromaKey: clip.chromaKey
                             ),
                             order
                         ))
@@ -123,7 +123,7 @@ nonisolated enum SequenceComposer {
                         let content = CompositionLayer.Content.video(trackID: videoTrack.trackID, naturalSize: naturalSize, preferredTransform: preferredTransform)
                         let layer = CompositionLayer(
                             content: content, transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, crop: clip.crop, animatedClip: animatedClip(clip),
-                            filters: clip.filters
+                            filters: clip.filters, chromaKey: clip.chromaKey
                         )
                         placedLayers.append((layerRange, layer, order))
                     }

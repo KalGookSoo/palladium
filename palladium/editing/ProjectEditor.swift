@@ -527,6 +527,13 @@ final class ProjectEditor {
         editCurrentSequence("필터") { $0.updateClips(clipIDs) { $0.filters = clamped } }
     }
 
+    /// 고른 클립 모두의 크로마키를 바꾼다(#70). `nil`이면 끈다. 값은 범위로 맞춘다.
+    func setChromaKey(_ chromaKey: ChromaKey?, for clipIDs: Set<Clip.ID>) {
+        var clamped = chromaKey
+        clamped?.clamp()
+        editCurrentSequence(chromaKey == nil ? "크로마키 끄기" : "크로마키") { $0.updateClips(clipIDs) { $0.chromaKey = clamped } }
+    }
+
     /// 고른 클립을 클립보드에 담는다(#62). 프로젝트는 바꾸지 않는다. 고른 클립이 없으면 클립보드를 그대로 둔다.
     func copyClips(_ clipIDs: Set<Clip.ID>) {
         let copied = currentSequence.copiedClips(clipIDs)

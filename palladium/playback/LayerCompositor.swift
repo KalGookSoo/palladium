@@ -31,6 +31,8 @@ nonisolated struct CompositionLayer {
     var animatedClip: Clip?
     /// 쌓은 필터(#68). 색보정 뒤, 화면에 놓기 전 원본 이미지에 차례로 적용한다.
     var filters: [VideoFilter] = []
+    /// 크로마키(#70). 색보정·필터보다 먼저 원본 이미지에 적용한다.
+    var chromaKey: ChromaKey?
 
     /// 합성 시각(시퀀스 시각)의 트랜스폼.
     func transform(at time: CMTime) -> ClipTransform {
@@ -124,10 +126,11 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
                 crop: layer.crop,
                 renderSize: renderSize
             )
-            let source = Self.applying(layer.filters, to: Self.applying(layer.colorAdjustment, to: CIImage(cvPixelBuffer: buffer)))
+            let keyed = Self.applying(layer.chromaKey, to: CIImage(cvPixelBuffer: buffer))
+            let source = Self.applying(layer.filters, to: Self.applying(layer.colorAdjustment, to: keyed))
             placed = Self.cropping(source.transformed(by: transform), by: layer.crop)
         case let .image(source):
-            let adjusted = Self.applying(layer.filters, to: Self.applying(layer.colorAdjustment, to: source))
+            let adjusted = Self.applying(layer.filters, to: Self.applying(layer.colorAdjustment, to: Self.applying(layer.chromaKey, to: source)))
             placed = adjusted.transformed(by: Self.imageTransform(imageSize: source.extent.size, clipTransform: clipTransform, renderSize: renderSize))
         case let .subtitle(subtitle):
             return subtitleImage(subtitle, renderSize: renderSize)
@@ -280,6 +283,30 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
             kCIInputBrightnessKey: adjustment.brightness,
             kCIInputContrastKey: adjustment.contrast,
             kCIInputSaturationKey: adjustment.saturation,
+        ])
+    }
+
+    /// 크로마키 색 입방체 한 변의 칸 수. 32칸이면 색 차이가 눈에 띄지 않고 만드는 데 1ms 남짓이다.
+    private static let chromaCubeSize = 32
+    /// 만든 색 입방체 자료. 같은 크로마키 설정이 모든 프레임에 쓰이므로 다시 만들지 않는다.
+    private static let chromaCubeCache = NSCache<NSString, NSData>()
+
+    /// 크로마키(#70)로 배경색을 투명하게 뺀다. Core Image 색 입방체(sRGB)로 픽셀마다 불투명도와 번짐 제거를 적용한다.
+    static func applying(_ chromaKey: ChromaKey?, to image: CIImage) -> CIImage {
+        guard let chromaKey else { return image }
+        let key = "\(chromaKey)" as NSString
+        let data: Data
+        if let cached = chromaCubeCache.object(forKey: key) {
+            data = cached as Data
+        } else {
+            let cube = chromaKey.colorCube(size: chromaCubeSize)
+            data = cube.withUnsafeBufferPointer { Data(buffer: $0) }
+            chromaCubeCache.setObject(data as NSData, forKey: key)
+        }
+        return image.applyingFilter("CIColorCubeWithColorSpace", parameters: [
+            "inputCubeDimension": chromaCubeSize,
+            "inputCubeData": data,
+            "inputColorSpace": CGColorSpace(name: CGColorSpace.sRGB) as Any,
         ])
     }
 

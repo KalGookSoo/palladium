@@ -166,6 +166,8 @@ final class ClipRecord {
     var titleData: Data?
     /// 필터(#68) 목록(JSON, 종류·세기). 옵셔널이라 기존 저장소가 열리고, `nil`이면 필터가 없다.
     var filtersData: Data?
+    /// 크로마키(#70) 설정(JSON). 옵셔널이라 기존 저장소가 열리고, `nil`이면 크로마키가 꺼져 있다.
+    var chromaKeyData: Data?
     var track: TrackRecord?
 
     init(

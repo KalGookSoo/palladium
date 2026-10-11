@@ -502,6 +502,9 @@ struct MainWindowView: View {
                 setFilters: { filters in
                     editor.setFilters(filters, for: Set(pictureClips(in: currentSequence).map(\.id)))
                 },
+                setChromaKey: { chromaKey in
+                    editor.setChromaKey(chromaKey, for: Set(pictureClips(in: currentSequence).map(\.id)))
+                },
                 renameClip: { clipID, name in editor.renameClip(clipID, to: name) },
                 setClipSource: { clipID, start, end in editor.setClipSource(clipID, start: start, end: end) },
                 setTransform: { clipID, transform in editor.setTransform(transform, for: clipID, at: playheadTime) },
