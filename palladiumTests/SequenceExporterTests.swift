@@ -173,6 +173,81 @@ struct SequenceExporterTests {
         #expect(codecType == kCMVideoCodecType_HEVC)
     }
 
+    @Test("화질 단계는 해상도·프레임레이트·코덱으로 비트레이트를 계산하고, 원본과 비슷하게는 원본 데이터율을, 직접 입력은 그 값을 쓰며 1~200Mbit/s로 맞춘다")
+    func bitRateRules() {
+        let hd = CGSize(width: 1920, height: 1080)
+        let thirty = CMTime(value: 1, timescale: 30)
+        let sixty = CMTime(value: 1, timescale: 60)
+        func mbps(_ quality: ExportQuality, codec: ExportCodec = .h264, size: CGSize = hd, frame: CMTime = thirty, source: Double? = nil, custom: Double = 20) -> Double {
+            ExportBitRate.bitsPerSecond(quality: quality, codec: codec, renderSize: size, frameDuration: frame, sourceBitRate: source, customMbps: custom) / 1_000_000
+        }
+        #expect(abs(mbps(.high) - 9.33) < 0.01)
+        #expect(mbps(.high) > mbps(.medium) && mbps(.medium) > mbps(.small))
+        #expect(abs(mbps(.high, codec: .hevc) - mbps(.high) * 0.6) < 0.01)
+        #expect(abs(mbps(.high, frame: sixty) / mbps(.high) - pow(2, 0.6)) < 0.01)
+        #expect(mbps(.source, source: 14_000_000) == 14)
+        #expect(mbps(.source) == mbps(.high))
+        #expect(mbps(.custom, custom: 35) == 35)
+        #expect(mbps(.custom, custom: 0.2) == ExportBitRate.minimumMbps)
+        #expect(mbps(.custom, custom: 999) == ExportBitRate.maximumMbps)
+        #expect(mbps(.small, size: CGSize(width: 64, height: 36)) == ExportBitRate.minimumMbps)
+    }
+
+    @Test("합성은 원본 영상의 데이터율을 알려 주고, 내보내기 비트레이트는 그 값과 고른 화질을 따른다")
+    func compositionReportsSourceBitRate() async throws {
+        let composition = try await sixtyFPSComposition(resolution: .source)
+        let sourceRate = try #require(composition.sourceBitRate)
+        #expect(sourceRate > 0)
+        #expect(SequenceExporter.videoBitRate(for: composition, codec: .h264, quality: .source, customMbps: 20) == max(sourceRate, ExportBitRate.minimumMbps * 1_000_000))
+        #expect(SequenceExporter.videoBitRate(for: composition, codec: .h264, quality: .custom, customMbps: 12) == 12_000_000)
+    }
+
+    @Test("직접 입력한 높은 비트레이트로 내보내면 낮은 비트레이트보다 데이터율이 높다")
+    func exportFollowsBitRate() async throws {
+        // 움직임이 있어야 인코더가 비트레이트를 채우므로 샘플 영상(움직이는 원·글자)을 쓴다.
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let url = directory.appending(path: "sample.mov")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try await SampleMediaGenerator.makeVideo(SampleMediaGenerator.videos[0], to: url)
+        let asset = MediaAsset(id: UUID(), name: "sample.mov", sourceURL: url, kind: .video, duration: seconds(6))
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let trackID = sequence.addTrack(kind: .video)
+        try sequence.place(#require(asset.makeClip(at: .zero)), onTrack: trackID)
+        let composition = try #require(await SequenceComposer.makeComposition(
+            sequence: sequence, assets: [asset], aspectRatio: .landscape16x9, resolution: .source, resolveURL: \.sourceURL
+        ))
+        let low = TestMedia.temporaryURL(extension: "mp4")
+        let high = TestMedia.temporaryURL(extension: "mp4")
+
+        try await SequenceExporter.export(composition, to: low, quality: .custom, customMbps: 1) { _ in }
+        try await SequenceExporter.export(composition, to: high, quality: .custom, customMbps: 30) { _ in }
+
+        let lowSize = try #require(try FileManager.default.attributesOfItem(atPath: low.path)[.size] as? Int)
+        let highSize = try #require(try FileManager.default.attributesOfItem(atPath: high.path)[.size] as? Int)
+        #expect(highSize > lowSize)
+    }
+
+    @Test("내보내기를 취소하면 취소 오류로 끝나고 만들던 파일을 지운다")
+    func cancelRemovesFile() async throws {
+        let url = try await TestMedia.makeVideo(red: 0, green: 255, blue: 0, seconds: 20, width: 640, height: 360)
+        let asset = MediaAsset(id: UUID(), name: "long.mov", sourceURL: url, kind: .video, duration: seconds(20))
+        var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])
+        let trackID = sequence.addTrack(kind: .video)
+        try sequence.place(#require(asset.makeClip(at: .zero)), onTrack: trackID)
+        let composition = try #require(await SequenceComposer.makeComposition(
+            sequence: sequence, assets: [asset], aspectRatio: .landscape16x9, resolution: .uhd, resolveURL: \.sourceURL
+        ))
+        let output = TestMedia.temporaryURL(extension: "mp4")
+
+        let task = Task { try await SequenceExporter.export(composition, to: output) { _ in } }
+        try await Task.sleep(for: .milliseconds(300))
+        task.cancel()
+        let result = await task.result
+
+        #expect(throws: CancellationError.self) { try result.get() }
+        #expect(!FileManager.default.fileExists(atPath: output.path))
+    }
+
     @Test("자막만 있는 시퀀스도 자막 길이만큼 내보내고 자막이 화면에 박힌다")
     func exportsSubtitleOnlySequence() async throws {
         var sequence = EditSequence(id: UUID(), name: "시퀀스", tracks: [])

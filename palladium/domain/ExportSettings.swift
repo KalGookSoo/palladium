@@ -1,4 +1,6 @@
+import CoreGraphics
 import CoreMedia
+import Foundation
 
 /// 내보내기 영상 코덱. 컨테이너는 어디서나 열리는 MP4로 고정한다.
 nonisolated enum ExportCodec: String, CaseIterable {
@@ -89,5 +91,71 @@ nonisolated enum OutputFrameRate {
         // 평균값의 흔들림(±0.1fps)은 같은 프레임레이트로 본다.
         let chosen = integerRates.first { Double($0) >= rate - 0.1 } ?? integerRates[integerRates.count - 1]
         return CMTime(value: 1, timescale: chosen)
+    }
+}
+
+/// 내보내기 화질(#77). 단계를 고르면 해상도·프레임레이트·코덱으로 비트레이트를 계산하고, "직접 입력"이면 Mbit/s를 그대로 쓴다.
+nonisolated enum ExportQuality: String, CaseIterable {
+    /// 시퀀스에 쓰인 영상 원본 중 가장 높은 비트레이트(알 수 없으면 "높음").
+    case source
+    case high
+    case medium
+    case small
+    /// Mbit/s를 직접 넣는다.
+    case custom
+
+    static let defaultValue = ExportQuality.source
+
+    var title: String {
+        switch self {
+        case .source: "원본과 비슷하게"
+        case .high: "높음"
+        case .medium: "보통"
+        case .small: "작게"
+        case .custom: "직접 입력"
+        }
+    }
+}
+
+/// 내보내기 비트레이트 계산(#77). 픽셀 하나·프레임 하나에 쓰는 비트(bpp)를 단계마다 정해 두고 화면 크기·프레임레이트를 곱한다.
+/// H.264 "높음"은 1080p 30fps에서 약 9Mbit/s(유튜브 권장 8Mbit/s보다 조금 높게)이고, HEVC는 같은 화질에 60%만 쓴다.
+/// 프레임레이트는 30fps를 기준으로 0.6제곱만큼만 늘린다(60fps는 약 1.5배 — 유튜브 권장 비율과 비슷하다).
+nonisolated enum ExportBitRate {
+    static let minimumMbps = 1.0
+    static let maximumMbps = 200.0
+    static let defaultCustomMbps = 20.0
+    private static let hevcFactor = 0.6
+
+    static func bitsPerPixel(_ quality: ExportQuality) -> Double {
+        switch quality {
+        case .source, .high: 0.15
+        case .medium: 0.09
+        case .small: 0.05
+        case .custom: 0.15
+        }
+    }
+
+    /// 초당 비트 수. `sourceBitRate`는 원본 중 가장 높은 비트레이트(초당 비트, 모르면 `nil`)다. 결과는 1~200Mbit/s 사이로 맞춘다.
+    static func bitsPerSecond(
+        quality: ExportQuality,
+        codec: ExportCodec,
+        renderSize: CGSize,
+        frameDuration: CMTime,
+        sourceBitRate: Double?,
+        customMbps: Double
+    ) -> Double {
+        let value: Double
+        switch quality {
+        case .custom:
+            value = customMbps * 1_000_000
+        case .source where (sourceBitRate ?? 0) > 0:
+            value = sourceBitRate ?? 0
+        default:
+            let fps = frameDuration.isNumeric && frameDuration > .zero ? 1 / frameDuration.seconds : 30
+            let pixels = Double(renderSize.width * renderSize.height)
+            let codecFactor = codec == .hevc ? hevcFactor : 1
+            value = pixels * 30 * pow(fps / 30, 0.6) * bitsPerPixel(quality) * codecFactor
+        }
+        return min(max(value, minimumMbps * 1_000_000), maximumMbps * 1_000_000)
     }
 }

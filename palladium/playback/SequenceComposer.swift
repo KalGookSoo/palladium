@@ -13,6 +13,8 @@ nonisolated struct SequenceComposition {
     let duration: CMTime
     /// 원본 영상의 프레임레이트를 따른 프레임 간격(영상이 없으면 30fps).
     var frameDuration = OutputFrameRate.defaultDuration
+    /// 쓰인 영상 원본 중 가장 높은 비트레이트(초당 비트, #77 "원본과 비슷하게"). 영상이 없거나 알 수 없으면 `nil`.
+    var sourceBitRate: Double?
 }
 
 /// 시퀀스의 모든 영상 트랙(아래 트랙이 먼저, 위 트랙이 그 위에)과 이미지 클립을 클립마다의 위치·크기·불투명도로 겹쳐 그리고(#5 2단계, #9),
@@ -64,6 +66,7 @@ nonisolated enum SequenceComposer {
         // 출력 프레임레이트·해상도를 정할 원본 영상 정보.
         var sourceFrameTimings: [SourceFrameTiming] = []
         var sourceShortSides: [Double] = []
+        var sourceBitRates: [Double] = []
 
         for (trackIndex, track) in sequence.tracks.enumerated() where track.kind == .video {
             // 트랙 배열은 화면 위쪽부터라, 앞에 있을수록 위에 그린다.
@@ -92,9 +95,12 @@ nonisolated enum SequenceComposer {
                 do {
                     if let sourceVideo = try await source.loadTracks(withMediaType: .video).first, let videoTrack {
                         try await insert(clip, of: sourceVideo, into: videoTrack, lead: edges.videoLead, tail: edges.videoTail, freezesMissingFrames: true)
-                        let (naturalSize, preferredTransform, frameRate, minFrameDuration) = try await sourceVideo.load(
-                            .naturalSize, .preferredTransform, .nominalFrameRate, .minFrameDuration
+                        let (naturalSize, preferredTransform, frameRate, minFrameDuration, dataRate) = try await sourceVideo.load(
+                            .naturalSize, .preferredTransform, .nominalFrameRate, .minFrameDuration, .estimatedDataRate
                         )
+                        if dataRate > 0 {
+                            sourceBitRates.append(Double(dataRate))
+                        }
                         let displayed = CGRect(origin: .zero, size: naturalSize).applying(preferredTransform).size
                         sourceShortSides.append(min(abs(displayed.width), abs(displayed.height)))
                         sourceFrameTimings.append(SourceFrameTiming(nominalFrameRate: frameRate, minFrameDuration: minFrameDuration))
@@ -158,7 +164,8 @@ nonisolated enum SequenceComposer {
             ),
             audioMix: audioMix,
             duration: duration,
-            frameDuration: frameDuration
+            frameDuration: frameDuration,
+            sourceBitRate: sourceBitRates.max()
         )
     }
 

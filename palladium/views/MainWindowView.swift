@@ -615,7 +615,7 @@ struct MainWindowView: View {
                 return
             }
             do {
-                try await SequenceExporter.export(composition, to: url, codec: options.codec) { fraction in
+                try await SequenceExporter.export(composition, to: url, codec: options.codec, quality: options.quality, customMbps: options.customMbps) { fraction in
                     Task { @MainActor in job.progress = fraction }
                 }
                 job.finish(error: nil)
@@ -650,7 +650,9 @@ struct MainWindowView: View {
                           sequence: sequence, assets: assets, aspectRatio: preset, resolution: options.resolution, resolveURL: MediaFileAccess.resolvedURL
                       )
                 else { throw SequenceExporter.ExportError.noPicture }
-                try await SequenceExporter.export(composition, to: item.destination, codec: options.codec, progress: progress)
+                try await SequenceExporter.export(
+                    composition, to: item.destination, codec: options.codec, quality: options.quality, customMbps: options.customMbps, progress: progress
+                )
             }
         }
         return job

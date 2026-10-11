@@ -7,6 +7,9 @@ enum AppPreferences {
     static let proxyThresholdKey = "proxyThreshold"
     static let exportCodecKey = "exportCodec"
     static let exportResolutionKey = "exportResolution"
+    /// 내보내기 화질 단계와 직접 입력한 Mbit/s(#77).
+    static let exportQualityKey = "exportQuality"
+    static let exportCustomMbpsKey = "exportCustomMbps"
     static let timelineShowsFilmstripKey = "timelineShowsFilmstrip"
     static let timelineShowsWaveformKey = "timelineShowsWaveform"
     /// 미디어 패널에서 접어 둔 폴더 ID들(#93). 프로젝트 내용이 아니라 보기 상태라 저장하지 않은 변경·실행 취소를 남기지 않는다.
@@ -37,7 +40,7 @@ struct SettingsView: View {
             } header: {
                 Text("내보내기")
             } footer: {
-                Text("MP4로 내보냅니다. 프레임레이트는 원본 영상을 따르고(최대 60fps), \"원본과 같게\"는 시퀀스에 쓰인 가장 큰 영상의 해상도(최대 4K)입니다. 내보낼 때 고른 값이 여기에 남습니다.")
+                Text("MP4로 내보냅니다. 프레임레이트는 원본 영상을 따르고(최대 60fps), 해상도 \"원본과 같게\"는 시퀀스에 쓰인 가장 큰 영상의 해상도(최대 4K), 화질 \"원본과 비슷하게\"는 가장 높은 원본 데이터율입니다. 내보낼 때 고른 값이 여기에 남습니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
