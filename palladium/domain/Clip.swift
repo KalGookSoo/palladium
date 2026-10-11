@@ -30,6 +30,8 @@ nonisolated struct Clip {
     var crop = ClipCrop()
     /// 시간에 따라 바뀌는 트랜스폼·음량(#67, 키프레임). 비어 있으면 위의 고정 값을 쓴다.
     var animation = ClipAnimation()
+    /// 타이틀 클립(#76)의 글자와 모양. 있으면 원본 대신 이 글자를 그린다(`assetID`는 `Clip.titleAssetID`).
+    var title: TitleText?
 
     init?(id: UUID = UUID(), assetID: MediaAsset.ID, sourceRange: CMTimeRange, timelineStart: CMTime) {
         guard sourceRange.start.isNumeric, sourceRange.duration.isNumeric, sourceRange.duration > .zero, timelineStart.isNumeric, timelineStart >= .zero else { return nil }

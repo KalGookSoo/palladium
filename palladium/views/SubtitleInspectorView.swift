@@ -216,7 +216,7 @@ private extension SubtitlePosition {
 }
 
 /// 끄는 동안은 숫자만 바꾸고 손을 뗄 때 반영한다(실행 취소가 잘게 쌓이지 않게).
-private struct CommitSlider: View {
+struct CommitSlider: View {
     let title: String
     let value: Double
     let range: ClosedRange<Double>
@@ -247,7 +247,7 @@ private struct CommitSlider: View {
 }
 
 /// 이 Mac에 설치된 글꼴 가족과 굵기(기기 안의 글꼴만 쓴다).
-private enum FontCatalog {
+enum FontCatalog {
     struct Member {
         let postScriptName: String
         let faceName: String

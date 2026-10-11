@@ -10,6 +10,8 @@ nonisolated struct CompositionLayer {
         case image(CIImage)
         /// 자막(#4). 위치는 자막 스타일이 정하고 `transform`은 쓰지 않는다.
         case subtitle(Subtitle)
+        /// 타이틀(#76). 글자 상자의 원래 크기에 트랜스폼 배율·위치·각도를 적용한다(화면에 맞춰 늘리지 않는다).
+        case title(TitleText)
     }
 
     /// 앞 클립 위로 나타나는 전환(#8). 구간 동안 0에서 1로 나아간다.
@@ -66,6 +68,8 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
     private let context = CIContext()
     /// 그려 둔 자막 이미지. 같은 자막이 여러 프레임에 이어 나오므로 다시 그리지 않는다.
     private let subtitleCache = NSCache<NSString, CIImage>()
+    /// 그려 둔 타이틀 이미지(#76). 키프레임으로 움직여도 글자 이미지는 같아 다시 그리지 않는다.
+    private let titleCache = NSCache<NSString, CIImage>()
 
     func renderContextChanged(_: AVVideoCompositionRenderContext) {}
 
@@ -124,6 +128,12 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
             placed = adjusted.transformed(by: Self.imageTransform(imageSize: source.extent.size, clipTransform: clipTransform, renderSize: renderSize))
         case let .subtitle(subtitle):
             return subtitleImage(subtitle, renderSize: renderSize)
+        case let .title(title):
+            guard let image = titleImage(title, renderSize: renderSize) else { return nil }
+            let size = image.extent.size
+            let frame = clipTransform.frame(naturalSize: size, in: renderSize)
+            placed = Self.applying(layer.colorAdjustment, to: image).transformed(by: CGAffineTransform(scaleX: frame.width / size.width, y: frame.height / size.height)
+                .concatenating(CGAffineTransform(translationX: frame.minX, y: renderSize.height - frame.maxY)))
         }
         return Self.applyingOpacity(clipTransform.opacity, to: Self.rotating(placed, by: clipTransform, renderSize: renderSize))
     }
@@ -137,6 +147,16 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
             .concatenating(CGAffineTransform(rotationAngle: -transform.rotation * .pi / 180))
             .concatenating(CGAffineTransform(translationX: center.x, y: center.y))
         return image.transformed(by: rotation)
+    }
+
+    private func titleImage(_ title: TitleText, renderSize: CGSize) -> CIImage? {
+        let key = "\(title)|\(renderSize)" as NSString
+        if let cached = titleCache.object(forKey: key) {
+            return cached
+        }
+        guard let image = TitleRenderer.image(for: title, renderSize: renderSize) else { return nil }
+        titleCache.setObject(image, forKey: key)
+        return image
     }
 
     private func subtitleImage(_ subtitle: Subtitle, renderSize: CGSize) -> CIImage? {

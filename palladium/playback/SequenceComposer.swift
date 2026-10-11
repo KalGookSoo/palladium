@@ -75,12 +75,20 @@ nonisolated enum SequenceComposer {
             let videoRolls = Rolls(composition: composition, mediaType: .video)
             let soundRolls = Rolls(composition: composition, mediaType: .audio)
             for clip in track.clips.sorted(by: { $0.timelineStart < $1.timelineStart }) {
-                guard let asset = assets.first(where: { $0.id == clip.assetID }) else { continue }
                 let edges = TransitionEdges(track: track, clip: clip)
                 let videoTrack = videoRolls.track(switching: edges.transition != nil)
                 let soundTrack = soundRolls.track(switching: edges.crossfadeIn != nil)
                 let layerRange = edges.videoRange(of: clip)
                 let fade = edges.transition.map { CompositionLayer.Fade(range: edges.transitionRange(of: clip), kind: $0.kind) }
+                // 타이틀(#76)은 원본 파일 없이 글자만 그린다.
+                if let title = clip.title {
+                    let layer = CompositionLayer(
+                        content: .title(title), transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, animatedClip: animatedClip(clip)
+                    )
+                    placedLayers.append((layerRange, layer, order))
+                    continue
+                }
+                guard let asset = assets.first(where: { $0.id == clip.assetID }) else { continue }
                 if asset.kind == .image {
                     if images[asset.id] == nil {
                         images[asset.id] = loadImage(at: resolveURL(asset))

@@ -27,6 +27,9 @@ struct InspectorView: View {
     var clearKeyframes: (Clip.ID, AnimatedProperty) -> Void = { _, _ in }
     /// 이전·다음 키프레임으로 재생 헤드를 옮긴다.
     var movePlayhead: (CMTime) -> Void = { _ in }
+    /// 타이틀(#76) 글자·모양과 페이드 인·아웃.
+    var setTitle: (Clip.ID, TitleText) -> Void = { _, _ in }
+    var addFade: (Clip.ID) -> Void = { _ in }
     var setClipSpeed: (Clip.ID, Double) -> Void = { _, _ in }
     /// 고른 클립과 바로 앞 클립 사이 전환의 최대 길이. 맞닿은 앞 클립이 없으면 0이다.
     var maximumTransitionDuration = CMTime.zero
@@ -86,7 +89,7 @@ struct InspectorView: View {
                     get: { shownTab(for: clip) },
                     set: { tab in
                         chosenTab = tab
-                        emptyTabClipID = tab.applies(to: asset?.kind) ? nil : clip.id
+                        emptyTabClipID = tab.applies(to: kind) ? nil : clip.id
                     }
                 )) {
                     ForEach(InspectorTab.allCases) { tab in
@@ -143,10 +146,10 @@ struct InspectorView: View {
     /// 사용자가 고른 탭이 이 클립에 해당하면 그 탭을, 아니면 클립 종류의 기본 탭을 보여준다.
     /// 해당하지 않는 탭을 이 클립에서 직접 눌렀으면 그 탭(빈 상태 안내)을 보여준다.
     private func shownTab(for clip: Clip) -> InspectorTab {
-        if chosenTab.applies(to: asset?.kind) || emptyTabClipID == clip.id {
+        if chosenTab.applies(to: kind) || emptyTabClipID == clip.id {
             return chosenTab
         }
-        return asset?.kind == .audio ? .audio : .video
+        return kind == .audio ? .audio : .video
     }
 
     @ViewBuilder
@@ -158,19 +161,23 @@ struct InspectorView: View {
                     clip: clip,
                     sourceDuration: asset?.trimmableDuration,
                     setSource: { start, end in setClipSource(clip.id, start, end) },
-                    setSpeed: asset?.kind == .image ? nil : { setClipSpeed(clip.id, $0) }
+                    setSpeed: kind == .image ? nil : { setClipSpeed(clip.id, $0) }
                 )
             }
             .formStyle(.grouped)
         case .video:
-            if asset?.kind == .audio {
+            if kind == .audio {
                 ContentUnavailableView("오디오 클립", systemImage: "waveform", description: Text("오디오 클립은 화면에 그리지 않습니다"))
             } else {
                 videoTab(clip: clip)
             }
         case .audio:
-            if asset?.kind == .image {
-                ContentUnavailableView("이미지 클립", systemImage: "photo", description: Text("이미지 클립에는 소리가 없습니다"))
+            if kind == .image {
+                ContentUnavailableView(
+                    clip.isTitle ? "타이틀 클립" : "이미지 클립",
+                    systemImage: clip.isTitle ? "textformat" : "photo",
+                    description: Text(clip.isTitle ? "타이틀에는 소리가 없습니다" : "이미지 클립에는 소리가 없습니다")
+                )
             } else {
                 Form {
                     AudioInspectorView(clip: clip, volume: clip.volume(atTimeline: playheadTime)) { volume, isMuted in
@@ -205,6 +212,11 @@ struct InspectorView: View {
         )
     }
 
+    /// 화면에 보이는 종류. 타이틀(#76)은 원본이 없어 이미지처럼 다룬다(영상 탭만, 소리·속도 없음).
+    private var kind: MediaKind? {
+        clip?.isTitle == true ? .image : asset?.kind
+    }
+
     /// 영상 탭: 크롭(읽기 요약)·트랜스폼·이펙트·영상 전환을 접을 수 있는 섹션으로 둔다.
     private func videoTab(clip: Clip) -> some View {
         Form {
@@ -217,9 +229,20 @@ struct InspectorView: View {
                         .help("클립 편집 창의 크롭 탭에서 화면을 잘라냅니다")
                 }
             }
+            if let title = clip.title {
+                Section("타이틀") {
+                    TitleInspectorView(title: title) { setTitle(clip.id, $0) }
+                        .id(clip.id)
+                }
+            }
             Section("트랜스폼", isExpanded: $isTransformExpanded) {
                 TransformInspectorView(transform: clip.transform(atTimeline: playheadTime)) { setTransform(clip.id, $0) }
                 keyframeControls(clip: clip, property: .transform)
+                Button("페이드 인·아웃 넣기") { addFade(clip.id) }
+                    .disabled(!clip.animation.transform.isEmpty)
+                    .help(clip.animation.transform.isEmpty
+                        ? "처음 0.5초 동안 나타나고 끝 0.5초 동안 사라지는 불투명도 키프레임을 넣습니다"
+                        : "트랜스폼 키프레임이 이미 있습니다. 키프레임을 모두 지운 뒤 넣을 수 있습니다")
             }
             Section("이펙트", isExpanded: $isEffectExpanded) {
                 EffectInspectorView(adjustment: clip.colorAdjustment, setAdjustment: setColorAdjustment)
@@ -280,7 +303,7 @@ private struct InspectorHeader: View {
 
     var body: some View {
         let durationText = Duration.seconds(clip.timelineDuration.seconds).formatted(.time(pattern: .minuteSecond))
-        let assetName = asset?.name ?? "알 수 없는 원본"
+        let assetName = clip.title.map { String($0.text.split(separator: "\n").first ?? "") } ?? asset?.name ?? "알 수 없는 원본"
 
         VStack(alignment: .leading) {
             TextField("클립 이름", text: $nameText, prompt: Text(assetName))
@@ -331,7 +354,10 @@ private struct InspectorHeader: View {
     }
 
     private var kindTitle: String {
-        switch asset?.kind {
+        if clip.isTitle {
+            return "타이틀"
+        }
+        return switch asset?.kind {
         case .video: "영상"
         case .audio: "오디오"
         case .image: "이미지"

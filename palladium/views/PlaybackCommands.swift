@@ -10,6 +10,8 @@ extension FocusedValues {
     @Entry var nextSequence: (() -> Void)?
     /// 기본 전환을 넣을 클립이 있을 때만 값이 있다(#64, ⇧⌘T).
     @Entry var addDefaultTransition: (() -> Void)?
+    /// 편집 창이 앞에 있을 때만 값이 있다(#76, ⌃T).
+    @Entry var addTitle: (() -> Void)?
 }
 
 /// 재생 메뉴와 타임라인 메뉴(#64). 한 글자 단축키(Space·J/K/L·M·T·R·방향키 등)는 입력란 글자를 가로채지 않도록
@@ -19,6 +21,7 @@ struct PlaybackCommands: Commands {
     @FocusedValue(\.previousSequence) private var previousSequence
     @FocusedValue(\.nextSequence) private var nextSequence
     @FocusedValue(\.addDefaultTransition) private var addDefaultTransition
+    @FocusedValue(\.addTitle) private var addTitle
 
     var body: some Commands {
         CommandMenu("재생") {
@@ -42,6 +45,11 @@ struct PlaybackCommands: Commands {
         CommandMenu("타임라인") {
             item(ShortcutGuide.addMarker, .addMarker)
             item(ShortcutGuide.addSubtitle, .addSubtitle)
+            Button(ShortcutGuide.addTitle.title) {
+                addTitle?()
+            }
+            .keyboardShortcut("t", modifiers: .control)
+            .disabled(addTitle == nil)
             Button(ShortcutGuide.addDefaultTransition.title) {
                 addDefaultTransition?()
             }

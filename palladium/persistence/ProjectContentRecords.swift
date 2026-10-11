@@ -162,6 +162,8 @@ final class ClipRecord {
     var cropRight: Double?
     /// 키프레임(#67)을 JSON으로 둔다(`StoredClipAnimation`). 기존 저장소가 열리도록 옵셔널로 두고, `nil`이면 키프레임이 없다.
     var animationData: Data?
+    /// 타이틀 클립(#76)의 글자와 모양(JSON, `StoredTitle`). 옵셔널이라 기존 저장소가 열리고, `nil`이면 타이틀이 아니다.
+    var titleData: Data?
     var track: TrackRecord?
 
     init(

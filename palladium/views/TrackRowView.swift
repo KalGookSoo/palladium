@@ -79,13 +79,15 @@ struct TrackRowView: View {
         let asset = assets.first { $0.id == clip.assetID }
         let width = scale.width(for: clip.timelineDuration)
 
-        let assetName = asset?.name ?? "알 수 없는 원본"
+        // 타이틀(#76)은 원본 대신 글자 첫 줄을 이름으로 보여준다.
+        let titleLine = clip.title.map { String($0.text.split(separator: "\n").first ?? "") }
+        let assetName = titleLine ?? asset?.name ?? "알 수 없는 원본"
         // 별칭이 없으면 원본 이름이다. 속도를 바꾼 클립은 이름 뒤에 배율을 붙인다.
         let title = clip.displayName(assetName: assetName) + (clip.speed == 1 ? "" : " · \(clip.speed.formatted())×")
 
         return ClipView(
             title: title,
-            symbolName: track.kind.symbolName,
+            symbolName: clip.isTitle ? "textformat" : track.kind.symbolName,
             isSelected: selectedClipIDs.contains(clip.id),
             colorLabel: clip.colorLabel,
             hasEffect: !clip.colorAdjustment.isDefault
@@ -102,7 +104,7 @@ struct TrackRowView: View {
                     }
                 }
         }
-        .help("원본: \(assetName)")
+        .help(clip.isTitle ? "타이틀: \(assetName) — 글자·모양은 인스펙터 영상 탭에서 바꿉니다" : "원본: \(assetName)")
         .frame(width: max(width - 2, 1), height: clipHeight)
         .offset(x: scale.x(for: clip.timelineStart) + 1 + offset.width, y: TimelineMetrics.clipVerticalInset + offset.height)
         .onTapGesture { select(clip) }
@@ -248,9 +250,12 @@ struct TrackRowView: View {
                 }
             }
         }
-        Divider()
-        Button("원본 훑어보기") { actions.openAsset(clip.assetID) }
-        Button("미디어 패널에서 원본 보기") { actions.revealAsset(clip.assetID) }
+        // 타이틀(#76)은 원본 파일이 없다.
+        if !clip.isTitle {
+            Divider()
+            Button("원본 훑어보기") { actions.openAsset(clip.assetID) }
+            Button("미디어 패널에서 원본 보기") { actions.revealAsset(clip.assetID) }
+        }
     }
 }
 

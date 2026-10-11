@@ -10,6 +10,8 @@ struct TransformHandlesView: View {
     let contentSize: CGSize
     /// 합성 화면 크기(화면비 프리셋).
     let renderSize: CGSize
+    /// `false`면 내용을 화면에 맞춰 늘리지 않고 원래 크기(`contentSize`, 화면 픽셀)에 배율만 곱한다(타이틀, #76).
+    var fitsContentToScreen = true
     let setTransform: (ClipTransform) -> Void
     @State private var draft: ClipTransform?
     /// 끄는 동안 가로·세로 가운데 선에 붙었는지. 붙은 선을 진하게 보여준다.
@@ -78,7 +80,7 @@ struct TransformHandlesView: View {
 
     /// 트랜스폼 테두리가 미리보기에 그려지는 사각형.
     private func shown(_ transform: ClipTransform, in shownRender: CGRect, scale: Double) -> CGRect {
-        let frame = transform.frame(contentSize: contentSize, in: renderSize)
+        let frame = fitsContentToScreen ? transform.frame(contentSize: contentSize, in: renderSize) : transform.frame(naturalSize: contentSize, in: renderSize)
         return CGRect(
             x: shownRender.minX + frame.minX * scale,
             y: shownRender.minY + frame.minY * scale,

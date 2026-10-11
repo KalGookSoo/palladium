@@ -29,6 +29,7 @@ has_children: true
 - [이펙트(기본 색보정)](./effects.md)
 - [샘플 프로젝트와 온보딩](./onboarding.md)
 - [키프레임 애니메이션](./keyframes.md)
+- [타이틀](./titles.md)
 
 ## 공통 Mermaid 색상 기준
 

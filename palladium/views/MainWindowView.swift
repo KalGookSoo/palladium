@@ -167,13 +167,16 @@ struct MainWindowView: View {
             .focusedSceneValue(\.isTimelineVisible, $isTimelineVisible)
             .focusedSceneValue(\.isInspectorPresented, $isInspectorPresented)
             .focusedSceneValue(\.timelineScale, $timelineScale)
+        // 식이 길면 타입 검사가 끝나지 않으므로 나눈다(#64·#76 메뉴 값).
+        let withMenuCommands = withCommands
             .focusedSceneValue(\.editorCommand) { key in _ = handleEditorKey(key, fromMenu: true) }
             .focusedSceneValue(\.newSequence) { timelineActions.addSequence() }
             .focusedSceneValue(\.previousSequence, adjacentSequenceAction(offset: -1))
             .focusedSceneValue(\.nextSequence, adjacentSequenceAction(offset: 1))
             .focusedSceneValue(\.addDefaultTransition, defaultTransitionAction)
+            .focusedSceneValue(\.addTitle) { addTitleAtPlayhead() }
             .focusedSceneValue(\.showTourChecklist, showTourChecklistAction)
-        let withBehaviors = withCommands
+        let withBehaviors = withMenuCommands
             .task { await writeBackupsPeriodically() }
             .modifier(EditorKeyHandling(handle: { handleEditorKey($0) }))
             // 편집기 커맨드의 실행 취소를 창의 실행 취소 관리자(편집 > 실행 취소 ⌘Z)에 남긴다.
@@ -509,6 +512,8 @@ struct MainWindowView: View {
                     previewPlayer.pause()
                     playheadTime = time
                 },
+                setTitle: { clipID, title in editor.setTitle(title, for: clipID) },
+                addFade: { clipID in editor.addFade(to: clipID) },
                 setClipSpeed: { clipID, speed in editor.setClipSpeed(speed, for: clipID) },
                 maximumTransitionDuration: selectedClip.flatMap { clip in
                     currentSequence.tracks.first { $0.clips.contains { $0.id == clip.id } }?.maximumTransitionDuration(into: clip)
@@ -545,13 +550,21 @@ struct MainWindowView: View {
     }
 
     /// 미리보기에서 테두리로 옮기고 크기를 바꿀 클립. 클립 하나를 골랐고 화면에 그려지는(소리만 있지 않은) 경우만.
-    private func transformTarget(in sequence: EditSequence) -> (clip: Clip, asset: MediaAsset)? {
-        guard selectedClipIDs.count == 1,
-              let clip = selectedClipIDs.first.flatMap({ sequence.clip(id: $0) }),
-              let asset = editor.asset(id: clip.assetID),
-              asset.kind != .audio
-        else { return nil }
+    private func transformTarget(in sequence: EditSequence) -> (clip: Clip, asset: MediaAsset?)? {
+        guard selectedClipIDs.count == 1, let clip = selectedClipIDs.first.flatMap({ sequence.clip(id: $0) }) else { return nil }
+        // 타이틀(#76)은 원본 없이 글자 상자를 옮기고 키운다.
+        if clip.isTitle {
+            return (clip, nil)
+        }
+        guard let asset = editor.asset(id: clip.assetID), asset.kind != .audio else { return nil }
         return (clip, asset)
+    }
+
+    /// 타임라인 메뉴 > 재생 헤드에 타이틀 추가(#76, ⌃T). 새 타이틀을 고르고 인스펙터에서 글자를 바로 고치게 한다.
+    private func addTitleAtPlayhead() {
+        guard let clipID = editor.addTitle(at: playheadTime) else { return }
+        selectedClipIDs = [clipID]
+        isInspectorPresented = true
     }
 
     /// 시퀀스에 처음 영상·이미지를 놓으면 툴바 화면비를 그 원본 방향에 맞춘다(세로 영상이면 9:16).

@@ -7,7 +7,7 @@ struct PreviewPlayerView: View {
     /// 프로젝트에 원본이 하나도 없으면 가져오기부터 안내한다.
     let hasProjectAssets: Bool
     /// 타임라인에서 고른 클립(화면에 그려지는 영상·이미지 하나). 있으면 미리보기 위에 테두리와 손잡이를 그린다.
-    var transformTarget: (clip: Clip, asset: MediaAsset)?
+    var transformTarget: (clip: Clip, asset: MediaAsset?)?
     var renderSize = SequenceComposer.renderSize(for: .landscape16x9)
     var setTransform: (Clip.ID, ClipTransform) -> Void = { _, _ in }
     /// 마스크 레인에서 고른 마스크. 있으면 미리보기 위에 영역과 손잡이를 그린다(#59).
@@ -37,7 +37,15 @@ struct PreviewPlayerView: View {
             VStack(spacing: 0) {
                 PlayerSurfaceView(player: previewPlayer.player)
                     .overlay {
-                        if let transformTarget, let targetContentSize {
+                        if let transformTarget, let title = transformTarget.clip.title {
+                            // 타이틀(#76)은 글자 상자의 원래 크기에 배율을 곱한다(화면에 맞춰 늘리지 않는다).
+                            TransformHandlesView(
+                                transform: transformTarget.clip.transform(atTimeline: previewPlayer.currentTime),
+                                contentSize: TitleRenderer.naturalSize(of: title, renderSize: renderSize),
+                                renderSize: renderSize,
+                                fitsContentToScreen: false
+                            ) { setTransform(transformTarget.clip.id, $0) }
+                        } else if let transformTarget, let targetContentSize {
                             TransformHandlesView(
                                 // 키프레임(#67)이 있으면 지금 보이는 시각의 트랜스폼이다.
                                 transform: transformTarget.clip.transform(atTimeline: previewPlayer.currentTime),
@@ -53,7 +61,7 @@ struct PreviewPlayerView: View {
                             SubtitleHandlesView(subtitle: subtitleTarget, renderSize: renderSize) { setSubtitlePosition(subtitleTarget.id, $0, $1) }
                         }
                     }
-                    .task(id: transformTarget?.asset.id) {
+                    .task(id: transformTarget?.asset?.id) {
                         targetContentSize = nil
                         if let asset = transformTarget?.asset {
                             targetContentSize = await ClipContentProvider.shared.contentSize(for: asset)

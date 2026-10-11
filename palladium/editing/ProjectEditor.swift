@@ -200,6 +200,36 @@ final class ProjectEditor {
         return placed
     }
 
+    /// `time`에 새 타이틀(#76)을 맨 위 영상 트랙에 놓는다(삽입 규칙대로 경계에 끼우고 뒤 클립을 민다). 영상 트랙이 하나도 없을 때만 새로 만든다.
+    /// 오프닝 제목처럼 메인 트랙 앞에 넣거나, 사용자가 만든 위 트랙에 겹쳐 얹는다. 새 클립 ID.
+    @discardableResult
+    func addTitle(at time: CMTime) -> Clip.ID? {
+        guard let clip = Clip.makeTitle(at: time) else { return nil }
+        editCurrentSequence("타이틀 추가") { sequence in
+            let trackID = sequence.tracks.first { $0.kind == .video }?.id ?? sequence.addTrack(kind: .video)
+            sequence.place(clip, onTrack: trackID)
+        }
+        return clip.id
+    }
+
+    /// 타이틀의 글자·모양을 바꾼다(#76). 범위를 벗어난 값은 맞춘다. 타이틀이 아닌 클립은 바꾸지 않는다.
+    func setTitle(_ title: TitleText, for clipID: Clip.ID) {
+        var clamped = title
+        clamped.clamp()
+        editCurrentSequence("타이틀 편집") { sequence in
+            sequence.updateClips([clipID]) { clip in
+                if clip.isTitle {
+                    clip.title = clamped
+                }
+            }
+        }
+    }
+
+    /// 페이드 인·아웃 키프레임을 넣는다(#76, 기본 0.5초). 트랜스폼 키프레임이 이미 있으면 바꾸지 않는다.
+    func addFade(to clipID: Clip.ID, duration: CMTime = CMTime(value: 1, timescale: 2)) {
+        editCurrentSequence("페이드 인·아웃") { $0.updateClips([clipID]) { $0.addFade(duration: duration) } }
+    }
+
     /// 녹음한 내레이션 파일을 가져와 `time`에 오디오 클립으로 놓는다(#10). 그 구간이 비어 있는 첫 오디오 트랙에 넣고,
     /// 없으면 오디오 트랙을 새로 만들어 기존 클립을 밀지 않는다. 가져오지 못하면 `nil`.
     @discardableResult
@@ -521,7 +551,8 @@ final class ProjectEditor {
         var pasted: PastedItems?
         switch clipboard {
         case let .clips(copied):
-            let available = copied.filter { asset(id: $0.clip.assetID) != nil }
+            // 타이틀(#76)은 원본 없이 글자만 있어 그대로 붙인다.
+            let available = copied.filter { $0.clip.isTitle || asset(id: $0.clip.assetID) != nil }
             editCurrentSequence("붙여넣기") { sequence in
                 let ids = sequence.paste(available, at: time)
                 pasted = ids.isEmpty ? nil : .clips(ids)

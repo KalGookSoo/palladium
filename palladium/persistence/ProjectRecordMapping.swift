@@ -87,6 +87,7 @@ private extension SequenceRecord {
                 .withColorAdjustment(of: clip)
                 .withCrop(of: clip)
                 .withAnimation(of: clip)
+                .withTitle(of: clip)
             }
             return trackRecord
         }
@@ -284,6 +285,7 @@ private extension ClipRecord {
         clip?.colorAdjustment = adjustment
         clip?.crop = ClipCrop(storedTop: cropTop, bottom: cropBottom, left: cropLeft, right: cropRight)
         clip?.animation = animationData.flatMap { try? JSONDecoder().decode(StoredClipAnimation.self, from: $0) }?.animation ?? ClipAnimation()
+        clip?.title = titleData.flatMap { try? JSONDecoder().decode(StoredTitle.self, from: $0) }?.title
         if clip == nil {
             let clipID = id
             Logger.project.error("Clip 불변식을 어기는 저장값이라 건너뜀: \(clipID, privacy: .public)")
@@ -372,5 +374,64 @@ private struct StoredClipAnimation: Codable {
                 Keyframe(time: $0.time.time, value: $0.volume, interpolation: KeyframeInterpolation(rawValue: $0.interpolation) ?? .linear)
             }.sorted { $0.time < $1.time }
         )
+    }
+}
+
+// MARK: - Title (#76)
+
+private extension ClipRecord {
+    func withTitle(of clip: Clip) -> ClipRecord {
+        titleData = clip.title.flatMap { try? JSONEncoder().encode(StoredTitle($0)) }
+        return self
+    }
+}
+
+/// 타이틀 저장 모양. 색은 RGB 세 값으로 둔다.
+private struct StoredTitle: Codable {
+    struct RGB: Codable {
+        let red: Double
+        let green: Double
+        let blue: Double
+
+        init(_ color: SubtitleRGB) {
+            red = color.red
+            green = color.green
+            blue = color.blue
+        }
+
+        var color: SubtitleRGB {
+            SubtitleRGB(red: red, green: green, blue: blue)
+        }
+    }
+
+    let text: String
+    let fontName: String
+    let fontSize: Double
+    let textColor: RGB
+    let outlineWidth: Double
+    let outlineColor: RGB
+    let hasShadow: Bool
+    let backgroundColor: RGB
+    let backgroundOpacity: Double
+
+    init(_ title: TitleText) {
+        text = title.text
+        fontName = title.fontName
+        fontSize = title.fontSize
+        textColor = RGB(title.textColor)
+        outlineWidth = title.outlineWidth
+        outlineColor = RGB(title.outlineColor)
+        hasShadow = title.hasShadow
+        backgroundColor = RGB(title.backgroundColor)
+        backgroundOpacity = title.backgroundOpacity
+    }
+
+    var title: TitleText {
+        var title = TitleText(
+            text: text, fontName: fontName, fontSize: fontSize, textColor: textColor.color, outlineWidth: outlineWidth,
+            outlineColor: outlineColor.color, hasShadow: hasShadow, backgroundColor: backgroundColor.color, backgroundOpacity: backgroundOpacity
+        )
+        title.clamp()
+        return title
     }
 }
