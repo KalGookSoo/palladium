@@ -125,7 +125,7 @@ nonisolated enum SequenceComposer {
                         let content = CompositionLayer.Content.video(trackID: videoTrack.trackID, naturalSize: naturalSize, preferredTransform: preferredTransform)
                         let layer = CompositionLayer(
                             content: content, transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, crop: clip.crop, animatedClip: animatedClip(clip),
-                            filters: clip.filters, chromaKey: clip.chromaKey
+                            filters: clip.filters, chromaKey: clip.chromaKey, stabilization: stabilizedLayer(of: clip, asset: asset)
                         )
                         placedLayers.append((layerRange, layer, order))
                     }
@@ -290,6 +290,12 @@ nonisolated enum SequenceComposer {
         } catch {
             Logger.playback.error("바탕 영상을 만들지 못함: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// 손떨림 보정이 켜져 있고 원본 분석이 끝났으면 그 값(#71). 분석 전이면 보정 없이 그린다.
+    private static func stabilizedLayer(of clip: Clip, asset: MediaAsset) -> StabilizedLayer? {
+        guard let settings = clip.stabilization, let path = StabilizationAnalyzer.motionPath(for: asset) else { return nil }
+        return StabilizedLayer(path: path, settings: settings, clip: clip)
     }
 
     /// 클립 소리가 나는 구간(크로스페이드로 앞뒤까지 늘어난 구간)과 그 소리 이펙트(#74).

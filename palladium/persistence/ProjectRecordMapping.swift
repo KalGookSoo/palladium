@@ -92,6 +92,7 @@ private extension SequenceRecord {
                 .withChromaKey(of: clip)
                 .withAudioEffects(of: clip)
                 .withGroup(of: clip)
+                .withStabilization(of: clip)
             }
             return trackRecord
         }
@@ -293,6 +294,11 @@ private extension ClipRecord {
         clip?.filters = filtersData.flatMap { try? JSONDecoder().decode([StoredFilter].self, from: $0) }?.compactMap(\.filter) ?? []
         clip?.chromaKey = chromaKeyData.flatMap { try? JSONDecoder().decode(StoredChromaKey.self, from: $0) }?.chromaKey
         clip?.groupID = groupID
+        clip?.stabilization = stabilizationStrength.map { strength in
+            var stabilization = ClipStabilization(strength: strength)
+            stabilization.clamp()
+            return stabilization
+        }
         clip?.audioEffects = audioEffectsData.flatMap { try? JSONDecoder().decode(StoredAudioEffects.self, from: $0) }?.effects ?? AudioEffects()
         if clip == nil {
             let clipID = id
@@ -550,6 +556,15 @@ private struct StoredAudioEffects: Codable {
 private extension ClipRecord {
     func withGroup(of clip: Clip) -> ClipRecord {
         groupID = clip.groupID
+        return self
+    }
+}
+
+// MARK: - Stabilization (#71)
+
+private extension ClipRecord {
+    func withStabilization(of clip: Clip) -> ClipRecord {
+        stabilizationStrength = clip.stabilization?.strength
         return self
     }
 }

@@ -172,6 +172,8 @@ final class ClipRecord {
     var audioEffectsData: Data?
     /// 타임라인 병합 그룹(#100). 옵셔널이라 기존 저장소가 열리고, `nil`이면 그룹이 아니다.
     var groupID: UUID?
+    /// 손떨림 보정 세기(#71). `nil`이면 꺼져 있다(옵셔널이라 기존 저장소가 열린다).
+    var stabilizationStrength: Double?
     var track: TrackRecord?
 
     init(

@@ -33,10 +33,38 @@ nonisolated struct CompositionLayer {
     var filters: [VideoFilter] = []
     /// 크로마키(#70). 색보정·필터보다 먼저 원본 이미지에 적용한다.
     var chromaKey: ChromaKey?
+    /// 손떨림 보정(#71): 원본 움직임 경로, 보정 설정, 시각을 원본 시각으로 바꿀 클립, 고정 확대 배율. 영상 층에만 쓴다.
+    var stabilization: StabilizedLayer?
 
     /// 합성 시각(시퀀스 시각)의 트랜스폼.
     func transform(at time: CMTime) -> ClipTransform {
         animatedClip?.transform(atTimeline: time) ?? transform
+    }
+}
+
+/// 손떨림 보정을 그릴 때 필요한 값(#71).
+nonisolated struct StabilizedLayer {
+    let path: MotionPath
+    let settings: ClipStabilization
+    let clip: Clip
+    /// 보정으로 옮겨도 가장자리가 보이지 않게 클립 전체에 같은 배율로 키운다.
+    let zoom: Double
+
+    init(path: MotionPath, settings: ClipStabilization, clip: Clip) {
+        self.path = path
+        self.settings = settings
+        self.clip = clip
+        zoom = path.zoom(during: clip.sourceRange.start.seconds ... clip.sourceRange.end.seconds, window: settings.smoothingWindow)
+    }
+
+    /// 합성 시각의 원본 프레임을 흔들림만큼 되돌려 옮기고 가운데 기준으로 키운다(원본 크기 그대로 자른다).
+    func apply(to image: CIImage, at time: CMTime) -> CIImage {
+        let extent = image.extent
+        let correction = path.correction(at: clip.sourceTime(atTimeline: time).seconds, window: settings.smoothingWindow)
+        let transform = CGAffineTransform(translationX: -extent.midX, y: -extent.midY)
+            .concatenating(CGAffineTransform(scaleX: zoom, y: zoom))
+            .concatenating(CGAffineTransform(translationX: extent.midX + correction.x * extent.width * zoom, y: extent.midY + correction.y * extent.height * zoom))
+        return image.transformed(by: transform).cropped(to: extent)
     }
 }
 
@@ -126,7 +154,9 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
                 crop: layer.crop,
                 renderSize: renderSize
             )
-            let keyed = Self.applying(layer.chromaKey, to: CIImage(cvPixelBuffer: buffer))
+            let frame = CIImage(cvPixelBuffer: buffer)
+            let stabilized = layer.stabilization?.apply(to: frame, at: request.compositionTime) ?? frame
+            let keyed = Self.applying(layer.chromaKey, to: stabilized)
             let source = Self.applying(layer.filters, to: Self.applying(layer.colorAdjustment, to: keyed))
             placed = Self.cropping(source.transformed(by: transform), by: layer.crop)
         case let .image(source):

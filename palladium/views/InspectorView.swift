@@ -22,6 +22,8 @@ struct InspectorView: View {
     var setChromaKey: (ChromaKey?) -> Void = { _ in }
     /// 클립 소리 이펙트(#74).
     var setAudioEffects: (Clip.ID, AudioEffects) -> Void = { _, _ in }
+    /// 손떨림 보정(#71). 켜면 원본 분석을 시작한다.
+    var setStabilization: (Clip.ID, ClipStabilization?) -> Void = { _, _ in }
     /// 클립 별칭(#78). 비우면 원본 이름을 보여준다.
     var renameClip: (Clip.ID, String) -> Void = { _, _ in }
     /// 트림 탭에서 원본 시작·끝 지점을 입력했을 때.
@@ -259,6 +261,11 @@ struct InspectorView: View {
             Section("이펙트", isExpanded: $isEffectExpanded) {
                 EffectInspectorView(adjustment: clip.colorAdjustment, setAdjustment: setColorAdjustment)
                 FilterInspectorView(filters: clip.filters, setFilters: setFilters)
+            }
+            if let asset, asset.kind == .video {
+                Section("손떨림 보정") {
+                    StabilizationInspectorView(asset: asset, stabilization: clip.stabilization) { setStabilization(clip.id, $0) }
+                }
             }
             Section("크로마키") {
                 ChromaKeyInspectorView(chromaKey: clip.chromaKey, setChromaKey: setChromaKey)

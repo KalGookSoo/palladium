@@ -547,6 +547,13 @@ final class ProjectEditor {
         editCurrentSequence(chromaKey == nil ? "크로마키 끄기" : "크로마키") { $0.updateClips(clipIDs) { $0.chromaKey = clamped } }
     }
 
+    /// 클립 손떨림 보정을 켜고 끄거나 세기를 바꾼다(#71). `nil`이면 끈다. 분석은 화면이 따로 시작한다(`StabilizationAnalyzer`).
+    func setStabilization(_ stabilization: ClipStabilization?, for clipID: Clip.ID) {
+        var clamped = stabilization
+        clamped?.clamp()
+        editCurrentSequence(stabilization == nil ? "손떨림 보정 끄기" : "손떨림 보정") { $0.updateClips([clipID]) { $0.stabilization = clamped } }
+    }
+
     /// 클립의 소리 이펙트를 바꾼다(#74, EQ·잔향·게이트·게인). 범위로 맞춘다.
     func setAudioEffects(_ effects: AudioEffects, for clipID: Clip.ID) {
         var clamped = effects

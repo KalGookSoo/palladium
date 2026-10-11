@@ -34,6 +34,8 @@ nonisolated struct Clip {
     var audioEffects = AudioEffects()
     /// 타임라인 병합 그룹(#100). 같은 값을 가진 맞닿은 클립들을 한 번에 고르고 옮기고 지운다. `nil`이면 그룹이 아니다.
     var groupID: UUID?
+    /// 손떨림 보정(#71). 있으면 켜져 있고, 원본 분석이 끝나면 합성에서 흔들림을 편다(영상 클립만).
+    var stabilization: ClipStabilization?
     /// 화면에서 잘라낼 만큼(#85, 클립 편집 창의 크롭). 위치·크기는 잘린 화면을 기준으로 한다.
     var crop = ClipCrop()
     /// 시간에 따라 바뀌는 트랜스폼·음량(#67, 키프레임). 비어 있으면 위의 고정 값을 쓴다.

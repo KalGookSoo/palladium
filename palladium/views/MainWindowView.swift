@@ -514,6 +514,13 @@ struct MainWindowView: View {
                     editor.setChromaKey(chromaKey, for: Set(pictureClips(in: currentSequence).map(\.id)))
                 },
                 setAudioEffects: { clipID, effects in editor.setAudioEffects(effects, for: clipID) },
+                setStabilization: { clipID, stabilization in
+                    editor.setStabilization(stabilization, for: clipID)
+                    // 켜면 원본 움직임을 뒤에서 분석한다(이미 했으면 건너뜀).
+                    if stabilization != nil, let clip = editor.currentSequence.clip(id: clipID), let asset = editor.asset(id: clip.assetID) {
+                        StabilizationAnalyzer.shared.analyzeIfNeeded(asset)
+                    }
+                },
                 renameClip: { clipID, name in editor.renameClip(clipID, to: name) },
                 setClipSource: { clipID, start, end in editor.setClipSource(clipID, start: start, end: end) },
                 setTransform: { clipID, transform in editor.setTransform(transform, for: clipID, at: playheadTime) },
@@ -1162,7 +1169,10 @@ private struct SequencePlayback: ViewModifier {
         content
             // 시퀀스·원본·화면비가 바뀌면 다시 합성한다. 연달아 바뀔 때 매번 합성하지 않도록 잠깐 기다린다.
             // 프록시가 생기거나 없어져도 다시 합성해 미리보기가 그 파일을 쓰게 한다(#43).
-            .task(id: CompositionKey(sequence: sequence, assets: assets, aspectRatio: aspectRatio, proxyRevision: ProxyGenerator.shared.revision)) {
+            .task(id: CompositionKey(
+                sequence: sequence, assets: assets, aspectRatio: aspectRatio, proxyRevision: ProxyGenerator.shared.revision,
+                stabilizationRevision: StabilizationAnalyzer.shared.revision
+            )) {
                 try? await Task.sleep(for: .milliseconds(150))
                 guard !Task.isCancelled else { return }
                 let composition = await SequenceComposer.makeComposition(
@@ -1195,6 +1205,8 @@ private struct CompositionKey: Equatable {
     let assets: [MediaAsset]
     let aspectRatio: AspectRatioPreset
     let proxyRevision: Int
+    /// 손떨림 분석(#71)이 끝나면 다시 합성해 보정이 보이게 한다.
+    let stabilizationRevision: Int
 }
 
 /// 미리보기와 타임라인 사이의 경계. 위아래로 끌어 타임라인 높이를 바꾼다.
