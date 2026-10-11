@@ -99,7 +99,12 @@ struct UnsavedChangesGuard: NSViewRepresentable {
                 window.delegate = self
             }
             self.window = window
-            window.isDocumentEdited = hasUnsavedChanges()
+            // 값이 같아도 설정하면 AppKit이 윈도우 메뉴 항목을 다시 그린다. 화면이 갱신될 때마다 불리므로
+            // 바뀔 때만 써야 메뉴가 열린 동안 편집·윈도우 메뉴가 깜빡이지 않는다.
+            let isEdited = hasUnsavedChanges()
+            if window.isDocumentEdited != isEdited {
+                window.isDocumentEdited = isEdited
+            }
         }
 
         /// 열려 있고 저장(적용)하지 않은 변경이 있는지.
