@@ -38,6 +38,14 @@ struct AssetSelectionOrderTests {
         #expect(AssetDragPayload.decode("file:///tmp/x.mov") == [])
     }
 
+    @Test("여러 줄을 골라 끌어 같은 묶음이 줄마다 와도 원본은 한 번씩, 처음 순서대로 읽는다(#106)")
+    func dragPayloadFromSeveralRows() {
+        let text = AssetDragPayload.encode([c, a, b])
+        #expect(AssetDragPayload.decode([text, text, text]) == [c, a, b])
+        #expect(AssetDragPayload.decode([a.uuidString, b.uuidString]) == [a, b])
+        #expect(AssetDragPayload.decode([String]()) == [])
+    }
+
     @Test("끄는 폴더는 원본 ID와 섞이지 않게 담아, 원본으로는 읽히지 않고 폴더로만 읽힌다(#93)")
     func folderPayload() {
         let text = FolderDragPayload.encode(a)

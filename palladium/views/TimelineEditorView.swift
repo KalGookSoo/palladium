@@ -192,7 +192,7 @@ struct TimelineEditorView: View {
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
                 .dropDestination(for: String.self) { items, _ in
-                    let assetIDs = items.flatMap(AssetDragPayload.decode)
+                    let assetIDs = AssetDragPayload.decode(items)
                     guard !assetIDs.isEmpty else { return false }
                     actions.dropAssets(assetIDs, [:], .zero)
                     return true

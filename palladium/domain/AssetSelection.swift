@@ -31,6 +31,13 @@ nonisolated enum AssetDragPayload {
     static func decode(_ text: String) -> [MediaAsset.ID] {
         text.split(whereSeparator: \.isNewline).compactMap { UUID(uuidString: String($0)) }
     }
+
+    /// 끌기 항목 여러 개를 한꺼번에 푼다(#106). 목록에서 여러 줄을 골라 끌면 고른 줄마다 같은 원본 묶음을 담은 항목이 오므로,
+    /// 겹치는 ID는 빼고 처음 나온 순서를 지킨다.
+    static func decode(_ items: [String]) -> [MediaAsset.ID] {
+        var seen = Set<MediaAsset.ID>()
+        return items.flatMap(decode).filter { seen.insert($0).inserted }
+    }
 }
 
 /// 미디어 패널에서 끄는 폴더(#93). 원본 ID와 섞이지 않게 앞에 표시를 붙인다(원본 ID로 읽히지 않아 타임라인은 무시한다).
