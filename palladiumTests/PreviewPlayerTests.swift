@@ -110,7 +110,7 @@ struct TrimPlayerTests {
         let player = TrimPlayer(url: url)
         try await waitUntil { player.player.currentItem?.status == .readyToPlay }
 
-        player.play(CMTimeRange(start: .zero, duration: seconds(2)))
+        player.play([CMTimeRange(start: .zero, duration: seconds(2))])
         #expect(player.isPlaying)
         player.beginScrubbing()
         #expect(!player.isPlaying)

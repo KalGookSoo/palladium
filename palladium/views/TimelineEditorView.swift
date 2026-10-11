@@ -568,7 +568,7 @@ struct TimelineEditorView: View {
         for kind in Set(dropped.map(\.trackKind)) where trackIDs[kind] == nil {
             trackIDs[kind] = preview.addTrack(kind: kind)
         }
-        let clips = dropped.compactMap { asset in asset.makeClip(at: target.time).map { (clip: $0, kind: asset.trackKind) } }
+        let clips = dropped.flatMap { asset in asset.makeClips(at: target.time).map { (clip: $0, kind: asset.trackKind) } }
         guard let firstClipID = preview.placeInOrder(clips, trackIDs: trackIDs).first, let firstTrackID = trackIDs[first.trackKind] else { return }
         isDragging = true
         dragPreview = DragPreview(sequence: preview, placeholderID: firstClipID, trackID: firstTrackID, time: target.time)

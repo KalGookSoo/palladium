@@ -138,6 +138,9 @@ private extension MediaAssetRecord {
         usedDurationTimescale = asset.usedRange?.duration.timescale ?? standardTimescale
         sourceAssetID = asset.sourceAssetID
         (cropTop, cropBottom, cropLeft, cropRight) = asset.crop.storedValues
+        excludedRangeValues = asset.excludedRanges.isEmpty ? nil : asset.excludedRanges.flatMap {
+            [$0.start.value, Int64($0.start.timescale), $0.duration.value, Int64($0.duration.timescale)]
+        }
         return self
     }
 
@@ -159,8 +162,20 @@ private extension MediaAssetRecord {
             tags: tags,
             usedRange: usedRange,
             sourceAssetID: sourceAssetID,
-            crop: ClipCrop(storedTop: cropTop, bottom: cropBottom, left: cropLeft, right: cropRight)
+            crop: ClipCrop(storedTop: cropTop, bottom: cropBottom, left: cropLeft, right: cropRight),
+            excludedRanges: excludedRanges
         )
+    }
+
+    /// 저장된 뺀 구간들. 쓰는 구간(없으면 원본 전체) 안으로 정리하고, 값이 맞지 않는 구간은 버린다.
+    var excludedRanges: [CMTimeRange] {
+        guard let values = excludedRangeValues, values.count % 4 == 0 else { return [] }
+        let ranges = stride(from: 0, to: values.count, by: 4).compactMap { index -> CMTimeRange? in
+            guard let startScale = Int32(exactly: values[index + 1]), let durationScale = Int32(exactly: values[index + 3]), startScale > 0, durationScale > 0 else { return nil }
+            return CMTimeRange(start: CMTime(value: values[index], timescale: startScale), duration: CMTime(value: values[index + 2], timescale: durationScale))
+        }
+        let bounds = usedRange ?? CMTimeRange(start: .zero, duration: CMTime(value: durationValue, timescale: durationTimescale))
+        return RangeExclusion.normalized(ranges, within: bounds)
     }
 
     /// 저장된 사용 구간. 길이가 0 이하이거나 원본 범위를 벗어나면 구간 없음(원본 전체)으로 연다.

@@ -163,9 +163,10 @@ enum ClipEditTab {
     case crop
 }
 
-/// 대상이 가진(또는 창에서 고치는) 구간과 크롭.
+/// 대상이 가진(또는 창에서 고치는) 구간·뺀 구간(#99)·크롭.
 private struct ClipEditValues: Equatable {
     var range: CMTimeRange
+    var excluded: [CMTimeRange] = []
     var crop: ClipCrop
 }
 
@@ -177,6 +178,12 @@ struct ClipEditView: View {
     let session: ClipEditSession
     @State private var kind: ClipEditTarget
     @State private var range: CMTimeRange
+    /// 뺀 구간들(#99). 결과는 손잡이 구간에서 이 구간들을 빼고 남은 구간들을 이어 붙인 것이다.
+    @State private var excluded: [CMTimeRange]
+    /// "구간 빼기"·"되살리기" 뒤 손잡이가 돌아갈 바깥 구간. 창을 열거나 적용한 때의 구간이다.
+    @State private var outer: CMTimeRange
+    /// 눌러 고른 뺀 구간(되살리기 대상).
+    @State private var selectedExcluded: CMTimeRange?
     @State private var crop: ClipCrop
     /// 대상이 마지막으로 가진 값. 고치는 값과 다르면 적용하지 않은 변경이 있다.
     @State private var committed: ClipEditValues?
@@ -200,6 +207,8 @@ struct ClipEditView: View {
         let values = Self.currentValues(of: target, in: session.editor)
         _kind = State(initialValue: target)
         _range = State(initialValue: values?.range ?? CMTimeRange(start: .zero, duration: .zero))
+        _excluded = State(initialValue: values?.excluded ?? [])
+        _outer = State(initialValue: values?.range ?? CMTimeRange(start: .zero, duration: .zero))
         _crop = State(initialValue: values?.crop ?? ClipCrop())
         _committed = State(initialValue: values)
     }
@@ -246,9 +255,15 @@ struct ClipEditView: View {
                     TrimBarView(
                         asset: asset,
                         range: range,
+                        excluded: excluded,
+                        selectedExcluded: selectedExcluded,
                         playhead: player?.currentTime ?? range.start,
                         activeEdge: activeEdge,
                         allowsRangeEditing: !isCropping(asset),
+                        canExclude: canExclude,
+                        selectExcluded: { selectedExcluded = $0 },
+                        excludeSelection: excludeSelection,
+                        restore: { restore($0) },
                         zoom: barZoom,
                         scrollPosition: $barScrollPosition,
                         viewport: $barViewport,
@@ -274,7 +289,7 @@ struct ClipEditView: View {
         .focusable()
         .focusEffectDisabled()
         .focused($isFocused)
-        .onKeyPress(keys: [.upArrow, .downArrow, .space]) { press in
+        .onKeyPress(keys: [.upArrow, .downArrow, .space, .delete, .deleteForward]) { press in
             handle(press)
         }
         .task(id: asset?.mediaKey) {
@@ -289,8 +304,7 @@ struct ClipEditView: View {
         .onChange(of: Self.currentValues(of: kind, in: editor)) { _, values in
             committed = values
             if let values {
-                range = values.range
-                crop = values.crop
+                reset(to: values)
             }
         }
         .onChange(of: hasUnappliedChanges, initial: true) { _, hasChanges in
@@ -343,7 +357,7 @@ struct ClipEditView: View {
                 Text("막대를 눌러 다른 장면으로 옮깁니다. 구간은 트림 탭에서 바꿉니다")
                     .foregroundStyle(.secondary)
             } else {
-                Text("시작 \(labelScale.timeLabel(for: range.start)) · 끝 \(labelScale.timeLabel(for: range.end)) · 길이 \(labelScale.timeLabel(for: range.duration))")
+                Text(trimSummary)
                     .monospacedDigit()
                 Spacer()
                 Text("↑/↓ \(activeEdge == .start ? "시작" : "끝")을 0.1초씩, ⇧와 함께 1초씩 · ⌥ 끌기로 정밀하게")
@@ -445,8 +459,14 @@ struct ClipEditView: View {
         HStack {
             if session.tab == .trim || asset.kind != .video {
                 Button("자르기") { split(at: playhead) }
-                    .disabled(!TrimRange.canSplit(range, at: playhead))
-                    .help("재생 위치에서 둘로 자릅니다. 옮겨 둔 손잡이 구간과 크롭도 함께 반영합니다")
+                    .disabled(!TrimRange.canSplit(range, at: playhead) || !excluded.isEmpty)
+                    .help(excluded.isEmpty ? "재생 위치에서 둘로 자릅니다. 옮겨 둔 손잡이 구간과 크롭도 함께 반영합니다" : "뺀 구간이 있으면 자를 수 없습니다. 먼저 적용하거나 되살리세요")
+                Button("구간 빼기") { excludeSelection() }
+                    .disabled(!canExclude)
+                    .help(ShortcutGuide.excludeRange.helpText)
+                Button("되살리기") { restore() }
+                    .disabled(selectedExcluded == nil)
+                    .help("빗금 친 뺀 구간을 눌러 고른 뒤 다시 포함합니다")
             }
             Spacer()
             // "취소"는 버리겠다는 뜻이라 묻지 않고 닫는다.
@@ -492,7 +512,51 @@ struct ClipEditView: View {
     }
 
     private var hasUnappliedChanges: Bool {
-        committed.map { $0 != ClipEditValues(range: range, crop: crop) } ?? false
+        committed.map { $0 != ClipEditValues(range: range, excluded: excluded, crop: crop) } ?? false
+    }
+
+    /// 손잡이 구간에서 뺀 구간을 빼고 남은 구간들(#99). 재생·적용·저장이 이 구간들을 쓴다.
+    private var keptRanges: [CMTimeRange] {
+        RangeExclusion.kept(bounds: range, excluded: excluded)
+    }
+
+    /// 지금 손잡이 구간을 뺄 수 있는지. 바깥 구간 전체를 고른 채이거나 빼면 남는 구간이 없으면 뺄 수 없다.
+    private var canExclude: Bool {
+        guard let asset, !isCropping(asset), range != outer else { return false }
+        return !RangeExclusion.kept(bounds: outer, excluded: excluded + [range]).isEmpty
+    }
+
+    /// "시작 0:02.0 · 끝 0:12.0 · 길이 0:10.0", 뺀 구간이 있으면 "· 구간 3개 · 남은 길이 0:07.0"을 붙인다.
+    private var trimSummary: String {
+        let base = "시작 \(labelScale.timeLabel(for: range.start)) · 끝 \(labelScale.timeLabel(for: range.end)) · 길이 \(labelScale.timeLabel(for: range.duration))"
+        guard !excluded.isEmpty else { return base }
+        let kept = keptRanges
+        return base + " · 구간 \(kept.count)개 · 남은 길이 \(labelScale.timeLabel(for: kept.reduce(.zero) { $0 + $1.duration }))"
+    }
+
+    /// 손잡이 구간을 뺀 구간에 더하고(#99) 손잡이를 바깥 구간으로 되돌린다. 겹치거나 맞닿은 뺀 구간은 하나로 합친다.
+    private func excludeSelection() {
+        guard canExclude else { return }
+        player?.pause()
+        excluded = RangeExclusion.normalized(excluded + [range], within: outer)
+        selectedExcluded = nil
+        range = outer
+    }
+
+    /// 뺀 구간을 다시 포함한다(#99). `target`이 없으면 고른 뺀 구간이다.
+    private func restore(_ target: CMTimeRange? = nil) {
+        guard let restoring = target ?? selectedExcluded else { return }
+        excluded.removeAll { $0 == restoring }
+        selectedExcluded = nil
+    }
+
+    /// 대상의 값으로 창을 다시 맞춘다(열 때·적용 뒤·바깥에서 바뀔 때).
+    private func reset(to values: ClipEditValues) {
+        range = values.range
+        outer = values.range
+        excluded = values.excluded
+        selectedExcluded = nil
+        crop = values.crop
     }
 
     /// 크롭은 영상에만 반영한다.
@@ -518,7 +582,9 @@ struct ClipEditView: View {
     private static func currentValues(of kind: ClipEditTarget, in editor: ProjectEditor) -> ClipEditValues? {
         switch kind {
         case let .asset(assetID):
-            return editor.asset(id: assetID).map { ClipEditValues(range: $0.usedRange ?? CMTimeRange(start: .zero, duration: $0.duration), crop: $0.crop) }
+            return editor.asset(id: assetID).map {
+                ClipEditValues(range: $0.usedRange ?? CMTimeRange(start: .zero, duration: $0.duration), excluded: $0.excludedRanges, crop: $0.crop)
+            }
         case let .clip(clipID):
             return editor.currentSequence.clip(id: clipID).map { ClipEditValues(range: $0.sourceRange, crop: $0.crop) }
         }
@@ -570,6 +636,10 @@ struct ClipEditView: View {
         switch press.key {
         case .space:
             togglePlayback()
+        case .delete, .deleteForward:
+            // 이 창이 앞에 있을 때만 받아 타임라인·미디어 패널 삭제로 가지 않는다(#99).
+            guard session.tab == .trim || asset.kind != .video else { return .ignored }
+            excludeSelection()
         default:
             guard session.tab == .trim || asset.kind != .video else { return .ignored }
             player?.beginScrubbing()
@@ -586,12 +656,12 @@ struct ClipEditView: View {
         if player.isPlaying {
             player.pause()
         } else {
-            player.play(range)
+            player.play(keptRanges)
         }
     }
 
     private func saveAsNewItem(_ asset: MediaAsset) {
-        editor.addTrimmedAsset(from: asset.id, start: range.start, end: range.end, crop: cropToApply ?? ClipCrop())
+        editor.addTrimmedAsset(from: asset.id, start: range.start, end: range.end, excluded: excluded, crop: cropToApply ?? ClipCrop())
         close()
     }
 
@@ -600,13 +670,12 @@ struct ClipEditView: View {
     private func saveKeepingWindow() {
         guard let asset else { return }
         if case .asset = kind, !asset.isDerived {
-            guard let newID = editor.addTrimmedAsset(from: asset.id, start: range.start, end: range.end, crop: cropToApply ?? ClipCrop()) else { return }
+            guard let newID = editor.addTrimmedAsset(from: asset.id, start: range.start, end: range.end, excluded: excluded, crop: cropToApply ?? ClipCrop()) else { return }
             kind = .asset(newID)
             session.target = kind
             if let current = Self.currentValues(of: kind, in: editor) {
                 committed = current
-                range = current.range
-                crop = current.crop
+                reset(to: current)
             }
         } else {
             applyDefault()
@@ -619,11 +688,11 @@ struct ClipEditView: View {
         guard let asset else { return }
         switch kind {
         case let .clip(clipID):
-            editor.commitClipTrim(clipID, start: range.start, end: range.end, crop: cropToApply)
+            editor.commitClipTrim(clipID, start: range.start, end: range.end, excluded: excluded, crop: cropToApply)
         case .asset where asset.isDerived:
-            editor.setUsedRange(start: range.start, end: range.end, crop: cropToApply, for: asset.id)
+            editor.setUsedRange(start: range.start, end: range.end, excluded: excluded, crop: cropToApply, for: asset.id)
         case .asset:
-            editor.addTrimmedAsset(from: asset.id, start: range.start, end: range.end, crop: cropToApply ?? ClipCrop())
+            editor.addTrimmedAsset(from: asset.id, start: range.start, end: range.end, excluded: excluded, crop: cropToApply ?? ClipCrop())
         }
     }
 
@@ -662,8 +731,7 @@ struct ClipEditView: View {
         }
         if let current = Self.currentValues(of: kind, in: editor) {
             committed = current
-            range = current.range
-            crop = current.crop
+            reset(to: current)
             player?.seek(to: current.range.start + CMTimeMultiplyByRatio(current.range.duration, multiplier: 1, divisor: 2))
         }
     }
@@ -851,10 +919,17 @@ private struct TrimBarViewport: Equatable {
 private struct TrimBarView: View {
     let asset: MediaAsset
     let range: CMTimeRange
+    /// 뺀 구간들(#99). 빗금으로 그리고, 누르면 골라 되살릴 수 있다.
+    let excluded: [CMTimeRange]
+    let selectedExcluded: CMTimeRange?
     let playhead: CMTime
     let activeEdge: ClipEdge
     /// 크롭 탭에서는 구간 손잡이를 감추고 재생 위치만 옮긴다(#89).
     let allowsRangeEditing: Bool
+    let canExclude: Bool
+    let selectExcluded: (CMTimeRange?) -> Void
+    let excludeSelection: () -> Void
+    let restore: (CMTimeRange) -> Void
     let zoom: TrimBarZoom
     @Binding var scrollPosition: ScrollPosition
     @Binding var viewport: TrimBarViewport
@@ -936,6 +1011,27 @@ private struct TrimBarView: View {
         return ZStack(alignment: .topLeading) {
             filmstrip(contentWidth: contentWidth, visibleWidth: visibleWidth)
                 .gesture(scrubGesture(visibleWidth: visibleWidth))
+                .contextMenu {
+                    if allowsRangeEditing {
+                        Button("구간 빼기", action: excludeSelection)
+                            .disabled(!canExclude)
+                    }
+                }
+            // 뺀 구간(#99)은 빗금으로. 누르면 고르고, 우클릭으로 되살린다.
+            ForEach(excluded, id: \.self) { excludedRange in
+                let minX = x(excludedRange.start)
+                let isSelected = excludedRange == selectedExcluded
+                HatchedRangeView(isSelected: isSelected)
+                    .frame(width: max(x(excludedRange.end) - minX, 2), height: Self.height)
+                    .contentShape(Rectangle())
+                    .offset(x: minX)
+                    .onTapGesture { selectExcluded(isSelected ? nil : excludedRange) }
+                    .contextMenu {
+                        Button("되살리기") { restore(excludedRange) }
+                    }
+                    .help("뺀 구간 — 눌러 고르고 \"되살리기\"로 다시 포함합니다")
+                    .allowsHitTesting(allowsRangeEditing)
+            }
             // 고르지 않은 바깥은 어둡게.
             Color.black.opacity(0.55)
                 .frame(width: max(startX, 0))
@@ -1106,6 +1202,31 @@ private struct TrimBarView: View {
     }
 }
 
+/// 뺀 구간(#99) 표시. 어둡게 덮고 빗금을 긋는다. 고르면 테두리를 두른다.
+private struct HatchedRangeView: View {
+    let isSelected: Bool
+
+    var body: some View {
+        Canvas { context, size in
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black.opacity(0.6)))
+            var stripes = Path()
+            var x = -size.height
+            while x < size.width {
+                stripes.move(to: CGPoint(x: x, y: size.height))
+                stripes.addLine(to: CGPoint(x: x + size.height, y: 0))
+                x += 8
+            }
+            context.clip(to: Path(CGRect(origin: .zero, size: size)))
+            context.stroke(stripes, with: .color(.red.opacity(0.7)), lineWidth: 1.5)
+        }
+        .overlay {
+            if isSelected {
+                Rectangle().strokeBorder(.white, lineWidth: 2)
+            }
+        }
+    }
+}
+
 // MARK: - Player
 
 /// 클립 편집 창에서 원본을 재생하는 플레이어. 시퀀스 미리보기(`PreviewPlayer`)와 따로 둔다.
@@ -1118,6 +1239,8 @@ final class TrimPlayer {
     /// 탐색이 끝나기 전에 들어온 다음 위치(#95). 앞 탐색이 끝나면 마지막 위치 하나만 이어서 찾는다("chase seek").
     @ObservationIgnored private var isSeeking = false
     @ObservationIgnored private var pendingSeekTime: CMTime?
+    /// 뺀 구간을 건너뛰는 경계 관찰자(#99). 재생할 때 걸고 멈추면 뗀다.
+    @ObservationIgnored private var skipObserver: Any?
 
     init(url: URL) {
         let item = AVPlayerItem(url: url)
@@ -1164,19 +1287,45 @@ final class TrimPlayer {
         }
     }
 
-    /// 고른 구간만 재생하고 끝에서 멈춘다. 재생 위치가 구간 밖이거나 끝이면 처음부터.
-    func play(_ range: CMTimeRange) {
-        player.currentItem?.forwardPlaybackEndTime = range.end
-        if currentTime < range.start || currentTime >= range.end - Clip.minimumDuration {
-            seek(to: range.start)
+    /// 남은 구간들만 이어 재생하고 마지막 구간 끝에서 멈춘다(#99, 뺀 구간은 건너뛴다). 재생 위치가 처음 구간 앞이거나 끝이면 처음부터,
+    /// 뺀 구간 안이면 다음 구간부터.
+    func play(_ segments: [CMTimeRange]) {
+        guard let first = segments.first, let last = segments.last else { return }
+        removeSkipObserver()
+        player.currentItem?.forwardPlaybackEndTime = last.end
+        if currentTime < first.start || currentTime >= last.end - Clip.minimumDuration {
+            seek(to: first.start)
+        } else if let next = segments.first(where: { currentTime < $0.start }), !segments.contains(where: { $0.containsTime(currentTime) }) {
+            seek(to: next.start)
+        }
+        let jumps = zip(segments, segments.dropFirst()).map { (from: $0.end, to: $1.start) }
+        if !jumps.isEmpty {
+            skipObserver = player.addBoundaryTimeObserver(forTimes: jumps.map { NSValue(time: $0.from) }, queue: .main) { [weak self] in
+                MainActor.assumeIsolated { self?.skipGap(jumps) }
+            }
         }
         player.play()
         isPlaying = true
     }
 
+    /// 경계에 닿으면 가장 가까운 뺀 구간의 끝으로 건너뛴다.
+    private func skipGap(_ jumps: [(from: CMTime, to: CMTime)]) {
+        let now = player.currentTime()
+        guard let jump = jumps.min(by: { abs(($0.from - now).seconds) < abs(($1.from - now).seconds) }) else { return }
+        player.seek(to: jump.to, toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
+    private func removeSkipObserver() {
+        if let skipObserver {
+            player.removeTimeObserver(skipObserver)
+            self.skipObserver = nil
+        }
+    }
+
     func pause() {
         player.pause()
         isPlaying = false
+        removeSkipObserver()
     }
 
     func stop() {

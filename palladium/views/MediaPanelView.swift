@@ -601,10 +601,10 @@ private struct MediaAssetRow<Name: View>: View {
 
     var body: some View {
         // 이미지는 길이가 없어(타임라인에 놓을 기본 길이만 있음) 길이 대신 종류를 보여준다.
-        // 파생 항목(#81)은 쓰는 구간 길이를 보여준다.
+        // 파생 항목(#81)은 쓰는 구간 길이(뺀 구간이 있으면 남은 구간 길이의 합, #99)를 보여준다.
         let durationText = asset.kind == .image
             ? "이미지"
-            : Duration.seconds((asset.usedRange?.duration ?? asset.duration).seconds).formatted(.time(pattern: .minuteSecond))
+            : Duration.seconds(asset.placementDuration.seconds).formatted(.time(pattern: .minuteSecond))
         let showsProxyBadge = ProxyGenerator.shared.progress[asset.mediaKey] == nil && ProxyGenerator.shared.hasProxy(asset)
 
         // 간격을 정하지 않으면 뱃지 유무에 따라 썸네일과 이름 사이 여백이 달라진다(#83).
@@ -661,11 +661,12 @@ private struct MediaAssetRow<Name: View>: View {
     }
 
     /// 태그가 있으면 길이 뒤에 붙인다. 예: "0:10 · 인터뷰, B컷"
-    /// 파생 항목은 길이 뒤에 쓰는 구간을, 태그가 있으면 그 뒤에 붙인다. 예: "0:05 · 0:02.0–0:07.0 · 인터뷰"
+    /// 파생 항목은 길이 뒤에 쓰는 구간을, 구간을 뺐으면(#99) 남은 구간 수를, 태그가 있으면 그 뒤에 붙인다. 예: "0:05 · 0:02.0–0:07.0 · 구간 3개 · 인터뷰"
     private func detailText(durationText: String) -> String {
         let label = TimelineScale(pointsPerSecond: 40)
         let rangeText = asset.usedRange.map { "\(label.timeLabel(for: $0.start))–\(label.timeLabel(for: $0.end))" }
-        return ([durationText, rangeText] + [asset.tags.isEmpty ? nil : asset.tags.joined(separator: ", ")]).compactMap(\.self).joined(separator: " · ")
+        let segmentText = asset.excludedRanges.isEmpty ? nil : "구간 \(asset.keptRanges.count)개"
+        return ([durationText, rangeText, segmentText] + [asset.tags.isEmpty ? nil : asset.tags.joined(separator: ", ")]).compactMap(\.self).joined(separator: " · ")
     }
 }
 

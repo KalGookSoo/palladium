@@ -74,6 +74,40 @@ nonisolated extension Track {
         }
     }
 
+    /// 클립을 원본 구간 여러 개로 나눠 빈틈없이 맞닿게 놓는다(#99, 클립 편집 창에서 구간을 빼고 "적용"). 앞 조각이 원래 ID를 지키고
+    /// 뒤 조각은 새 ID다. 조각은 원래 클립의 속성(위치·음량·이펙트·크롭·속도 등)을 그대로 갖고, 앞 클립과의 전환은 앞 조각에만 남는다.
+    /// 길이가 바뀐 만큼 뒤 클립들을 당기거나 민다(리플). 구간이 없으면 바꾸지 않는다.
+    mutating func replaceClip(_ clipID: Clip.ID, withSourceRanges ranges: [CMTimeRange]) {
+        guard let index = clips.firstIndex(where: { $0.id == clipID }), !ranges.isEmpty else { return }
+        let original = clips[index]
+        let oldEnd = original.timelineRange.end
+        var start = original.timelineStart
+        let pieces = ranges.enumerated().map { offset, range -> Clip in
+            var piece = original
+            if offset > 0 {
+                piece = Clip(id: UUID(), assetID: original.assetID, sourceRange: range, timelineStart: start) ?? original
+                piece.speed = original.speed
+                piece.transform = original.transform
+                piece.volume = original.volume
+                piece.isMuted = original.isMuted
+                piece.name = original.name
+                piece.colorLabel = original.colorLabel
+                piece.colorAdjustment = original.colorAdjustment
+                piece.crop = original.crop
+            }
+            piece.sourceRange = range
+            piece.timelineStart = start
+            start = start + piece.timelineDuration
+            return piece
+        }
+        let change = start - oldEnd
+        for other in clips.indices where other != index && clips[other].timelineStart >= oldEnd {
+            clips[other].timelineStart = clips[other].timelineStart + change
+        }
+        clips.replaceSubrange(index ... index, with: pieces)
+        clips.sort { $0.timelineStart < $1.timelineStart }
+    }
+
     /// `ripple`이면 지운 클립 뒤의 클립을 지운 길이만큼 당겨 틈을 메운다.
     mutating func removeClip(id: Clip.ID, ripple: Bool) {
         guard let index = clips.firstIndex(where: { $0.id == id }) else { return }
@@ -344,6 +378,13 @@ nonisolated extension EditSequence {
         return clip.isMuted || track.isMuted ? 0 : clip.volume * track.volume
     }
 
+    /// 클립이 있는 트랙에서 클립을 원본 구간 여러 개로 나눠 맞닿게 놓는다(#99, 리플).
+    mutating func replaceClip(_ clipID: Clip.ID, withSourceRanges ranges: [CMTimeRange]) {
+        for index in tracks.indices where tracks[index].clips.contains(where: { $0.id == clipID }) {
+            tracks[index].replaceClip(clipID, withSourceRanges: ranges)
+        }
+    }
+
     /// 클립이 있는 트랙에서 원본 구간을 바꾼다(리플 트림).
     mutating func setSourceRange(_ range: CMTimeRange, forClip clipID: Clip.ID) {
         for index in tracks.indices where tracks[index].clips.contains(where: { $0.id == clipID }) {
@@ -410,9 +451,15 @@ nonisolated extension MediaAsset {
         kind == .audio ? .audio : .video
     }
 
-    /// 타임라인에 처음 놓을 때의 길이. 파생 항목은 쓰는 구간 길이, 이미지는 길이가 없어 정해진 길이를 쓴다.
+    /// 타임라인에 처음 놓을 때의 길이. 파생 항목은 쓰는 구간(뺀 구간이 있으면 남은 구간들, #99)의 길이 합, 이미지는 길이가 없어 정해진 길이를 쓴다.
     var placementDuration: CMTime {
-        usedRange?.duration ?? (kind == .image ? Self.stillImageDuration : duration)
+        keptRanges.reduce(.zero) { $0 + $1.duration }
+    }
+
+    /// 타임라인에 놓을 원본 구간들(#99). 뺀 구간이 없으면 쓰는 구간(없으면 원본 전체, 이미지는 정해진 길이) 하나다.
+    var keptRanges: [CMTimeRange] {
+        let bounds = usedRange ?? CMTimeRange(start: .zero, duration: kind == .image ? Self.stillImageDuration : duration)
+        return excludedRanges.isEmpty ? [bounds] : RangeExclusion.kept(bounds: bounds, excluded: excludedRanges)
     }
 
     /// 클립이 원본에서 쓸 수 있는 길이. 이미지는 길이 제한이 없어 `nil`.
@@ -420,11 +467,21 @@ nonisolated extension MediaAsset {
         kind == .image ? nil : duration
     }
 
-    /// 이 항목(파생 항목이면 쓰는 구간과 크롭)을 `time`에 놓는 새 클립. 길이가 0이면 `nil`.
+    /// 이 항목(파생 항목이면 쓰는 구간과 크롭)을 `time`부터 놓는 새 클립들. 뺀 구간이 있으면(#99) 남은 구간마다 클립 하나씩
+    /// 빈틈없이 맞닿게 이어진다. 길이가 0이면 빈 배열.
+    func makeClips(at time: CMTime) -> [Clip] {
+        var start = CMTimeMaximum(time, .zero)
+        return keptRanges.compactMap { range in
+            // 파생 항목(#81)은 쓰는 구간만 놓고, 크롭(#85)도 클립에 따라간다.
+            var clip = Clip(assetID: id, sourceRange: range, timelineStart: start)
+            clip?.crop = crop
+            start = start + range.duration
+            return clip
+        }
+    }
+
+    /// `makeClips(at:)`의 첫 클립. 뺀 구간이 없는 항목이면 그 항목 전체를 놓는 클립이다.
     func makeClip(at time: CMTime) -> Clip? {
-        // 파생 항목(#81)은 쓰는 구간만 놓고, 크롭(#85)도 클립에 따라간다.
-        var clip = Clip(assetID: id, sourceRange: usedRange ?? CMTimeRange(start: .zero, duration: placementDuration), timelineStart: CMTimeMaximum(time, .zero))
-        clip?.crop = crop
-        return clip
+        makeClips(at: time).first
     }
 }

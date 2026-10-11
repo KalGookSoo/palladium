@@ -19,6 +19,8 @@ nonisolated struct MediaAsset {
     var sourceAssetID: UUID? = nil
     /// 파생 항목이 잘라낼 화면(#85, 크롭). 타임라인에 놓으면 클립이 이 크롭을 갖는다. 원본 항목에는 두지 않는다.
     var crop = ClipCrop()
+    /// 파생 항목에서 뺀 구간들(#99). `usedRange` 안의 빈 곳이고 시작 순이다. 타임라인에 놓으면 남은 구간들이 맞닿은 클립 여러 개가 된다.
+    var excludedRanges: [CMTimeRange] = []
 }
 
 nonisolated enum MediaKind: String {

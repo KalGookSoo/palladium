@@ -64,6 +64,7 @@ enum ShortcutGuide {
     static let rename = ShortcutGuideEntry(title: "이름 변경", summary: "타임라인에서 고른 클립의 별칭을, 미디어 패널에 포커스가 있으면 고른 원본의 이름을 바꿉니다", keys: "F2")
     static let clipEditor = ShortcutGuideEntry(title: "클립 편집…", summary: "고른 클립(미디어 패널에 포커스가 있으면 항목)을 클립 편집 창에서 엽니다 — 트림 탭에서 원본 전체를 보며 줄이고 늘리고 자르고, 크롭 탭에서 화면을 잘라냅니다", keys: "⌘T")
     static let trimNudge = ShortcutGuideEntry(title: "트림 구간 미세 조정", summary: "클립 편집 창 트림 탭에서 마지막으로 잡은 손잡이를 0.1초씩, ⇧와 함께 1초씩 옮깁니다", keys: "↑/↓ (클립 편집 창)")
+    static let excludeRange = ShortcutGuideEntry(title: "구간 빼기", summary: "클립 편집 창 트림 탭에서 노란 손잡이로 고른 구간을 빼고 남은 구간들을 이어 붙입니다(빗금을 눌러 되살리기)", keys: "⌫ (클립 편집 창)")
     static let zoomInTrimBar = ShortcutGuideEntry(title: "필름스트립 확대", summary: "클립 편집 창의 필름스트립 막대를 더 자세히 봅니다(핀치로도 됩니다)", keys: "⌘= (클립 편집 창)")
     static let zoomOutTrimBar = ShortcutGuideEntry(title: "필름스트립 축소", summary: "클립 편집 창의 필름스트립 막대를 더 넓게 봅니다", keys: "⌘- (클립 편집 창)")
     static let fitTrimBar = ShortcutGuideEntry(title: "필름스트립 전체 맞춤", summary: "클립 편집 창의 필름스트립 막대에 원본 전체가 보이게 합니다", keys: "⌘0 (클립 편집 창)")
@@ -81,7 +82,7 @@ enum ShortcutGuide {
         ("파일", [openProjectList, newProject, save, close, importMedia, export, batchExport]),
         ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline]),
         ("재생", [playPause, previousFrame, nextFrame, narration]),
-        ("편집", [undo, redo, rename, clipEditor, trimNudge, preciseTrimBar, zoomInTrimBar, zoomOutTrimBar, fitTrimBar, cropKeepRatio, cutCopyPasteAssets, deleteAsset]),
+        ("편집", [undo, redo, rename, clipEditor, trimNudge, excludeRange, preciseTrimBar, zoomInTrimBar, zoomOutTrimBar, fitTrimBar, cropKeepRatio, cutCopyPasteAssets, deleteAsset]),
         ("타임라인", [deleteClips, rippleDeleteClips, cutClips, copyClips, pasteClips, duplicateClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect, addMarker, addSubtitle, moveSubtitle, preciseTrim, rollTrim, slipTrim, slideTrim]),
         ("도움말", [showHelp, showShortcuts]),
     ]

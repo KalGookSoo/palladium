@@ -35,6 +35,7 @@ classDiagram
         colorLabel: ColorLabel?
         tags: Array~String~
         usedRange: CMTimeRange?
+        excludedRanges: Array~CMTimeRange~
         sourceAssetID: UUID?
     }
     class EditSequence {
@@ -98,7 +99,7 @@ classDiagram
 | 타입             | 책임                                                          | 비고                                                                      |
 |----------------|-------------------------------------------------------------|-------------------------------------------------------------------------|
 | `Project`      | 가져온 원본 미디어와 시퀀스를 담는 저장 단위                                   | 새 프로젝트는 빈 시퀀스 하나로 시작한다([프로젝트 저장/불러오기](use-cases/project-management.md)) |
-| `MediaAsset`   | 가져온 원본 파일 하나(영상/오디오/이미지)의 정보                                | 미디어 패널에 보이는 항목. 정리용으로 색상 레이블과 태그(자유 텍스트 여러 개)를 갖는다. 타임라인 배치 정보는 갖지 않는다. `name`은 가져올 때 파일 이름으로 채우고 이후 바꿀 수 있다. 원본 위치는 `sourceURL`과 함께 security-scoped bookmark(`bookmarkData`)로 들고 있어 앱을 다시 켜도 연다([파일 접근 권한](file-access-and-sandboxing.md)). 클립 편집 창으로 만든 파생 항목은 쓰는 구간(`usedRange`, 없으면 전체)·크롭(`crop`, #85)과 처음 원본 표시(`sourceAssetID`)를 갖고, 처음 원본의 캐시 키(`mediaKey`)를 같이 쓴다(#81). 원본 항목·파일은 트림·크롭으로 바뀌지 않는다 |
+| `MediaAsset`   | 가져온 원본 파일 하나(영상/오디오/이미지)의 정보                                | 미디어 패널에 보이는 항목. 정리용으로 색상 레이블과 태그(자유 텍스트 여러 개)를 갖는다. 타임라인 배치 정보는 갖지 않는다. `name`은 가져올 때 파일 이름으로 채우고 이후 바꿀 수 있다. 원본 위치는 `sourceURL`과 함께 security-scoped bookmark(`bookmarkData`)로 들고 있어 앱을 다시 켜도 연다([파일 접근 권한](file-access-and-sandboxing.md)). 클립 편집 창으로 만든 파생 항목은 쓰는 구간(`usedRange`, 없으면 전체)·그 안에서 뺀 구간(`excludedRanges`, #99 — 놓으면 남은 구간마다 맞닿은 클립이 된다)·크롭(`crop`, #85)과 처음 원본 표시(`sourceAssetID`)를 갖고, 처음 원본의 캐시 키(`mediaKey`)를 같이 쓴다(#81). 원본 항목·파일은 트림·크롭으로 바뀌지 않는다 |
 | `MediaFolder`  | 미디어 패널에서 원본을 분류하는 폴더(빈) 하나                                   | 원본을 복사하지 않고 `assetIDs`로 참조한다. 어느 폴더에도 없는 원본은 "분류 안 됨"으로 보여준다. 한 단계뿐이고, 원본은 한 폴더에만 속한다(`Project.moveAssets(_:toFolder:before:)`가 다른 폴더에서 뺀다) |
 | `EditSequence` | 독립된 편집 결과물 하나(통합본 또는 하이라이트)                                 | Swift 표준 라이브러리의 `Sequence` 프로토콜과 이름이 겹치지 않도록 `EditSequence`로 짓는다        |
 | `Track`        | 시퀀스 안에서 클립이 시간순으로 놓이는 레인 하나                                 | `TrackKind`: `video`, `audio`                                           |

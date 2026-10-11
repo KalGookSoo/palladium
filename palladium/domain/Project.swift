@@ -208,12 +208,15 @@ nonisolated extension Project {
     }
 
     /// 파생 항목이 쓰는 구간을 바꾼다(#81, 클립 편집 창의 "적용"). 원본 범위 안으로 맞추고, 원본 전체가 되면 구간을 없앤다.
-    /// `crop`이 있으면 크롭(#85)도 범위로 맞춰 함께 바꾼다. 원본 항목(파생이 아닌 항목)은 바꾸지 않는다.
-    mutating func setUsedRange(_ range: CMTimeRange, crop: ClipCrop? = nil, for assetID: MediaAsset.ID) {
+    /// `excluded`(#99)는 그 구간에서 뺄 구간들이다. 남은 구간들을 감싸는 구간과 그 안의 빈 곳으로 정리해 저장하고(양 끝을 뺐으면 구간이 줄어든다),
+    /// 남는 구간이 없으면 바꾸지 않는다. `crop`이 있으면 크롭(#85)도 범위로 맞춰 함께 바꾼다. 원본 항목(파생이 아닌 항목)은 바꾸지 않는다.
+    mutating func setUsedRange(_ range: CMTimeRange, excluded: [CMTimeRange] = [], crop: ClipCrop? = nil, for assetID: MediaAsset.ID) {
         guard let index = assets.firstIndex(where: { $0.id == assetID }), assets[index].isDerived, assets[index].isTrimmable else { return }
         let duration = assets[index].duration
         let clamped = TrimRange.clamped(start: range.start, end: range.end, sourceDuration: duration)
-        assets[index].usedRange = clamped.start == .zero && clamped.end == duration ? nil : clamped
+        guard let (hull, gaps) = RangeExclusion.hullAndGaps(of: RangeExclusion.kept(bounds: clamped, excluded: excluded)) else { return }
+        assets[index].usedRange = hull.start == .zero && hull.end == duration ? nil : hull
+        assets[index].excludedRanges = gaps
         if var crop {
             crop.clamp()
             assets[index].crop = crop
@@ -267,6 +270,7 @@ nonisolated extension Project {
                 duration: source.duration, bookmarkData: source.bookmarkData, colorLabel: source.colorLabel, tags: source.tags
             )
             copy.usedRange = source.usedRange
+            copy.excludedRanges = source.excludedRanges
             copy.crop = source.crop
             copy.sourceAssetID = source.mediaKey
             taken.insert(copy.name)
@@ -279,20 +283,24 @@ nonisolated extension Project {
         return copiedIDs
     }
 
-    /// 같은 파일을 가리키는 파생 항목을 `afterAssetID` 바로 뒤(같은 폴더)에 구간·크롭(#85)과 함께 추가한다(#81). 이름은 `derivedAssetName` 규칙이다.
-    /// 파일을 복사하지 않고, 썸네일·파형·프록시는 처음 원본 것을 같이 쓴다. 원본이 없거나 이미지면 `nil`.
-    mutating func addDerivedAsset(from assetID: MediaAsset.ID, usedRange: CMTimeRange, crop: ClipCrop = ClipCrop(), after afterAssetID: MediaAsset.ID) -> MediaAsset.ID? {
+    /// 같은 파일을 가리키는 파생 항목을 `afterAssetID` 바로 뒤(같은 폴더)에 구간·뺀 구간(#99)·크롭(#85)과 함께 추가한다(#81).
+    /// 이름은 `derivedAssetName` 규칙이다(남은 구간들을 감싸는 구간으로 짓는다). 파일을 복사하지 않고, 썸네일·파형·프록시는 처음 원본 것을 같이 쓴다.
+    /// 원본이 없거나 이미지거나 남는 구간이 없으면 `nil`.
+    mutating func addDerivedAsset(
+        from assetID: MediaAsset.ID, usedRange: CMTimeRange, excluded: [CMTimeRange] = [], crop: ClipCrop = ClipCrop(), after afterAssetID: MediaAsset.ID
+    ) -> MediaAsset.ID? {
         guard let source = assets.first(where: { $0.id == assetID }), source.isTrimmable,
               let assetIndex = assets.firstIndex(where: { $0.id == afterAssetID })
         else { return nil }
-        let range = TrimRange.clamped(start: usedRange.start, end: usedRange.end, sourceDuration: source.duration)
+        let clamped = TrimRange.clamped(start: usedRange.start, end: usedRange.end, sourceDuration: source.duration)
+        guard let (range, _) = RangeExclusion.hullAndGaps(of: RangeExclusion.kept(bounds: clamped, excluded: excluded)) else { return nil }
         var derived = MediaAsset(
             id: UUID(), name: derivedAssetName(from: source, range: range), sourceURL: source.sourceURL, kind: source.kind,
             duration: source.duration, bookmarkData: source.bookmarkData, colorLabel: source.colorLabel, tags: source.tags
         )
         derived.sourceAssetID = source.mediaKey
         assets.insert(derived, at: assetIndex + 1)
-        setUsedRange(range, crop: crop, for: derived.id)
+        setUsedRange(clamped, excluded: excluded, crop: crop, for: derived.id)
         if let folderIndex = folders.firstIndex(where: { $0.assetIDs.contains(afterAssetID) }),
            let position = folders[folderIndex].assetIDs.firstIndex(of: afterAssetID)
         {

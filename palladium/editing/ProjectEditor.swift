@@ -84,16 +84,18 @@ final class ProjectEditor {
     // MARK: 클립 편집 창(#81 트림, #85 크롭) — 원본 항목·파일은 바꾸지 않는다
 
     /// 파생 항목이 쓰는 구간을 바꾼다(클립 편집 창의 "적용"). 원본 범위로 맞추고, 원본 전체면 구간을 없앤다.
-    /// `crop`이 있으면 크롭도 함께 바꾼다(실행 취소 한 번). 원본 항목은 바꾸지 않는다.
-    func setUsedRange(start: CMTime, end: CMTime, crop: ClipCrop? = nil, for assetID: MediaAsset.ID) {
-        perform("트림") { $0.setUsedRange(CMTimeRange(start: start, end: end), crop: crop, for: assetID) }
+    /// `excluded`는 그 구간에서 뺄 구간들이다(#99). `crop`이 있으면 크롭도 함께 바꾼다(실행 취소 한 번). 원본 항목은 바꾸지 않는다.
+    func setUsedRange(start: CMTime, end: CMTime, excluded: [CMTimeRange] = [], crop: ClipCrop? = nil, for assetID: MediaAsset.ID) {
+        perform("트림") { $0.setUsedRange(CMTimeRange(start: start, end: end), excluded: excluded, crop: crop, for: assetID) }
     }
 
-    /// 같은 파일을 가리키는 파생 항목을 구간·크롭과 함께 고른 항목 바로 뒤에 추가한다("새 항목으로 저장"). 새 항목 ID.
+    /// 같은 파일을 가리키는 파생 항목을 구간·뺀 구간(#99)·크롭과 함께 고른 항목 바로 뒤에 추가한다("새 항목으로 저장"). 새 항목 ID.
     @discardableResult
-    func addTrimmedAsset(from assetID: MediaAsset.ID, start: CMTime, end: CMTime, crop: ClipCrop = ClipCrop()) -> MediaAsset.ID? {
+    func addTrimmedAsset(from assetID: MediaAsset.ID, start: CMTime, end: CMTime, excluded: [CMTimeRange] = [], crop: ClipCrop = ClipCrop()) -> MediaAsset.ID? {
         var newID: MediaAsset.ID?
-        perform("새 항목으로 저장") { newID = $0.addDerivedAsset(from: assetID, usedRange: CMTimeRange(start: start, end: end), crop: crop, after: assetID) }
+        perform("새 항목으로 저장") {
+            newID = $0.addDerivedAsset(from: assetID, usedRange: CMTimeRange(start: start, end: end), excluded: excluded, crop: crop, after: assetID)
+        }
         return newID
     }
 
@@ -114,13 +116,16 @@ final class ProjectEditor {
     }
 
     /// 타임라인 클립을 원본 `start`~`end` 구간으로 트림한다(클립 편집 창의 "적용", 리플 — 뒤 클립이 따라온다).
+    /// `excluded`(#99)가 있으면 그 구간들을 빼고 남은 구간마다 조각을 만들어 맞닿게 놓는다(앞 조각이 원래 ID). 남는 구간이 없으면 바꾸지 않는다.
     /// `crop`이 있으면 크롭도 범위로 맞춰 함께 바꾼다(실행 취소 한 번). 원본 항목은 바꾸지 않는다.
-    func commitClipTrim(_ clipID: Clip.ID, start: CMTime, end: CMTime, crop: ClipCrop? = nil) {
+    func commitClipTrim(_ clipID: Clip.ID, start: CMTime, end: CMTime, excluded: [CMTimeRange] = [], crop: ClipCrop? = nil) {
         guard let clip = currentSequence.clip(id: clipID) else { return }
         let range = clip.clampedSourceRange(start: start, end: end, sourceDuration: asset(id: clip.assetID)?.trimmableDuration)
+        let kept = RangeExclusion.kept(bounds: range, excluded: excluded)
+        guard !kept.isEmpty else { return }
         editCurrentSequence("트림") { sequence in
-            sequence.setSourceRange(range, forClip: clipID)
             Self.setCrop(crop, forClip: clipID, in: &sequence)
+            sequence.replaceClip(clipID, withSourceRanges: kept)
         }
     }
 
@@ -159,14 +164,17 @@ final class ProjectEditor {
     /// 반환값은 새로 만든 클립의 ID이고, 원본이 없거나 놓을 수 없으면 `nil`이다.
     @discardableResult
     func placeAsset(_ assetID: MediaAsset.ID, onTrack trackID: Track.ID?, at time: CMTime) -> Clip.ID? {
-        guard let asset = asset(id: assetID), let clip = asset.makeClip(at: time) else { return nil }
+        guard let asset = asset(id: assetID) else { return nil }
+        // 뺀 구간이 있는 파생 항목(#99)은 남은 구간마다 클립이 생겨 맞닿게 이어 놓는다.
+        let clips = asset.makeClips(at: time)
+        guard let first = clips.first else { return nil }
         editCurrentSequence("클립 배치") { sequence in
             let matchingTrackID = sequence.tracks.first { $0.id == trackID && $0.kind == asset.trackKind }?.id
                 ?? sequence.tracks.first { $0.kind == asset.trackKind }?.id
             let targetTrackID = matchingTrackID ?? sequence.addTrack(kind: asset.trackKind)
-            sequence.place(clip, onTrack: targetTrackID)
+            sequence.placeInOrder(clips.map { ($0, asset.trackKind) }, trackIDs: [asset.trackKind: targetTrackID])
         }
-        return clip.id
+        return first.id
     }
 
     /// 여러 원본을 `time`부터 고른 순서대로 이어 놓는다(#86). 영상·이미지는 영상 트랙에, 오디오는 오디오 트랙에 각각 이어 붙이고,
@@ -174,9 +182,9 @@ final class ProjectEditor {
     /// 실행 취소 한 번으로 모두 되돌린다. 반환값은 놓은 클립 ID다.
     @discardableResult
     func placeAssets(_ assetIDs: [MediaAsset.ID], preferredTracks: [TrackKind: Track.ID] = [:], at time: CMTime) -> [Clip.ID] {
-        let items = assetIDs.compactMap { id -> (clip: Clip, kind: TrackKind)? in
-            guard let asset = asset(id: id), let clip = asset.makeClip(at: time) else { return nil }
-            return (clip, asset.trackKind)
+        let items = assetIDs.flatMap { id -> [(clip: Clip, kind: TrackKind)] in
+            guard let asset = asset(id: id) else { return [] }
+            return asset.makeClips(at: time).map { ($0, asset.trackKind) }
         }
         guard !items.isEmpty else { return [] }
         var placed: [Clip.ID] = []

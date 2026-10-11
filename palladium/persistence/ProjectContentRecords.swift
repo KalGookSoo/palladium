@@ -31,6 +31,8 @@ final class MediaAssetRecord {
     var cropBottom: Double?
     var cropLeft: Double?
     var cropRight: Double?
+    /// 파생 항목에서 뺀 구간들(#99). 구간마다 시작 값·시작 단위·길이 값·길이 단위 네 개씩 이어 둔다. 기존 저장소가 열리도록 옵셔널로 둔다.
+    var excludedRangeValues: [Int64]?
     var project: ProjectRecord?
     var backup: ProjectBackupRecord?
 
