@@ -1,6 +1,8 @@
+import AppKit
 import CoreMedia
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// 프리미어 프로의 프로젝트 패널처럼 한 번 클릭은 선택만 하고, 더블클릭하면 원본을 미리보기(소스 모니터)에서 연다.
 /// 포토샵 레이어처럼 원본 이름을 목록에서 바로 바꿔 정리한다(F2 또는 우클릭 > 이름 변경).
@@ -20,6 +22,8 @@ struct MediaPanelView: View {
     var openClipEditor: (MediaAsset.ID) -> Void = { _ in }
     /// 타임라인의 "미디어 패널에서 원본 보기"(#101). 바뀌면 목록이 포커스를 받고 그 원본 줄까지 스크롤한다.
     var revealRequest: AssetRevealRequest?
+    /// 빈 곳 우클릭 > 가져오기…(#104). 파일 > 가져오기(⌘I)와 같다.
+    var importMedia: () -> Void = {}
     @State private var filter = MediaFilter()
     /// 고른 순서(#86). 타임라인에 이어 붙이거나 폴더로 옮길 때 이 순서를 쓴다.
     @State private var selectionOrder: [MediaAsset.ID] = []
@@ -44,11 +48,6 @@ struct MediaPanelView: View {
 
     var body: some View {
         let project = editor.project
-        let isFiltering = filter != MediaFilter()
-        // 거르는 중이면 그 아래 어딘가에 맞는 원본이 있는 폴더만 보이고, 아니면 빈 폴더도 보여 놓을 곳이 된다.
-        let rootFolders = project.subfolders(of: nil).filter(isVisible)
-        let rootAssets = project.unfiledAssets.filter(filter.matches)
-        let hasNoResults = !project.assets.contains(where: filter.matches)
         let isRenamingFolder = Binding<Bool>(
             get: { renamingFolderID != nil },
             set: {
@@ -67,8 +66,94 @@ struct MediaPanelView: View {
         )
 
         let listOrder = project.assetListOrder
+        panelList
+            .alert("태그 편집", isPresented: isEditingTags) {
+                TextField("인터뷰, B컷", text: $tagText)
+                Button("저장") {
+                    if let tagEditingAssetID {
+                        editor.setTags(from: tagText, for: tagEditingAssetID)
+                    }
+                }
+                Button("취소", role: .cancel) {}
+            } message: {
+                Text("태그는 쉼표로 나눠 입력하세요.")
+            }
+            .alert("폴더 이름", isPresented: isRenamingFolder) {
+                TextField("폴더 이름", text: $folderNameText)
+                Button("확인") {
+                    if let renamingFolderID {
+                        editor.renameFolder(renamingFolderID, to: folderNameText)
+                    }
+                }
+                Button("취소", role: .cancel) {}
+            }
+            // 이름 바꾸기는 하나만 골랐을 때만 한다.
+            .focusedSceneValue(\.renameSelectedAsset, listHasFocus ? singleSelection.map { assetID in { beginRenaming(assetID) } } : nil)
+            .onChange(of: selectedAssetIDs, initial: true) { _, selection in
+                selectionOrder = AssetSelectionOrder.updated(selectionOrder, selection: selection, listOrder: listOrder)
+                // 타임라인의 "미디어 패널에서 원본 보기"처럼 접힌 폴더 안 원본이 골라지면 그 폴더들을 펼쳐 보이게 한다.
+                for folderID in selection.flatMap(project.folderIDs(containing:)) where collapsedFolderIDs.contains(folderID) {
+                    setExpanded(true, folderID)
+                }
+            }
+            .focused($listHasFocus)
+            .onChange(of: listHasFocus, initial: true) {
+                isListFocused.wrappedValue = listHasFocus
+            }
+            // 목록에 포커스가 있을 때 ⌘X·⌘C·⌘V(편집 메뉴)는 원본을 잘라내고·복사하고·붙인다(#104). 타임라인 클립보드와 따로다.
+            .onCutCommand {
+                clipboardItems(for: selectedAssetIDs, isCut: true)
+            }
+            .onCopyCommand {
+                clipboardItems(for: selectedAssetIDs, isCut: false)
+            }
+            .onPasteCommand(of: [.utf8PlainText]) { providers in
+                let folderID = pasteTargetFolder
+                for provider in providers {
+                    _ = provider.loadObject(ofClass: NSString.self) { object, _ in
+                        guard let text = object as? String else { return }
+                        DispatchQueue.main.async { paste(text, into: folderID) }
+                    }
+                }
+            }
+            // 목록에 포커스가 있을 때 ⌫(편집 > 삭제)로 고른 원본을 지운다. 이름을 바꾸는 중에는 글자를 지운다.
+            .onDeleteCommand {
+                if !selectedAssetIDs.isEmpty, renamingAssetID == nil {
+                    requestDeletion(selectedAssetIDs)
+                }
+            }
+            .confirmationDialog(
+                deletionTitle,
+                isPresented: Binding(
+                    get: { pendingDeletion != nil },
+                    set: {
+                        if !$0 {
+                            pendingDeletion = nil
+                        }
+                    }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("삭제", role: .destructive) {
+                    if let pendingDeletion {
+                        delete(pendingDeletion)
+                    }
+                }
+                Button("취소", role: .cancel) {}
+            } message: {
+                Text(deletionMessage)
+            }
+    }
 
-        ScrollViewReader { proxy in
+    /// 폴더 트리 목록과 검색·필터·우클릭 메뉴. 본문 식이 길어 타입 검사가 느려지지 않도록 나눈다.
+    private var panelList: some View {
+        let project = editor.project
+        // 거르는 중이면 그 아래 어딘가에 맞는 원본이 있는 폴더만 보이고, 아니면 빈 폴더도 보여 놓을 곳이 된다.
+        let rootFolders = project.subfolders(of: nil).filter(isVisible)
+        let rootAssets = project.unfiledAssets.filter(filter.matches)
+        let hasNoResults = !project.assets.contains(where: filter.matches)
+
+        return ScrollViewReader { proxy in
             List(selection: $selectedAssetIDs) {
                 ForEach(rootFolders) { folder in
                     folderNode(folder)
@@ -99,7 +184,14 @@ struct MediaPanelView: View {
         }
         .listStyle(.sidebar)
         .contextMenu(forSelectionType: MediaAsset.ID.self) { assetIDs in
-            if !assetIDs.isEmpty {
+            if assetIDs.isEmpty {
+                // 목록 빈 곳(#104): 맨 위에 새 폴더·가져오기·붙여넣기.
+                Button("새 폴더") { addFolder(in: nil) }
+                Button("가져오기…") { importMedia() }
+                    .keyboardShortcut("i", modifiers: .command)
+                Divider()
+                pasteButton(into: nil)
+            } else {
                 assetMenu(for: assetIDs)
             }
         } primaryAction: { assetIDs in
@@ -125,66 +217,6 @@ struct MediaPanelView: View {
             if hasNoResults, filter != MediaFilter() {
                 ContentUnavailableView("일치하는 원본 없음", systemImage: "magnifyingglass", description: Text("검색어나 필터를 바꿔 보세요"))
             }
-        }
-        .alert("태그 편집", isPresented: isEditingTags) {
-            TextField("인터뷰, B컷", text: $tagText)
-            Button("저장") {
-                if let tagEditingAssetID {
-                    editor.setTags(from: tagText, for: tagEditingAssetID)
-                }
-            }
-            Button("취소", role: .cancel) {}
-        } message: {
-            Text("태그는 쉼표로 나눠 입력하세요.")
-        }
-        .alert("폴더 이름", isPresented: isRenamingFolder) {
-            TextField("폴더 이름", text: $folderNameText)
-            Button("확인") {
-                if let renamingFolderID {
-                    editor.renameFolder(renamingFolderID, to: folderNameText)
-                }
-            }
-            Button("취소", role: .cancel) {}
-        }
-        // 이름 바꾸기는 하나만 골랐을 때만 한다.
-        .focusedSceneValue(\.renameSelectedAsset, listHasFocus ? singleSelection.map { assetID in { beginRenaming(assetID) } } : nil)
-        .onChange(of: selectedAssetIDs, initial: true) { _, selection in
-            selectionOrder = AssetSelectionOrder.updated(selectionOrder, selection: selection, listOrder: listOrder)
-            // 타임라인의 "미디어 패널에서 원본 보기"처럼 접힌 폴더 안 원본이 골라지면 그 폴더들을 펼쳐 보이게 한다.
-            for folderID in selection.flatMap(project.folderIDs(containing:)) where collapsedFolderIDs.contains(folderID) {
-                setExpanded(true, folderID)
-            }
-        }
-        .focused($listHasFocus)
-        .onChange(of: listHasFocus, initial: true) {
-            isListFocused.wrappedValue = listHasFocus
-        }
-        // 목록에 포커스가 있을 때 ⌫(편집 > 삭제)로 고른 원본을 지운다. 이름을 바꾸는 중에는 글자를 지운다.
-        .onDeleteCommand {
-            if !selectedAssetIDs.isEmpty, renamingAssetID == nil {
-                requestDeletion(selectedAssetIDs)
-            }
-        }
-        .confirmationDialog(
-            deletionTitle,
-            isPresented: Binding(
-                get: { pendingDeletion != nil },
-                set: {
-                    if !$0 {
-                        pendingDeletion = nil
-                    }
-                }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("삭제", role: .destructive) {
-                if let pendingDeletion {
-                    delete(pendingDeletion)
-                }
-            }
-            Button("취소", role: .cancel) {}
-        } message: {
-            Text(deletionMessage)
         }
     }
 
@@ -314,6 +346,8 @@ struct MediaPanelView: View {
             }
             .contextMenu {
                 Button("새 폴더") { addFolder(in: folder.id) }
+                pasteButton(into: folder.id)
+                Divider()
                 Button("폴더 이름 변경…") {
                     folderNameText = folder.name
                     renamingFolderID = folder.id
@@ -395,6 +429,16 @@ struct MediaPanelView: View {
 
     @ViewBuilder
     private func assetMenu(for assetIDs: Set<MediaAsset.ID>) -> some View {
+        // 우클릭한 원본이 있는 폴더(맨 위면 맨 위)에 새 폴더를 만들고 붙인다(#104).
+        let folderID = ordered(assetIDs).first.flatMap { assetID in editor.project.folders.first { $0.assetIDs.contains(assetID) }?.id }
+        Button("새 폴더") { addFolder(in: folderID) }
+        Divider()
+        Button("잘라내기") { putOnClipboard(assetIDs, isCut: true) }
+            .keyboardShortcut("x", modifiers: .command)
+        Button("복사") { putOnClipboard(assetIDs, isCut: false) }
+            .keyboardShortcut("c", modifiers: .command)
+        pasteButton(into: folderID)
+        Divider()
         Menu("색상 레이블") {
             Button("없음") {
                 editor.setColorLabel(nil, for: assetIDs)
@@ -441,14 +485,55 @@ struct MediaPanelView: View {
         // 메뉴 오른쪽에 단축키를 보여준다. 실제 ⌫는 목록에 포커스가 있을 때 처리한다.
         Button("삭제…", role: .destructive) { requestDeletion(assetIDs) }
             .keyboardShortcut(.delete, modifiers: [])
-        Divider()
-        Menu("폴더로 이동") {
-            Button("맨 위(폴더 밖)") { editor.moveAssets(ordered(assetIDs), toFolder: nil) }
-            Divider()
-            // 트리 순서대로, 하위 폴더는 "촬영본 / 1일차"처럼 경로로 보인다.
-            ForEach(editor.project.folderTree, id: \.folder.id) { node in
-                Button(editor.project.folderPath(node.folder.id)) { editor.moveAssets(ordered(assetIDs), toFolder: node.folder.id) }
+    }
+
+    // MARK: - Clipboard
+
+    /// 잘라내기·복사한 원본을 고른 순서대로 클립보드 글자로 담는다(#104). 편집 메뉴(⌘X·⌘C)가 클립보드에 쓴다.
+    private func clipboardItems(for assetIDs: Set<MediaAsset.ID>, isCut: Bool) -> [NSItemProvider] {
+        guard !assetIDs.isEmpty, renamingAssetID == nil else { return [] }
+        return [NSItemProvider(object: AssetClipboardPayload.encode(ordered(assetIDs), isCut: isCut) as NSString)]
+    }
+
+    /// 우클릭 메뉴의 잘라내기·복사. 편집 메뉴와 같은 글자를 클립보드에 쓴다.
+    private func putOnClipboard(_ assetIDs: Set<MediaAsset.ID>, isCut: Bool) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(AssetClipboardPayload.encode(ordered(assetIDs), isCut: isCut), forType: .string)
+    }
+
+    /// 우클릭 메뉴의 붙여넣기. 미디어 패널에서 잘라내거나 복사한 원본이 없으면 꺼진다.
+    private func pasteButton(into folderID: MediaFolder.ID?) -> some View {
+        let text = NSPasteboard.general.string(forType: .string)
+        return Button("붙여넣기") {
+            if let text {
+                paste(text, into: folderID)
             }
+        }
+        .keyboardShortcut("v", modifiers: .command)
+        .disabled(text.flatMap(AssetClipboardPayload.decode) == nil)
+    }
+
+    /// ⌘V로 붙일 곳: 고른 원본(목록 순서로 첫 원본)이 있는 폴더, 고른 것이 없으면 맨 위.
+    private var pasteTargetFolder: MediaFolder.ID? {
+        let first = editor.project.assetListOrder.first(where: selectedAssetIDs.contains)
+        return first.flatMap { assetID in editor.project.folders.first { $0.assetIDs.contains(assetID) }?.id }
+    }
+
+    /// 복사한 원본은 사본을 만들고(같은 파일, 이름 뒤에 (1)·(2)…), 잘라낸 원본은 옮긴 뒤 클립보드를 비운다. 붙인 원본을 고른다.
+    private func paste(_ text: String, into folderID: MediaFolder.ID?) {
+        guard let content = AssetClipboardPayload.decode(text) else { return }
+        let assetIDs = content.assetIDs.filter { editor.asset(id: $0) != nil }
+        guard !assetIDs.isEmpty else { return }
+        if content.isCut {
+            editor.moveAssets(assetIDs, toFolder: folderID)
+            NSPasteboard.general.clearContents()
+            selectedAssetIDs = Set(assetIDs)
+        } else {
+            selectedAssetIDs = Set(editor.duplicateAssets(assetIDs, toFolder: folderID))
+        }
+        if let folderID {
+            setExpanded(true, folderID)
         }
     }
 }

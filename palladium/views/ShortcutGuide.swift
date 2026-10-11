@@ -69,6 +69,7 @@ enum ShortcutGuide {
     static let fitTrimBar = ShortcutGuideEntry(title: "필름스트립 전체 맞춤", summary: "클립 편집 창의 필름스트립 막대에 원본 전체가 보이게 합니다", keys: "⌘0 (클립 편집 창)")
     static let preciseTrimBar = ShortcutGuideEntry(title: "클립 편집 정밀 끌기", summary: "클립 편집 창에서 손잡이·재생 위치를 끌 때 이동량을 5분의 1로 줄입니다", keys: "⌥ 끌기 (클립 편집 창)")
     static let cropKeepRatio = ShortcutGuideEntry(title: "크롭 비율 유지", summary: "클립 편집 창 크롭 탭에서 ⇧를 누른 채 손잡이를 끌면 지금 비율을 지킵니다", keys: "⇧ 끌기 (클립 편집 창)")
+    static let cutCopyPasteAssets = ShortcutGuideEntry(title: "원본 잘라내기·복사·붙여넣기", summary: "미디어 패널에서 원본을 잘라내 다른 폴더로 옮기거나, 복사해 같은 파일을 가리키는 사본을 만듭니다", keys: "⌘X/⌘C/⌘V (미디어 패널)")
     static let deleteAsset = ShortcutGuideEntry(title: "원본 삭제", summary: "미디어 패널에서 고른 원본을 프로젝트에서 뺍니다(쓰는 클립도 함께, 원본 파일은 남음)", keys: "⌫ (미디어 패널)")
     static let filterMedia = ShortcutGuideEntry(title: "필터", summary: "색상 레이블로 원본을 거릅니다", keys: nil)
 
@@ -80,7 +81,7 @@ enum ShortcutGuide {
         ("파일", [openProjectList, newProject, save, close, importMedia, export, batchExport]),
         ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline]),
         ("재생", [playPause, previousFrame, nextFrame, narration]),
-        ("편집", [undo, redo, rename, clipEditor, trimNudge, preciseTrimBar, zoomInTrimBar, zoomOutTrimBar, fitTrimBar, cropKeepRatio, deleteAsset]),
+        ("편집", [undo, redo, rename, clipEditor, trimNudge, preciseTrimBar, zoomInTrimBar, zoomOutTrimBar, fitTrimBar, cropKeepRatio, cutCopyPasteAssets, deleteAsset]),
         ("타임라인", [deleteClips, rippleDeleteClips, cutClips, copyClips, pasteClips, duplicateClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect, addMarker, addSubtitle, moveSubtitle, preciseTrim, rollTrim, slipTrim, slideTrim]),
         ("도움말", [showHelp, showShortcuts]),
     ]

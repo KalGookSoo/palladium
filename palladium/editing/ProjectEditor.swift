@@ -532,6 +532,14 @@ final class ProjectEditor {
     }
 
     /// `folderID`가 `nil`이면 "분류 안 됨"으로 뺀다. `beforeAssetID`가 주어지면 그 원본 앞에 넣는다.
+    /// 미디어 패널 복사·붙여넣기(#104). 원본들의 사본을 `folderID` 폴더(`nil`이면 맨 위)에 만든다(실행 취소 한 번).
+    @discardableResult
+    func duplicateAssets(_ assetIDs: [MediaAsset.ID], toFolder folderID: MediaFolder.ID?) -> [MediaAsset.ID] {
+        var copiedIDs: [MediaAsset.ID] = []
+        perform("원본 붙여넣기") { copiedIDs = $0.duplicateAssets(assetIDs, toFolder: folderID) }
+        return copiedIDs
+    }
+
     /// 폴더를 다른 폴더 안(`nil`이면 맨 위)으로 옮긴다(#93). 자기 아래로는 옮기지 않아 편집이 남지 않는다.
     func moveFolder(_ folderID: MediaFolder.ID, into parentID: MediaFolder.ID?) {
         perform("폴더 이동") { $0.moveFolder(folderID, into: parentID) }

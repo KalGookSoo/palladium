@@ -53,3 +53,23 @@ nonisolated struct AssetRevealRequest: Equatable {
     let id = UUID()
     let assetID: MediaAsset.ID
 }
+
+/// 미디어 패널 잘라내기·복사(#104)로 클립보드에 담는 글자. 첫 줄이 동작, 나머지 줄이 원본 ID다.
+/// 타임라인 클립보드(앱 안 `ProjectEditor.clipboard`)와 섞이지 않고, 원본 ID로만 읽히지 않도록 표시를 붙인다.
+nonisolated enum AssetClipboardPayload {
+    private static let copyMarker = "palladium-assets-copy"
+    private static let cutMarker = "palladium-assets-cut"
+
+    static func encode(_ assetIDs: [MediaAsset.ID], isCut: Bool) -> String {
+        ([isCut ? cutMarker : copyMarker] + assetIDs.map(\.uuidString)).joined(separator: "\n")
+    }
+
+    /// 미디어 패널에서 담은 글자가 아니면 `nil`.
+    static func decode(_ text: String) -> (assetIDs: [MediaAsset.ID], isCut: Bool)? {
+        let lines = text.split(whereSeparator: \.isNewline).map(String.init)
+        guard let marker = lines.first, marker == copyMarker || marker == cutMarker else { return nil }
+        let assetIDs = lines.dropFirst().compactMap(UUID.init(uuidString:))
+        guard !assetIDs.isEmpty else { return nil }
+        return (assetIDs, marker == cutMarker)
+    }
+}

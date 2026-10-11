@@ -239,6 +239,46 @@ nonisolated extension Project {
         return candidate
     }
 
+    /// 사본 이름(#104): 같은 이름이 없으면 그대로, 있으면 파일 저장처럼 " (1)"·" (2)"…를 붙인다. 예: "윈드밀1 (1).mov".
+    func copiedAssetName(for name: String, taken: Set<String>) -> String {
+        guard taken.contains(name) else { return name }
+        let stem = (name as NSString).deletingPathExtension
+        let pathExtension = (name as NSString).pathExtension
+        let suffix = pathExtension.isEmpty ? "" : ".\(pathExtension)"
+        var number = 1
+        while taken.contains("\(stem) (\(number))\(suffix)") {
+            number += 1
+        }
+        return "\(stem) (\(number))\(suffix)"
+    }
+
+    /// 원본들의 사본을 `folderID` 폴더(`nil`이면 맨 위)에 만든다(#104, 미디어 패널 복사·붙여넣기). 반환값은 만든 사본 ID(순서대로).
+    /// 사본은 같은 파일을 가리키는 항목이다(디스크 파일은 복사하지 않는다). 구간·크롭·색상 레이블·태그도 같고,
+    /// 파생 항목처럼 처음 원본의 키를 같이 써 썸네일·파형·프록시를 다시 만들지 않는다. 그래서 사본은 "파생" 표시가 붙고 구간을 다시 정할 수 있다.
+    @discardableResult
+    mutating func duplicateAssets(_ assetIDs: [MediaAsset.ID], toFolder folderID: MediaFolder.ID?) -> [MediaAsset.ID] {
+        let targetFolder = folderID.flatMap { folderID in folders.firstIndex { $0.id == folderID } }
+        var taken = Set(assets.map(\.name))
+        var copiedIDs: [MediaAsset.ID] = []
+        for assetID in assetIDs {
+            guard let source = assets.first(where: { $0.id == assetID }) else { continue }
+            var copy = MediaAsset(
+                id: UUID(), name: copiedAssetName(for: source.name, taken: taken), sourceURL: source.sourceURL, kind: source.kind,
+                duration: source.duration, bookmarkData: source.bookmarkData, colorLabel: source.colorLabel, tags: source.tags
+            )
+            copy.usedRange = source.usedRange
+            copy.crop = source.crop
+            copy.sourceAssetID = source.mediaKey
+            taken.insert(copy.name)
+            assets.append(copy)
+            if let targetFolder {
+                folders[targetFolder].assetIDs.append(copy.id)
+            }
+            copiedIDs.append(copy.id)
+        }
+        return copiedIDs
+    }
+
     /// 같은 파일을 가리키는 파생 항목을 `afterAssetID` 바로 뒤(같은 폴더)에 구간·크롭(#85)과 함께 추가한다(#81). 이름은 `derivedAssetName` 규칙이다.
     /// 파일을 복사하지 않고, 썸네일·파형·프록시는 처음 원본 것을 같이 쓴다. 원본이 없거나 이미지면 `nil`.
     mutating func addDerivedAsset(from assetID: MediaAsset.ID, usedRange: CMTimeRange, crop: ClipCrop = ClipCrop(), after afterAssetID: MediaAsset.ID) -> MediaAsset.ID? {

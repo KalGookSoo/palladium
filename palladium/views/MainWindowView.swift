@@ -438,7 +438,8 @@ struct MainWindowView: View {
                 importFiles: importMedia(from:),
                 isListFocused: $isMediaPanelFocused,
                 openClipEditor: { assetID in openClipEditor(.asset(assetID)) },
-                revealRequest: assetRevealRequest
+                revealRequest: assetRevealRequest,
+                importMedia: { isImporterPresented = true }
             )
             .onChange(of: isMediaPanelFocused) { _, isFocused in
                 if isFocused {
