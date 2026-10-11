@@ -796,15 +796,15 @@ struct MainWindowView: View {
     /// `fromMenu`면 재생 메뉴·타임라인 메뉴 항목에서 부른 것이라(#64) 키를 받는 영역과 상관없이 실행한다.
     private func handleEditorKey(_ key: EditorKeyMonitor.Key, fromMenu: Bool = false) -> Bool {
         // 자막을 골랐으면 ←/→는 프레임 이동 대신 자막을 옮긴다(#82).
-        if selectedSubtitleID != nil, key == .previousFrame || key == .nextFrame {
+        if selectedSubtitleID != nil, !fromMenu, key == .previousFrame || key == .nextFrame {
             return nudgeSelectedSubtitle(key)
         }
         // 방향키 이동·처음/끝은 미리보기·타임라인에서만(#103). 미디어 패널은 목록 이동·폴더 접기, 인스펙터는 컨트롤이 쓴다.
         let canNavigate = fromMenu || isEditingPaneActive
         switch key {
         case .moveUp, .moveDown, .moveLeftLarge, .moveRightLarge:
-            // 자막을 골랐으면 자막을 옮기고, 아니면 ↑/↓는 이전·다음 편집점, ⇧←/→는 10프레임씩(#64).
-            if selectedSubtitleID != nil {
+            // 자막을 골랐으면 자막을 옮기고, 아니면 ↑/↓는 이전·다음 편집점, ⇧←/→는 10프레임씩(#64). 메뉴에서 고르면 늘 재생 헤드를 옮긴다.
+            if selectedSubtitleID != nil, !fromMenu {
                 return nudgeSelectedSubtitle(key)
             }
             guard canNavigate, case let .ready(timeline) = previewPlayer.loadState else { return false }

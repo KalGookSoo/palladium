@@ -218,27 +218,38 @@ private final nonisolated class EncodingJob: @unchecked Sendable {
     private func pump(_ pipe: Pipe) async {
         let queue = DispatchQueue(label: "palladium.export.\(pipe.isVideo ? "video" : "audio")")
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            // `finished`·`finish`는 모두 이 직렬 큐에서만 다뤄 한 번만 끝낸다.
             var finished = false
+            let watchdog = DispatchSource.makeTimerSource(queue: queue)
+            let finish = {
+                guard !finished else { return }
+                finished = true
+                watchdog.cancel()
+                pipe.input.markAsFinished()
+                continuation.resume()
+            }
+            // 취소했거나 다른 입력이 실패해 쓰기가 멈추면 이 입력의 준비 알림이 다시 오지 않을 수 있어 직접 살펴 끝낸다.
+            watchdog.schedule(deadline: .now() + 0.1, repeating: 0.1)
+            watchdog.setEventHandler { [self] in
+                if shouldStop || writer.status != .writing {
+                    finish()
+                }
+            }
+            watchdog.resume()
             pipe.input.requestMediaDataWhenReady(on: queue) { [self] in
                 guard !finished else { return }
                 while pipe.input.isReadyForMoreMediaData {
                     if shouldStop {
-                        finished = true
-                        pipe.input.markAsFinished()
-                        continuation.resume()
+                        finish()
                         return
                     }
                     guard let sample = pipe.output.copyNextSampleBuffer() else {
-                        finished = true
-                        pipe.input.markAsFinished()
-                        continuation.resume()
+                        finish()
                         return
                     }
                     if !pipe.input.append(sample) {
                         lock.withLock { failure = failure ?? writer.error ?? SequenceExporter.ExportError.cannotCreateSession }
-                        finished = true
-                        pipe.input.markAsFinished()
-                        continuation.resume()
+                        finish()
                         return
                     }
                     if pipe.isVideo || pipes.count == 1 {

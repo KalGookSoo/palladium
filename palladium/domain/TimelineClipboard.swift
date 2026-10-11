@@ -118,8 +118,9 @@ nonisolated extension Track {
     /// 묶음과 겹치는 만큼 뒤 클립들을 민다. 기존 클립은 나누지 않는다.
     mutating func insert(contentsOf group: [Clip]) {
         guard let groupStart = group.map(\.timelineStart).min() else { return }
-        let straddled = clips.first { $0.timelineStart < groupStart && groupStart < $0.timelineRange.end }
-        let delta = straddled.map { $0.timelineRange.end - groupStart } ?? .zero
+        // 그룹(#100) 안에 걸리면 그룹 전체 뒤 경계로 옮긴다(그룹 사이에 끼우지 않는다).
+        let straddled = clips.map { blockRange(of: $0) }.first { $0.start < groupStart && groupStart < $0.end }
+        let delta = straddled.map { $0.end - groupStart } ?? .zero
         let moved = group.map { clip in
             var clip = clip
             clip.timelineStart = clip.timelineStart + delta

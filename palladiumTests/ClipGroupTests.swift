@@ -78,6 +78,26 @@ struct ClipGroupTests {
         #expect(sequence.clip(id: ids[2])?.timelineRange.end == seconds(6))
     }
 
+    @Test("그룹 안 클립끼리 맞닿은 경계에 정확히 놓거나 붙여도 그룹 사이에 끼우지 않는다")
+    func boundaryInsertionAvoidsGroups() throws {
+        var (sequence, ids) = try makeSequence()
+        sequence.group([ids[0], ids[1], ids[2]])
+        let trackID = sequence.tracks[0].id
+        // 경계 2초(A|B): 그룹 0~6초의 앞쪽 절반이라 그룹 앞(0초)으로 간다. 경계 4초(B|C)는 뒤쪽 절반이라 그룹 뒤(6초)로.
+        #expect(sequence.tracks[0].insertionPoint(for: seconds(2)) == .zero)
+        #expect(sequence.tracks[0].insertionPoint(for: seconds(4)) == seconds(6))
+        let dropped = try #require(Clip(assetID: UUID(), sourceRange: range(0, 1), timelineStart: seconds(4)))
+        sequence.place(dropped, onTrack: trackID)
+        #expect(sequence.clip(id: dropped.id)?.timelineStart == seconds(6))
+        // 기준 트랙이 아닌 트랙에 붙일 때도 그룹 안이면 그룹 뒤로 옮긴다.
+        var track = sequence.tracks[0]
+        let pasted = try #require(Clip(assetID: UUID(), sourceRange: range(0, 1), timelineStart: seconds(1)))
+        track.insert(contentsOf: [pasted])
+        #expect(track.clips.first { $0.id == pasted.id }?.timelineStart == seconds(6))
+        let members = track.clips.filter { $0.groupID != nil }.sorted { $0.timelineStart < $1.timelineStart }
+        #expect(zip(members, members.dropFirst()).allSatisfy { $0.timelineRange.end == $1.timelineStart })
+    }
+
     @Test("그룹 클립을 끌면 그룹 전체가 맞닿은 채 옮겨지고, 다른 트랙으로도 옮겨진다")
     func moveGroup() throws {
         var (sequence, ids) = try makeSequence()

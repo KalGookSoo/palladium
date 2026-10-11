@@ -50,8 +50,12 @@ nonisolated extension Track {
     /// 클립을 넣을 지점. 클립 안에 떨어지면 앞쪽 절반은 그 클립 앞 경계, 뒤쪽 절반은 뒤 경계로 옮긴다.
     /// 클립 사이 틈이나 맨 뒤라면 그 시각 그대로다. 삽입은 클립을 자동으로 나누지 않기 위함이다.
     /// 그룹(#100) 안에 떨어지면 그룹 전체를 한 덩어리로 보고 그 앞이나 뒤로 옮긴다(그룹 사이에 끼워 넣지 않는다).
+    /// 그룹 안 클립끼리 맞닿은 경계(재생 헤드·자석이 자주 멈추는 곳)도 그룹 안으로 본다.
     func insertionPoint(for time: CMTime) -> CMTime {
-        guard let clip = clips.first(where: { $0.timelineStart < time && time < $0.timelineRange.end }) else {
+        guard let clip = clips.first(where: { clip in
+            let block = blockRange(of: clip)
+            return block.start < time && time < block.end
+        }) else {
             return CMTimeMaximum(time, .zero)
         }
         let block = blockRange(of: clip)
