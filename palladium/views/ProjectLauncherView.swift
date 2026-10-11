@@ -20,6 +20,9 @@ struct ProjectLauncherView: View {
     @State private var errorMessage: String?
     /// 삭제를 확인 중인 프로젝트.
     @State private var projectPendingDeletion: ProjectSummary?
+    /// 샘플 프로젝트를 만드는 중(#63). 샘플 영상을 기기에서 만드느라 몇 초 걸린다.
+    @State private var isMakingTour = false
+    private let requests = LauncherRequests.shared
 
     var body: some View {
         let isConfirmingDeletion = Binding<Bool>(
@@ -41,11 +44,13 @@ struct ProjectLauncherView: View {
 
         Group {
             if summaries.isEmpty {
-                ContentUnavailableView(
-                    "프로젝트 없음",
-                    systemImage: "film.stack",
-                    description: Text("새 프로젝트를 만들거나 최근 프로젝트를 여세요")
-                )
+                ContentUnavailableView {
+                    Label("프로젝트 없음", systemImage: "film.stack")
+                } description: {
+                    Text("새 프로젝트를 만들거나, 샘플 프로젝트로 5분 동안 배치 → 편집 → 내보내기를 해 보세요")
+                } actions: {
+                    tourButton
+                }
             } else {
                 List(summaries, selection: $selectedProjectID) { summary in
                     ProjectSummaryRow(summary: summary)
@@ -68,6 +73,24 @@ struct ProjectLauncherView: View {
             }
         }
         .frame(width: 600, height: 420)
+        .overlay {
+            if isMakingTour {
+                ProgressView("샘플 영상을 만드는 중…")
+                    .padding(24)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            }
+        }
+        // 목록이 있을 때도 아래에 둘러보기 버튼을 둔다(#63). 자동으로 열지는 않는다.
+        .safeAreaInset(edge: .bottom) {
+            if !summaries.isEmpty {
+                HStack {
+                    Spacer()
+                    tourButton
+                }
+                .padding(12)
+            }
+        }
+        .onChange(of: requests.pending == nil, initial: true) { handlePendingRequest() }
         // 목록이 있든 없든 항상 보이도록 창 툴바에 아이콘 버튼으로 둔다. 레이블은 툴팁과 VoiceOver에 쓰인다.
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -103,6 +126,41 @@ struct ProjectLauncherView: View {
             Button("확인", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
+        }
+    }
+
+    private var tourButton: some View {
+        Button("샘플 프로젝트로 둘러보기", systemImage: "graduationcap") { makeTourProject() }
+            .disabled(isMakingTour)
+            .help("샘플 영상·로고·배경음악이 든 \"\(SampleProjectFactory.projectName)\" 프로젝트를 만들어 열고, 할 일 목록으로 기능을 안내합니다(네트워크를 쓰지 않음)")
+    }
+
+    /// 도움말 메뉴·둘러보기 끝에서 남긴 요청을 처리한다(#63).
+    private func handlePendingRequest() {
+        guard let request = requests.pending else { return }
+        requests.pending = nil
+        switch request {
+        case .tour:
+            makeTourProject()
+        case .newProject:
+            newProjectName = ""
+            isNamingNewProject = true
+        }
+    }
+
+    /// 샘플 미디어를 만들고(이미 있으면 그대로) 둘러보기 프로젝트를 만들어 연다(#63).
+    private func makeTourProject() {
+        guard !isMakingTour else { return }
+        isMakingTour = true
+        Task {
+            defer { isMakingTour = false }
+            do {
+                let projectID = try await SampleProjectFactory.makeTourProject(using: SwiftDataProjectRepository(modelContext: modelContext))
+                openProject(projectID)
+            } catch {
+                Logger.project.error("샘플 프로젝트 생성 실패: \(error.localizedDescription, privacy: .public)")
+                errorMessage = "샘플 프로젝트를 만들지 못했습니다. \(error.localizedDescription)"
+            }
         }
     }
 

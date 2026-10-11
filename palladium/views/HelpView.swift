@@ -50,8 +50,14 @@ struct HelpView: View {
     }
 }
 
+extension FocusedValues {
+    /// 둘러보기 프로젝트에서 목록을 닫아 두었을 때만 값이 있다(#63).
+    @Entry var showTourChecklist: (() -> Void)?
+}
+
 struct HelpCommands: Commands {
     @Environment(\.openWindow) private var openWindow
+    @FocusedValue(\.showTourChecklist) private var showTourChecklist
 
     var body: some Commands {
         // 시스템 기본 항목은 Help Book이 없어 "도움말을 사용할 수 없음"만 보여주므로 앱 내 도움말로 바꾼다.
@@ -64,6 +70,16 @@ struct HelpCommands: Commands {
                 openWindow(id: SceneID.help)
             }
             .keyboardShortcut("/", modifiers: .command)
+            Divider()
+            // 시작 창을 열어 샘플 프로젝트를 만들고 연다(#63). 자동으로 열지는 않는다.
+            Button("샘플 프로젝트로 둘러보기…") {
+                LauncherRequests.shared.pending = .tour
+                openWindow(id: SceneID.launcher)
+            }
+            Button("둘러보기 목록 보기") {
+                showTourChecklist?()
+            }
+            .disabled(showTourChecklist == nil)
         }
     }
 }

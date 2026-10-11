@@ -172,6 +172,7 @@ struct MainWindowView: View {
             .focusedSceneValue(\.previousSequence, adjacentSequenceAction(offset: -1))
             .focusedSceneValue(\.nextSequence, adjacentSequenceAction(offset: 1))
             .focusedSceneValue(\.addDefaultTransition, defaultTransitionAction)
+            .focusedSceneValue(\.showTourChecklist, showTourChecklistAction)
         let withBehaviors = withCommands
             .task { await writeBackupsPeriodically() }
             .modifier(EditorKeyHandling(handle: { handleEditorKey($0) }))
@@ -306,6 +307,18 @@ struct MainWindowView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .takesKeyboardFocus(on: .preview, focus: $focusedEditingPane, activePane: $activePane)
+                // 샘플 프로젝트 둘러보기 목록(#63). 편집을 막지 않도록 미리보기 한쪽에 띄운다.
+                .overlay(alignment: .topLeading) {
+                    if TourProgress.shared.showsChecklist(for: editor.project.id) {
+                        TourChecklistView(
+                            project: editor.project,
+                            reveal: revealForTour,
+                            startOwnProject: startOwnProject,
+                            close: { TourProgress.shared.setChecklistHidden(true, for: editor.project.id) }
+                        )
+                        .padding(12)
+                    }
+                }
                 .dropDestination(for: URL.self) { urls, _ in
                     importMedia(from: urls)
                     return true
@@ -606,6 +619,7 @@ struct MainWindowView: View {
                     Task { @MainActor in job.progress = fraction }
                 }
                 job.finish(error: nil)
+                TourProgress.shared.markExported(editor.project.id)
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             } catch is CancellationError {
                 export = nil
@@ -805,6 +819,43 @@ struct MainWindowView: View {
             pasteAtPlayhead()
         }
         return true
+    }
+
+    /// 둘러보기 "보여줘"(#63): 그 단계에 쓸 패널을 열고 키를 받는 영역 테두리로 알린다. 내보내기는 바로 내보내기 창을 연다.
+    private func revealForTour(_ step: TourStep) {
+        switch step.revealTarget {
+        case .mediaPanel:
+            if columnVisibility == .detailOnly {
+                columnVisibility = .all
+            }
+            activePane = .mediaPanel
+            let kind: MediaKind = step == .overlay ? .image : .video
+            if let asset = editor.project.assets.first(where: { $0.kind == kind }) {
+                revealInMediaPanel(asset.id)
+            }
+        case .timeline:
+            isTimelineVisible = true
+            activePane = .timeline
+            focusedEditingPane = .timeline
+        case .inspector:
+            isInspectorPresented = true
+            activePane = .inspector
+        case .export:
+            exportAction?()
+        }
+    }
+
+    /// 둘러보기를 마친 뒤 "이제 내 영상으로 시작하기"(#63). 시작 창을 열어 새 프로젝트 이름을 묻는다.
+    private func startOwnProject() {
+        LauncherRequests.shared.pending = .newProject
+        openWindow(id: SceneID.launcher)
+    }
+
+    /// 도움말 > 둘러보기 목록 보기(#63). 둘러보기 프로젝트에서 목록을 닫아 두었을 때만 값이 있다.
+    private var showTourChecklistAction: (() -> Void)? {
+        let projectID = editor.project.id
+        guard TourProgress.shared.isTourProject(projectID), !TourProgress.shared.showsChecklist(for: projectID) else { return nil }
+        return { TourProgress.shared.setChecklistHidden(false, for: projectID) }
     }
 
     /// 재생 헤드를 이전·다음 편집점(클립 시작·끝)으로 옮긴다(#64). 재생 중이면 멈춘다.
@@ -1153,17 +1204,10 @@ private struct EditorKeyHandling: ViewModifier {
 
 #if DEBUG
     private extension View {
-        /// 디버그 메뉴에서 이름 끝에 표시를 붙여 저장하지 않은 변경 상태를 만들거나, 내용을 샘플 데이터로 바꾼다.
+        /// 디버그 메뉴에서 이름 끝에 표시를 붙여 저장하지 않은 변경 상태를 만든다. 샘플 내용은 둘러보기 프로젝트(#63)로 본다.
         func debugCommandValues(editor: ProjectEditor) -> some View {
             focusedSceneValue(\.makeUnsavedChange) {
                 editor.applyDebugChange { $0.name += " ✎" }
-            }
-            .focusedSceneValue(\.fillSampleData) {
-                editor.applyDebugChange { project in
-                    project.assets = SampleData.project.assets
-                    project.folders = SampleData.project.folders
-                    project.sequences = SampleData.project.sequences
-                }
             }
         }
     }
