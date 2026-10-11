@@ -135,6 +135,8 @@ final class ClipRecord {
     var transformCenterY: Double = 0.5
     var transformScale: Double = 1
     var transformOpacity: Double = 1
+    /// 회전 각도(#66). 기존 저장소가 열리도록 옵셔널로 두고, `nil`이면 0도다.
+    var transformRotation: Double?
     var volume: Double = 1
     var isMuted = false
     /// 전환 종류(`TransitionKind`). `nil`이면 전환이 없다.
@@ -185,6 +187,7 @@ final class ClipRecord {
         transformCenterY = transform.centerY
         transformScale = transform.scale
         transformOpacity = transform.opacity
+        transformRotation = transform.rotation == 0 ? nil : transform.rotation
     }
 }
 

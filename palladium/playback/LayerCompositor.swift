@@ -116,7 +116,18 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
         case let .subtitle(subtitle):
             return subtitleImage(subtitle, renderSize: renderSize)
         }
-        return Self.applyingOpacity(layer.transform.opacity, to: placed)
+        return Self.applyingOpacity(layer.transform.opacity, to: Self.rotating(placed, by: layer.transform, renderSize: renderSize))
+    }
+
+    /// 화면에 놓은 클립을 클립 가운데 기준으로 돌린다(#66). 크롭으로 잘린 뒤에 돌려 잘린 화면 그대로 돈다.
+    /// 화면의 시계 방향은 아래가 원점인 Core Image에서 반시계 방향(음수 각도)이다.
+    static func rotating(_ image: CIImage, by transform: ClipTransform, renderSize: CGSize) -> CIImage {
+        guard transform.rotation != 0 else { return image }
+        let center = CGPoint(x: transform.centerX * renderSize.width, y: (1 - transform.centerY) * renderSize.height)
+        let rotation = CGAffineTransform(translationX: -center.x, y: -center.y)
+            .concatenating(CGAffineTransform(rotationAngle: -transform.rotation * .pi / 180))
+            .concatenating(CGAffineTransform(translationX: center.x, y: center.y))
+        return image.transformed(by: rotation)
     }
 
     private func subtitleImage(_ subtitle: Subtitle, renderSize: CGSize) -> CIImage? {

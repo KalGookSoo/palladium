@@ -266,7 +266,9 @@ private extension ClipRecord {
             sourceRange: sourceRange,
             timelineStart: CMTime(value: timelineStartValue, timescale: timelineStartTimescale)
         )
-        clip?.transform = ClipTransform(centerX: transformCenterX, centerY: transformCenterY, scale: transformScale, opacity: transformOpacity)
+        clip?.transform = ClipTransform(
+            centerX: transformCenterX, centerY: transformCenterY, scale: transformScale, opacity: transformOpacity, rotation: transformRotation ?? 0
+        )
         clip?.volume = volume
         clip?.isMuted = isMuted
         if let kind = transitionKindRawValue.flatMap(TransitionKind.init(rawValue:)) {

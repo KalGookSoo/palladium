@@ -11,8 +11,11 @@ nonisolated struct ClipTransform {
     var scale = 1.0
     /// 0(투명)~1(불투명).
     var opacity = 1.0
+    /// 클립 가운데를 기준으로 화면에서 시계 방향으로 돌린 각도(도, #66). -180~180.
+    var rotation = 0.0
 
     static let scaleRange = 0.05 ... 4.0
+    static let rotationRange = -180.0 ... 180.0
 }
 
 // MARK: - Queries
@@ -36,9 +39,34 @@ nonisolated extension ClipTransform {
 
 nonisolated extension ClipTransform {
     /// 범위를 벗어난 배율·불투명도는 가장 가까운 값으로 맞춘다. 위치는 화면 밖으로도 둘 수 있다.
+    /// 각도는 같은 방향의 -180~180도로 바꾼다(270도 → -90도).
     mutating func clamp() {
         scale = min(max(scale, Self.scaleRange.lowerBound), Self.scaleRange.upperBound)
         opacity = min(max(opacity, 0), 1)
+        rotation = Self.normalizedRotation(rotation)
+    }
+
+    /// 90도씩 돌린다(#66, 인스펙터 ↺·↻ 버튼). `clockwise`면 시계 방향.
+    func rotatedByQuarterTurn(clockwise: Bool) -> ClipTransform {
+        var rotated = self
+        rotated.rotation = Self.normalizedRotation(rotation + (clockwise ? 90 : -90))
+        return rotated
+    }
+
+    /// 미리보기 회전 손잡이를 끌어 정한 각도(#66). 클립 가운데에서 포인터까지의 방향이 위쪽(0도)에서 시계 방향으로 몇 도인지다.
+    /// `snapsToStep`이면 15도 단위로 맞춘다(⇧).
+    func rotated(toward pointer: CGPoint, around center: CGPoint, snapsToStep: Bool) -> ClipTransform {
+        var rotated = self
+        let degrees = atan2(pointer.x - center.x, center.y - pointer.y) * 180 / .pi
+        rotated.rotation = Self.normalizedRotation(snapsToStep ? (degrees / 15).rounded() * 15 : degrees)
+        return rotated
+    }
+
+    /// 같은 방향의 -180 초과 ~ 180 이하 각도.
+    static func normalizedRotation(_ degrees: Double) -> Double {
+        let wrapped = (degrees + 180).truncatingRemainder(dividingBy: 360)
+        let result = (wrapped < 0 ? wrapped + 360 : wrapped) - 180
+        return result == -180 ? 180 : result
     }
 
     /// 끌기 시작 때의 트랜스폼을 화면 비율 `offset`만큼 옮긴 결과(#84). 가운데가 화면 가로·세로 가운데에서 `snap`(화면 비율) 안이면 가운데에 붙이고, 붙었는지 함께 돌려준다.
