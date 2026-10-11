@@ -14,6 +14,7 @@ struct ClipView<Content: View>: View {
     let title: String
     let symbolName: String
     let isSelected: Bool
+    @Environment(\.isTimelineActive) private var isTimelineActive
     var colorLabel: ColorLabel?
     /// 색보정(#61) 같은 이펙트가 걸려 있으면 이름 옆에 표시한다.
     var hasEffect = false
@@ -61,7 +62,8 @@ struct ClipView<Content: View>: View {
 
     private var borderStyle: AnyShapeStyle {
         if isSelected {
-            AnyShapeStyle(Color.accentColor)
+            // 타임라인이 키를 받지 않으면 고른 테두리를 회색으로(#103, 목록 선택 색과 같은 규칙).
+            isTimelineActive ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.secondary)
         } else if let colorLabel {
             AnyShapeStyle(colorLabel.color)
         } else {

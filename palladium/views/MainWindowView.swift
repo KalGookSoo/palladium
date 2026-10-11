@@ -59,6 +59,11 @@ struct MainWindowView: View {
     /// 미리보기·타임라인을 누르면 키보드 포커스를 그쪽으로 가져온다(#98). 그래야 미디어 패널 목록이 포커스를 잃어
     /// ⌫·⌘A·⌘C 같은 키가 마지막으로 누른 패널에 동작한다.
     @FocusState private var focusedEditingPane: EditingPane?
+    /// 키를 받는 영역(#103): 미디어 패널·미리보기·타임라인·인스펙터 중 마지막으로 누른 곳. 테두리로 보이고, 같은 키도 영역마다 다르게 동작한다.
+    @State private var activePane: EditingPane = .timeline
+    /// 타임라인의 "미디어 패널에서 원본 보기"(#101). 바뀔 때마다 미디어 패널이 포커스를 받고 그 원본까지 스크롤한다.
+    @State private var assetRevealRequest: AssetRevealRequest?
+    @State private var columnVisibility = NavigationSplitViewVisibility.all
     /// 자막 트랙에서 고른 자막. 클립 선택과 함께 있지 않는다.
     @State private var selectedSubtitleID: Subtitle.ID?
     /// 마스크 레인에서 고른 마스크(#59). 클립·자막 선택과 함께 있지 않는다.
@@ -293,7 +298,7 @@ struct MainWindowView: View {
                     toggleNarration: toggleNarration
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .takesKeyboardFocus(on: .preview, focus: $focusedEditingPane)
+                .takesKeyboardFocus(on: .preview, focus: $focusedEditingPane, activePane: $activePane)
                 .dropDestination(for: URL.self) { urls, _ in
                     importMedia(from: urls)
                     return true
@@ -332,7 +337,9 @@ struct MainWindowView: View {
                     )
                     .frame(maxWidth: .infinity)
                     .frame(height: min(timelineHeight, maxTimelineHeight))
-                    .takesKeyboardFocus(on: .timeline, focus: $focusedEditingPane)
+                    .takesKeyboardFocus(on: .timeline, focus: $focusedEditingPane, activePane: $activePane)
+                    // 포커스가 없는 타임라인의 고른 클립·자막·마스크는 회색 테두리로 보인다(목록 선택 색과 같은 규칙).
+                    .environment(\.isTimelineActive, activePane == .timeline || activePane == .preview)
                 }
             }
         }
@@ -382,7 +389,7 @@ struct MainWindowView: View {
             openClipEditor: { clipID in openClipEditor(.clip(clipID)) },
             paste: paste,
             openAsset: quickLook,
-            revealAsset: { assetID in selectedAssetIDs = [assetID] },
+            revealAsset: { assetID in revealInMediaPanel(assetID) },
             switchSequence: { sequenceID in
                 editor.switchToSequence(sequenceID)
                 selectedClipIDs = []
@@ -423,15 +430,21 @@ struct MainWindowView: View {
 
     /// 미디어 패널 · 가운데(미리보기 + 타임라인) · 인스펙터와 툴바. 본문 식이 길어 타입 검사가 느려지지 않도록 나눈다.
     private func splitView(currentSequence: EditSequence, selectedClip: Clip?, selectedClipAsset: MediaAsset?) -> some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             MediaPanelView(
                 editor: editor,
                 selectedAssetIDs: $selectedAssetIDs,
                 openAsset: quickLook,
                 importFiles: importMedia(from:),
                 isListFocused: $isMediaPanelFocused,
-                openClipEditor: { assetID in openClipEditor(.asset(assetID)) }
+                openClipEditor: { assetID in openClipEditor(.asset(assetID)) },
+                revealRequest: assetRevealRequest
             )
+            .onChange(of: isMediaPanelFocused) { _, isFocused in
+                if isFocused {
+                    activePane = .mediaPanel
+                }
+            }
             // 놓을 곳을 창 전체로 잡으면 분할 뷰 경계를 덮어 크기 조절 커서가 나타나지 않으므로,
             // Finder에서 끌어온 파일은 미디어 패널과 미리보기에 놓을 때만 가져온다.
             .dropDestination(for: URL.self) { urls, _ in
@@ -482,6 +495,7 @@ struct MainWindowView: View {
                 setMaskRange: { maskID, start, end in editor.setMaskRange(maskID, start: start, end: end) },
                 deleteMask: deleteMask
             )
+            .marksActivePane(.inspector, activePane: $activePane)
             .inspectorColumnWidth(
                 min: MainWindowMetrics.inspectorMinWidth,
                 ideal: MainWindowMetrics.inspectorIdealWidth,
@@ -692,6 +706,21 @@ struct MainWindowView: View {
         quickLookURL = MediaFileAccess.resolvedURL(for: asset)
     }
 
+    /// 미리보기나 타임라인이 키를 받는지. 프레임 이동·자막 옮기기는 여기서만 한다(#103).
+    private var isEditingPaneActive: Bool {
+        activePane == .preview || activePane == .timeline
+    }
+
+    /// 타임라인의 "미디어 패널에서 원본 보기"(#101). 원본을 고르고, 가려 둔 미디어 패널을 열고, 미디어 패널이 포커스를 받아 그 줄까지 스크롤하게 한다.
+    private func revealInMediaPanel(_ assetID: MediaAsset.ID) {
+        selectedAssetIDs = [assetID]
+        if columnVisibility == .detailOnly {
+            columnVisibility = .all
+        }
+        activePane = .mediaPanel
+        assetRevealRequest = AssetRevealRequest(assetID: assetID)
+    }
+
     /// 처리하지 않는 키(미리보기에 원본이 없을 때의 재생 키, 고른 클립이 없을 때의 삭제)는 그대로 넘긴다.
     private func handleEditorKey(_ key: EditorKeyMonitor.Key) -> Bool {
         // 자막을 골랐으면 ←/→는 프레임 이동 대신 자막을 옮긴다(#82).
@@ -702,6 +731,8 @@ struct MainWindowView: View {
         case .moveUp, .moveDown, .moveLeftLarge, .moveRightLarge, .moveUpLarge, .moveDownLarge:
             return nudgeSelectedSubtitle(key)
         case .playPause, .previousFrame, .nextFrame:
+            // ←/→ 프레임 이동은 미리보기·타임라인에서만(#103). 미디어 패널은 폴더 접기·펴기, 인스펙터는 컨트롤이 쓴다.
+            guard key == .playPause || isEditingPaneActive else { return false }
             guard case let .ready(timeline) = previewPlayer.loadState else { return false }
             switch key {
             case .playPause: previewPlayer.togglePlayPause()
@@ -709,7 +740,7 @@ struct MainWindowView: View {
             default: previewPlayer.stepFrame(by: 1, in: timeline)
             }
         case .deleteSelection, .rippleDeleteSelection:
-            guard !isMediaPanelFocused else { return false }
+            guard activePane != .mediaPanel else { return false }
             if let selectedSubtitleID {
                 deleteSubtitle(selectedSubtitleID)
                 return true
@@ -722,7 +753,7 @@ struct MainWindowView: View {
             timelineActions.deleteClips(selectedClipIDs, key == .rippleDeleteSelection)
         case .selectAll:
             // 미디어 패널에 포커스가 있으면 ⌘A는 목록 전체 선택이다(#86).
-            guard !isMediaPanelFocused else { return false }
+            guard activePane != .mediaPanel else { return false }
             selectedClipIDs = Set(editor.currentSequence.tracks.flatMap(\.clips).map(\.id))
         case .escape:
             return releaseOneLevel()
@@ -735,7 +766,7 @@ struct MainWindowView: View {
         case .copy, .cut:
             return copySelection(cut: key == .cut)
         case .paste:
-            guard !isMediaPanelFocused, editor.clipboard != nil else { return false }
+            guard activePane != .mediaPanel, editor.clipboard != nil else { return false }
             pasteAtPlayhead()
         }
         return true
@@ -743,7 +774,7 @@ struct MainWindowView: View {
 
     /// 고른 자막을 방향키로 옮긴다(#82). 한 번에 화면의 0.5%, ⇧와 함께 5%.
     private func nudgeSelectedSubtitle(_ key: EditorKeyMonitor.Key) -> Bool {
-        guard !isMediaPanelFocused, let selectedSubtitleID else { return false }
+        guard isEditingPaneActive, let selectedSubtitleID else { return false }
         let small = 0.005
         let large = 0.05
         let (dx, dy): (Double, Double) = switch key {
@@ -763,7 +794,7 @@ struct MainWindowView: View {
 
     /// 고른 자막·마스크·클립을 복사하거나 잘라낸다(#62). 고른 것이 없거나 미디어 패널에 포커스가 있으면 키를 넘긴다.
     private func copySelection(cut: Bool) -> Bool {
-        guard !isMediaPanelFocused else { return false }
+        guard activePane != .mediaPanel else { return false }
         if let selectedSubtitleID {
             editor.copySubtitle(selectedSubtitleID)
             if cut {
@@ -903,7 +934,7 @@ struct MainWindowView: View {
 
     /// 편집 > 클립 편집…(⌘T, #81·#85). 미디어 패널에 포커스가 있으면 고른 항목을, 아니면 고른 클립 하나를 연다. 이미지는 열지 않는다.
     private var clipEditorAction: (() -> Void)? {
-        if isMediaPanelFocused, selectedAssetIDs.count == 1, let assetID = selectedAssetIDs.first, editor.asset(id: assetID)?.isTrimmable == true {
+        if activePane == .mediaPanel, selectedAssetIDs.count == 1, let assetID = selectedAssetIDs.first, editor.asset(id: assetID)?.isTrimmable == true {
             return { openClipEditor(.asset(assetID)) }
         }
         guard selectedClipIDs.count == 1, let clipID = selectedClipIDs.first,
@@ -1091,15 +1122,24 @@ private struct EditorKeyHandling: ViewModifier {
 }
 
 /// 키보드 포커스를 가져가는 편집 영역(#98). 미디어 패널 목록과 구분하기만 하면 되어 값은 따로 쓰지 않는다.
+/// 키를 받는 영역(#98, #103). 미디어 패널은 목록이 스스로 포커스를 갖고, 미리보기·타임라인은 누르면 포커스를 가져오며,
+/// 인스펙터는 누르면 키를 받는 영역으로 표시만 한다(입력칸·슬라이더가 스스로 포커스를 갖는다).
 private enum EditingPane: Hashable {
+    case mediaPanel
     case preview
     case timeline
+    case inspector
+}
+
+extension EnvironmentValues {
+    /// 타임라인(또는 미리보기)이 키를 받는 중인지(#103). 아니면 고른 클립·자막·마스크 테두리를 회색으로 그린다.
+    @Entry var isTimelineActive = true
 }
 
 private extension View {
-    /// 이 영역을 누르거나 끌기 시작하면 키보드 포커스를 가져온다. 포커스 테두리는 그리지 않는다.
-    /// 안쪽 클립·손잡이의 제스처는 그대로 동작하도록 함께(simultaneous) 듣는다.
-    func takesKeyboardFocus(on pane: EditingPane, focus: FocusState<EditingPane?>.Binding) -> some View {
+    /// 이 영역을 누르거나 끌기 시작하면 키보드 포커스를 가져오고 키를 받는 영역이 된다.
+    /// 시스템 포커스 링 대신 키를 받는 동안 강조색 테두리를 그린다(#103). 안쪽 클립·손잡이의 제스처는 그대로 동작하도록 함께(simultaneous) 듣는다.
+    func takesKeyboardFocus(on pane: EditingPane, focus: FocusState<EditingPane?>.Binding, activePane: Binding<EditingPane>) -> some View {
         focusable()
             .focusEffectDisabled()
             .focused(focus, equals: pane)
@@ -1108,7 +1148,39 @@ private extension View {
                     if focus.wrappedValue != pane {
                         focus.wrappedValue = pane
                     }
+                    if activePane.wrappedValue != pane {
+                        activePane.wrappedValue = pane
+                    }
                 }
             )
+            .activePaneBorder(activePane.wrappedValue == pane)
+    }
+
+    /// 누르면 키를 받는 영역으로 표시한다(인스펙터). 미디어 패널 목록이 키보드 포커스를 쥐고 있으면 놓게 해,
+    /// ↑/↓·⌫가 목록으로 가지 않게 한다. 입력칸을 누른 경우에는 입력칸이 포커스를 가져간 뒤라 건드리지 않는다.
+    func marksActivePane(_ pane: EditingPane, activePane: Binding<EditingPane>) -> some View {
+        simultaneousGesture(
+            DragGesture(minimumDistance: 0).onChanged { _ in
+                guard activePane.wrappedValue != pane else { return }
+                activePane.wrappedValue = pane
+                DispatchQueue.main.async {
+                    if let window = NSApp.keyWindow, window.firstResponder is NSTableView {
+                        window.makeFirstResponder(nil)
+                    }
+                }
+            }
+        )
+        .activePaneBorder(activePane.wrappedValue == pane)
+    }
+
+    /// 키를 받는 영역의 안쪽 테두리(Premiere식). 클릭은 가로막지 않는다.
+    func activePaneBorder(_ isActive: Bool) -> some View {
+        overlay {
+            if isActive {
+                Rectangle()
+                    .strokeBorder(Color.accentColor.opacity(0.7), lineWidth: 2)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 }

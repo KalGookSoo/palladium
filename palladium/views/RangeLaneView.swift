@@ -18,6 +18,7 @@ struct RangeLaneView: View {
     let scale: TimelineScale
     let playheadTime: CMTime
     @Binding var selectedID: UUID?
+    @Environment(\.isTimelineActive) private var isTimelineActive
     let addTitle: String
     let deleteTitle: String
     let helpText: String
@@ -73,7 +74,7 @@ struct RangeLaneView: View {
             .background(RoundedRectangle(cornerRadius: 4).fill(tint.opacity(isSelected ? 0.55 : 0.3)))
             .overlay {
                 RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(isSelected ? Color.accentColor : tint, lineWidth: isSelected ? 2 : 1)
+                    .strokeBorder(isSelected ? (isTimelineActive ? Color.accentColor : Color.secondary) : tint, lineWidth: isSelected ? 2 : 1)
             }
             .clipped()
             .contentShape(Rectangle())

@@ -18,6 +18,8 @@ struct MediaPanelView: View {
     var isListFocused: Binding<Bool> = .constant(false)
     /// 항목을 클립 편집 창으로 연다(#81·#85).
     var openClipEditor: (MediaAsset.ID) -> Void = { _ in }
+    /// 타임라인의 "미디어 패널에서 원본 보기"(#101). 바뀌면 목록이 포커스를 받고 그 원본 줄까지 스크롤한다.
+    var revealRequest: AssetRevealRequest?
     @State private var filter = MediaFilter()
     /// 고른 순서(#86). 타임라인에 이어 붙이거나 폴더로 옮길 때 이 순서를 쓴다.
     @State private var selectionOrder: [MediaAsset.ID] = []
@@ -66,12 +68,22 @@ struct MediaPanelView: View {
 
         let listOrder = project.assetListOrder
 
-        List(selection: $selectedAssetIDs) {
-            ForEach(rootFolders) { folder in
-                folderNode(folder)
+        ScrollViewReader { proxy in
+            List(selection: $selectedAssetIDs) {
+                ForEach(rootFolders) { folder in
+                    folderNode(folder)
+                }
+                ForEach(rootAssets) { asset in
+                    assetRow(asset, folderID: nil)
+                }
             }
-            ForEach(rootAssets) { asset in
-                assetRow(asset, folderID: nil)
+            .onChange(of: revealRequest) { _, request in
+                guard let request else { return }
+                listHasFocus = true
+                // 접힌 폴더가 펼쳐져 줄이 생긴 뒤에 스크롤한다.
+                Task { @MainActor in
+                    withAnimation { proxy.scrollTo(request.assetID, anchor: .center) }
+                }
             }
         }
         // 행이 없는 빈 곳에 놓으면 맨 위로 옮긴다.

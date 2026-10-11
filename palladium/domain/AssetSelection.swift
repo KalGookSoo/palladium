@@ -47,3 +47,9 @@ nonisolated enum FolderDragPayload {
         }
     }
 }
+
+/// "미디어 패널에서 원본 보기" 요청(#101). 같은 원본을 다시 보여 달라고 해도 새 요청으로 치도록 ID를 둔다.
+nonisolated struct AssetRevealRequest: Equatable {
+    let id = UUID()
+    let assetID: MediaAsset.ID
+}
