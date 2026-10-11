@@ -866,6 +866,11 @@ private struct TrimBarView: View {
     @State private var lastDrag: (x: Double, time: CMTime)?
     @State private var autoScroll: AutoScroll?
     @State private var pinchStart: TrimBarZoom?
+    /// 끄는 중인 포인터 자리(막대 안 좌표)와 그 시각. 말풍선을 띄우는 데 쓴다(#102).
+    @State private var dragHint: (x: Double, time: CMTime)?
+    @State private var isOptionHeld = false
+    /// 말풍선 시각 글자(소수 둘째 자리까지).
+    private static let hintScale = TimelineScale(pointsPerSecond: 100)
     static let height = TimelineMetrics.trackHeight - TimelineMetrics.clipVerticalInset * 2
     private static let handleWidth = 12.0
     private static let space = "trimBar"
@@ -898,6 +903,15 @@ private struct TrimBarView: View {
             }
         }
         .frame(height: Self.height)
+        // 끄는 동안 포인터 위에 시각과 ⌥ 정밀 안내를 띄운다. 기본 툴팁은 끄는 동안 뜨지 않아 직접 그린다(#102).
+        .overlay(alignment: .topLeading) {
+            if let dragHint {
+                dragHintBubble(dragHint)
+            }
+        }
+        .onModifierKeysChanged(mask: .option, initial: true) { _, keys in
+            isOptionHeld = keys.contains(.option)
+        }
         .gesture(
             MagnifyGesture()
                 .onChanged { value in
@@ -982,7 +996,10 @@ private struct TrimBarView: View {
                 let time = draggedTime(to: value.location.x, from: playhead, visibleWidth: visibleWidth)
                 scrub(time)
             }
-            .onEnded { _ in lastDrag = nil }
+            .onEnded { _ in
+                lastDrag = nil
+                dragHint = nil
+            }
     }
 
     private func handle(_ edge: ClipEdge, x: Double, visibleWidth: Double) -> some View {
@@ -1011,6 +1028,7 @@ private struct TrimBarView: View {
                     }
                     .onEnded { _ in
                         lastDrag = nil
+                        dragHint = nil
                         autoScroll = nil
                     }
             )
@@ -1032,7 +1050,26 @@ private struct TrimBarView: View {
             visibleWidth: visibleWidth
         )
         lastDrag = (x, time)
+        dragHint = (x, time)
         return time
+    }
+
+    /// "0:12.40 · ⌥ 누르면 정밀하게" / ⌥를 누르면 "0:12.40 · 정밀 1/5". 막대 밖으로 나가지 않게 좌우를 맞춘다.
+    private func dragHintBubble(_ hint: (x: Double, time: CMTime)) -> some View {
+        let text = "\(Self.hintScale.timeLabel(for: hint.time)) · \(isOptionHeld ? "정밀 1/5" : "⌥ 누르면 정밀하게")"
+        let width = 190.0
+        let viewX = hint.x - viewport.offset
+        let left = min(max(viewX - width / 2, 0), max(viewport.visibleWidth - width, 0))
+        return Text(text)
+            .font(.caption.weight(isOptionHeld ? .semibold : .regular))
+            .monospacedDigit()
+            .foregroundStyle(isOptionHeld ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(isOptionHeld ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.regularMaterial), in: Capsule())
+            .frame(width: width)
+            .offset(x: left, y: -30)
+            .allowsHitTesting(false)
     }
 
     private func updateAutoScroll(edge: ClipEdge, viewX: Double) {
@@ -1063,6 +1100,7 @@ private struct TrimBarView: View {
             let time = zoom.time(forX: x, duration: asset.duration, visibleWidth: width)
             moveEdge(current.edge, time)
             lastDrag = (x, time)
+            dragHint = (x, time)
             try? await Task.sleep(for: .milliseconds(16))
         }
     }
