@@ -98,10 +98,14 @@ struct TimelineEditorView: View {
     @Binding var isDragging: Bool
     /// 값이 바뀌면 끄는 중인 편집을 취소한다(Esc).
     var dragCancelCount = 0
+    /// 값이 바뀌면 시퀀스 전체가 보이게 배율을 맞춘다(#64, ⇧Z).
+    var fitRequest = 0
     var actions = TimelineActions()
     @AppStorage(AppPreferences.timelineShowsFilmstripKey) private var showsFilmstrip = true
     @AppStorage(AppPreferences.timelineShowsWaveformKey) private var showsWaveform = true
     @State private var pinchStartScale: TimelineScale?
+    /// 트랙이 보이는 가로 폭. 전체 보기(⇧Z) 배율을 계산하는 데 쓴다.
+    @State private var visibleWidth = 0.0
     @State private var isRenamingSequence = false
     @State private var sequenceNameText = ""
     @State private var isConfirmingSequenceDeletion = false
@@ -147,6 +151,14 @@ struct TimelineEditorView: View {
                 }
                 .disabled(!scale.canZoomIn)
                 .help(ShortcutGuide.zoomInTimeline.helpText)
+
+                Button {
+                    fitToSequence()
+                } label: {
+                    Label("전체 보기", systemImage: "arrow.left.and.right.square")
+                }
+                .disabled(sequence.duration <= .zero)
+                .help(ShortcutGuide.fitTimeline.helpText)
             }
             .labelStyle(.iconOnly)
             .buttonStyle(.plain)
@@ -358,8 +370,16 @@ struct TimelineEditorView: View {
                         .allowsHitTesting(false)
                 }
             }
+            .onGeometryChange(for: Double.self) { $0.size.width } action: { visibleWidth = $0 }
         }
         .frame(maxHeight: .infinity)
+        .onChange(of: fitRequest) { fitToSequence() }
+    }
+
+    /// 시퀀스 전체가 보이게 배율을 맞춘다(#64, ⇧Z). 끝이 가장자리에 붙지 않게 조금 남긴다.
+    private func fitToSequence() {
+        guard sequence.duration > .zero else { return }
+        scale = TimelineScale.fitting(CMTimeMultiplyByFloat64(sequence.duration, multiplier: 1.03), into: visibleWidth)
     }
 
     /// 원래 시퀀스에서 끄는 클립은 원래 행에 반투명하게 남겨 끌기 제스처를 이어 가고,

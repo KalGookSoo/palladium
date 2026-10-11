@@ -421,6 +421,19 @@ final class ProjectEditor {
         editCurrentSequence(transition == nil ? "전환 제거" : "전환") { $0.setTransition(transition, forClip: clipID) }
     }
 
+    /// 기본 전환(디졸브 1초)을 넣는다(#64, ⇧⌘T). 고른 클립이 있으면 그중 앞 클립과 맞닿은 클립에, 없으면 재생 헤드에서 시작하는 클립에 넣는다.
+    /// 실행 취소 한 번으로 되돌린다. 넣은 클립 수를 돌려준다(넣을 곳이 없으면 0).
+    @discardableResult
+    func addDefaultTransitions(selected clipIDs: Set<Clip.ID>, at playhead: CMTime) -> Int {
+        let targets = currentSequence.defaultTransitionTargets(selected: clipIDs, playhead: playhead)
+        editCurrentSequence("기본 전환") { sequence in
+            for clipID in targets {
+                sequence.setTransition(ClipTransition(kind: .dissolve, duration: ClipTransition.defaultDuration), forClip: clipID)
+            }
+        }
+        return targets.count
+    }
+
     /// 앞 클립과의 오디오 크로스페이드. `nil`이면 없앤다(#8).
     func setAudioCrossfade(_ duration: CMTime?, forClip clipID: Clip.ID) {
         editCurrentSequence(duration == nil ? "크로스페이드 제거" : "크로스페이드") { $0.setAudioCrossfade(duration, forClip: clipID) }

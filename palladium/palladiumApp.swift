@@ -40,6 +40,7 @@ struct palladiumApp: App {
             MediaCommands()
             PanelVisibilityCommands()
             TimelineZoomCommands()
+            PlaybackCommands()
             HelpCommands()
             #if DEBUG
                 DebugCommands()

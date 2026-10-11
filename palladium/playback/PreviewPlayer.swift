@@ -123,6 +123,22 @@ final class PreviewPlayer {
         isPlaying = false
     }
 
+    /// J/L(#64): 앞으로(`forward`) 또는 거꾸로 재생하고, 같은 쪽을 다시 누르면 2배·4배로 빨라진다. 거꾸로 재생할 수 없는 합성이면
+    /// 아무것도 하지 않고 `false`. 앞으로 재생을 끝에서 시작하면 처음부터다.
+    @discardableResult
+    func shuttle(forward: Bool) -> Bool {
+        guard let item = player.currentItem else { return false }
+        if !forward, !item.canPlayReverse {
+            return false
+        }
+        if forward, player.rate <= 0, isAtEnd {
+            seek(to: .zero)
+        }
+        player.rate = ShuttleRate.next(from: player.rate, forward: forward)
+        isPlaying = true
+        return true
+    }
+
     func stepFrame(by frameCount: Int, in timeline: PlaybackTimeline) {
         player.pause()
         seek(to: timeline.steppedTime(from: currentTime, byFrames: frameCount))

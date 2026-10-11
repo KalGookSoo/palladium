@@ -75,6 +75,8 @@ struct MainWindowView: View {
     @State private var timelineDragCancelCount = 0
     @State private var playheadTime: CMTime = .zero
     @State private var timelineScale = TimelineScale(pointsPerSecond: 40)
+    /// 바뀔 때마다 타임라인이 시퀀스 전체가 보이게 배율을 맞춘다(#64, ⇧Z).
+    @State private var timelineFitRequest = 0
     @State private var previewPlayer = PreviewPlayer()
     @State private var narration = NarrationRecorder()
     /// 정지 프레임을 저장하지 못했을 때의 안내.
@@ -165,9 +167,14 @@ struct MainWindowView: View {
             .focusedSceneValue(\.isTimelineVisible, $isTimelineVisible)
             .focusedSceneValue(\.isInspectorPresented, $isInspectorPresented)
             .focusedSceneValue(\.timelineScale, $timelineScale)
+            .focusedSceneValue(\.editorCommand) { key in _ = handleEditorKey(key, fromMenu: true) }
+            .focusedSceneValue(\.newSequence) { timelineActions.addSequence() }
+            .focusedSceneValue(\.previousSequence, adjacentSequenceAction(offset: -1))
+            .focusedSceneValue(\.nextSequence, adjacentSequenceAction(offset: 1))
+            .focusedSceneValue(\.addDefaultTransition, defaultTransitionAction)
         let withBehaviors = withCommands
             .task { await writeBackupsPeriodically() }
-            .modifier(EditorKeyHandling(handle: handleEditorKey))
+            .modifier(EditorKeyHandling(handle: { handleEditorKey($0) }))
             // 편집기 커맨드의 실행 취소를 창의 실행 취소 관리자(편집 > 실행 취소 ⌘Z)에 남긴다.
             .onChange(of: undoManager, initial: true) { _, undoManager in
                 editor.undoManager = undoManager
@@ -333,6 +340,7 @@ struct MainWindowView: View {
                         scale: $timelineScale,
                         isDragging: $isTimelineDragging,
                         dragCancelCount: timelineDragCancelCount,
+                        fitRequest: timelineFitRequest,
                         actions: timelineActions
                     )
                     .frame(maxWidth: .infinity)
@@ -723,17 +731,43 @@ struct MainWindowView: View {
     }
 
     /// 처리하지 않는 키(미리보기에 원본이 없을 때의 재생 키, 고른 클립이 없을 때의 삭제)는 그대로 넘긴다.
-    private func handleEditorKey(_ key: EditorKeyMonitor.Key) -> Bool {
+    /// `fromMenu`면 재생 메뉴·타임라인 메뉴 항목에서 부른 것이라(#64) 키를 받는 영역과 상관없이 실행한다.
+    private func handleEditorKey(_ key: EditorKeyMonitor.Key, fromMenu: Bool = false) -> Bool {
         // 자막을 골랐으면 ←/→는 프레임 이동 대신 자막을 옮긴다(#82).
         if selectedSubtitleID != nil, key == .previousFrame || key == .nextFrame {
             return nudgeSelectedSubtitle(key)
         }
+        // 방향키 이동·처음/끝은 미리보기·타임라인에서만(#103). 미디어 패널은 목록 이동·폴더 접기, 인스펙터는 컨트롤이 쓴다.
+        let canNavigate = fromMenu || isEditingPaneActive
         switch key {
-        case .moveUp, .moveDown, .moveLeftLarge, .moveRightLarge, .moveUpLarge, .moveDownLarge:
+        case .moveUp, .moveDown, .moveLeftLarge, .moveRightLarge:
+            // 자막을 골랐으면 자막을 옮기고, 아니면 ↑/↓는 이전·다음 편집점, ⇧←/→는 10프레임씩(#64).
+            if selectedSubtitleID != nil {
+                return nudgeSelectedSubtitle(key)
+            }
+            guard canNavigate, case let .ready(timeline) = previewPlayer.loadState else { return false }
+            switch key {
+            case .moveUp: moveToEditPoint(next: false)
+            case .moveDown: moveToEditPoint(next: true)
+            case .moveLeftLarge: previewPlayer.stepFrame(by: -10, in: timeline)
+            default: previewPlayer.stepFrame(by: 10, in: timeline)
+            }
+        case .moveUpLarge, .moveDownLarge:
             return nudgeSelectedSubtitle(key)
+        case .goToStart, .goToEnd:
+            guard canNavigate, case .ready = previewPlayer.loadState else { return false }
+            previewPlayer.pause()
+            playheadTime = key == .goToStart ? .zero : editor.currentSequence.duration
+        case .shuttleReverse, .shuttleForward:
+            return previewPlayer.shuttle(forward: key == .shuttleForward)
+        case .shuttleStop:
+            guard case .ready = previewPlayer.loadState else { return false }
+            previewPlayer.pause()
+        case .fitTimeline:
+            isTimelineVisible = true
+            timelineFitRequest += 1
         case .playPause, .previousFrame, .nextFrame:
-            // ←/→ 프레임 이동은 미리보기·타임라인에서만(#103). 미디어 패널은 폴더 접기·펴기, 인스펙터는 컨트롤이 쓴다.
-            guard key == .playPause || isEditingPaneActive else { return false }
+            guard key == .playPause || canNavigate else { return false }
             guard case let .ready(timeline) = previewPlayer.loadState else { return false }
             switch key {
             case .playPause: previewPlayer.togglePlayPause()
@@ -771,6 +805,28 @@ struct MainWindowView: View {
             pasteAtPlayhead()
         }
         return true
+    }
+
+    /// 재생 헤드를 이전·다음 편집점(클립 시작·끝)으로 옮긴다(#64). 재생 중이면 멈춘다.
+    private func moveToEditPoint(next: Bool) {
+        let sequence = editor.currentSequence
+        guard let time = next ? sequence.nextEditPoint(after: playheadTime) : sequence.previousEditPoint(before: playheadTime) else { return }
+        previewPlayer.pause()
+        playheadTime = time
+    }
+
+    /// 타임라인 메뉴 > 이전·다음 시퀀스(#64, ⌘[ / ⌘]). 그쪽에 시퀀스가 없으면 `nil`이라 메뉴가 꺼진다.
+    private func adjacentSequenceAction(offset: Int) -> (() -> Void)? {
+        let sequences = editor.project.sequences
+        guard let index = sequences.firstIndex(where: { $0.id == editor.currentSequence.id }), sequences.indices.contains(index + offset) else { return nil }
+        let target = sequences[index + offset].id
+        return { timelineActions.switchSequence(target) }
+    }
+
+    /// 타임라인 메뉴 > 기본 전환 추가(#64, ⇧⌘T). 넣을 곳이 없으면 `nil`이라 메뉴가 꺼진다.
+    private var defaultTransitionAction: (() -> Void)? {
+        guard !editor.currentSequence.defaultTransitionTargets(selected: selectedClipIDs, playhead: playheadTime).isEmpty else { return nil }
+        return { editor.addDefaultTransitions(selected: selectedClipIDs, at: playheadTime) }
     }
 
     /// 고른 자막을 방향키로 옮긴다(#82). 한 번에 화면의 0.5%, ⇧와 함께 5%.

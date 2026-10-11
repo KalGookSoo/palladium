@@ -14,17 +14,24 @@ struct ShortcutGuideEntry: Identifiable {
         guard let keys else { return "\(title) — \(summary)" }
         return "\(title) — \(summary) (\(keys))"
     }
+
+    /// 한 글자 단축키를 메뉴에 보일 이름(#64). 예: "재생 헤드에 마커 추가 (M)"
+    var menuTitle: String {
+        keys.map { "\(title) (\($0))" } ?? title
+    }
 }
 
 /// 앱의 고정 단축키. 사용자가 바꿀 수 없다(커스텀 키맵은 보류 기능).
 enum ShortcutGuide {
     static let openProjectList = ShortcutGuideEntry(title: "프로젝트 목록 열기", summary: "시작 창을 엽니다", keys: "⇧⌘1")
-    static let newProject = ShortcutGuideEntry(title: "새 프로젝트 만들기", summary: "이름을 정해 새 프로젝트를 만듭니다(시작 창)", keys: "⌘N")
+    static let newProject = ShortcutGuideEntry(title: "새 프로젝트 만들기", summary: "이름을 정해 새 프로젝트를 만듭니다", keys: "⌘N (시작 창)")
     static let save = ShortcutGuideEntry(title: "저장", summary: "프로젝트 창에서는 저장하지 않은 변경을 저장하고, 클립 편집 창에서는 고친 트림·크롭을 적용합니다(창은 열어 둠)", keys: "⌘S")
     static let close = ShortcutGuideEntry(title: "닫기", summary: "편집 창을 닫습니다", keys: "⌘W")
     static let importMedia = ShortcutGuideEntry(title: "가져오기", summary: "영상·오디오·이미지 파일을 프로젝트로 가져옵니다", keys: "⌘I")
     static let export = ShortcutGuideEntry(title: "내보내기", summary: "편집한 영상을 파일로 내보냅니다", keys: "⌘E")
     static let batchExport = ShortcutGuideEntry(title: "여러 시퀀스 내보내기", summary: "고른 시퀀스들을 한 폴더에 차례로 내보냅니다", keys: "⇧⌘E")
+    static let exportStillFrame = ShortcutGuideEntry(title: "정지 프레임 저장", summary: "재생 헤드 위치의 화면 한 장을 PNG로 저장합니다", keys: "⌥⌘E")
+    static let newSequence = ShortcutGuideEntry(title: "새 시퀀스", summary: "이 프로젝트에 빈 시퀀스를 만들고 그 시퀀스로 바꿉니다", keys: "⌘N")
     static let aspectRatio = ShortcutGuideEntry(title: "화면비", summary: "결과물의 화면비를 고릅니다", keys: nil)
 
     static let toggleMediaPanel = ShortcutGuideEntry(title: "미디어 패널 보기/가리기", summary: "왼쪽 미디어 패널을 열고 닫습니다", keys: "⌃⌘S")
@@ -34,10 +41,20 @@ enum ShortcutGuide {
     static let playPause = ShortcutGuideEntry(title: "재생/일시정지", summary: "미리보기를 재생하거나 멈춥니다(끝에서는 처음부터 다시 재생)", keys: "Space")
     static let previousFrame = ShortcutGuideEntry(title: "이전 프레임", summary: "한 프레임 뒤로 이동합니다", keys: "←")
     static let nextFrame = ShortcutGuideEntry(title: "다음 프레임", summary: "한 프레임 앞으로 이동합니다", keys: "→")
+    static let tenFramesBack = ShortcutGuideEntry(title: "10프레임 뒤로", summary: "재생 헤드를 10프레임 뒤로 옮깁니다", keys: "⇧←")
+    static let tenFramesForward = ShortcutGuideEntry(title: "10프레임 앞으로", summary: "재생 헤드를 10프레임 앞으로 옮깁니다", keys: "⇧→")
+    static let goToStart = ShortcutGuideEntry(title: "처음으로", summary: "재생 헤드를 시퀀스 처음으로 옮깁니다", keys: "Home")
+    static let goToEnd = ShortcutGuideEntry(title: "끝으로", summary: "재생 헤드를 시퀀스 끝으로 옮깁니다", keys: "End")
+    static let previousEditPoint = ShortcutGuideEntry(title: "이전 편집점", summary: "재생 헤드를 앞쪽 가장 가까운 클립 경계로 옮깁니다(자막을 골랐으면 자막을 옮김)", keys: "↑")
+    static let nextEditPoint = ShortcutGuideEntry(title: "다음 편집점", summary: "재생 헤드를 뒤쪽 가장 가까운 클립 경계로 옮깁니다(자막을 골랐으면 자막을 옮김)", keys: "↓")
+    static let shuttleReverse = ShortcutGuideEntry(title: "거꾸로 재생", summary: "미리보기를 거꾸로 재생합니다. 다시 누를수록 2배·4배로 빨라집니다", keys: "J")
+    static let shuttleStop = ShortcutGuideEntry(title: "멈춤", summary: "미리보기 재생을 멈춥니다", keys: "K")
+    static let shuttleForward = ShortcutGuideEntry(title: "앞으로 재생", summary: "미리보기를 재생합니다. 다시 누를수록 2배·4배로 빨라집니다", keys: "L")
     static let narration = ShortcutGuideEntry(title: "내레이션 녹음 시작/정지", summary: "재생 헤드부터 영상을 재생하며 마이크로 내레이션을 녹음하고, 멈추면 오디오 트랙에 놓습니다", keys: "R")
 
     static let zoomInTimeline = ShortcutGuideEntry(title: "타임라인 확대", summary: "타임라인을 더 자세히 봅니다", keys: "⌘=")
     static let zoomOutTimeline = ShortcutGuideEntry(title: "타임라인 축소", summary: "타임라인을 더 넓게 봅니다", keys: "⌘-")
+    static let fitTimeline = ShortcutGuideEntry(title: "타임라인 전체 보기", summary: "시퀀스 전체가 타임라인 폭에 들어오게 배율을 맞춥니다", keys: "⇧Z")
 
     static let undo = ShortcutGuideEntry(title: "실행 취소", summary: "마지막 편집을 되돌립니다", keys: "⌘Z")
     static let redo = ShortcutGuideEntry(title: "다시 실행", summary: "되돌린 편집을 다시 합니다", keys: "⇧⌘Z")
@@ -49,7 +66,10 @@ enum ShortcutGuide {
     static let pasteClips = ShortcutGuideEntry(title: "붙여넣기", summary: "재생 헤드에 붙입니다. 클립은 경계에 끼워 넣고 뒤 클립을 밀며, 다른 시퀀스에도 붙일 수 있습니다", keys: "⌘V")
     static let duplicateClips = ShortcutGuideEntry(title: "복제", summary: "고른 클립 바로 뒤에 같은 클립을 넣습니다(클립보드는 그대로)", keys: "⌘D")
     static let addMarker = ShortcutGuideEntry(title: "재생 헤드에 마커 추가", summary: "나중에 다시 찾을 시점에 책갈피를 둡니다", keys: "M")
-    static let moveSubtitle = ShortcutGuideEntry(title: "자막 옮기기", summary: "고른 자막을 화면의 0.5%씩, ⇧와 함께 5%씩 옮깁니다(자막을 고르지 않았으면 ←/→는 프레임 이동)", keys: "←/→/↑/↓ (자막 선택 시)")
+    static let moveSubtitle = ShortcutGuideEntry(title: "자막 옮기기", summary: "고른 자막을 화면의 0.5%씩, ⇧와 함께 5%씩 옮깁니다(자막을 고르지 않았으면 ←/→는 프레임, ↑/↓는 편집점, ⇧←/→는 10프레임 이동)", keys: "←/→/↑/↓ (자막 선택 시)")
+    static let addDefaultTransition = ShortcutGuideEntry(title: "기본 전환 추가", summary: "고른 클립(없으면 재생 헤드에서 시작하는 클립)과 앞 클립 사이에 1초 디졸브를 넣습니다", keys: "⇧⌘T")
+    static let previousSequence = ShortcutGuideEntry(title: "이전 시퀀스", summary: "시퀀스 목록에서 앞 시퀀스로 바꿉니다", keys: "⌘[")
+    static let nextSequence = ShortcutGuideEntry(title: "다음 시퀀스", summary: "시퀀스 목록에서 뒤 시퀀스로 바꿉니다", keys: "⌘]")
     static let addSubtitle = ShortcutGuideEntry(title: "재생 헤드에 자막 추가", summary: "재생 헤드부터 3초 동안 나오는 자막을 자막 트랙에 둡니다", keys: "T")
     static let preciseTrim = ShortcutGuideEntry(title: "정밀 트림", summary: "클립 끝을 끌 때 이동량을 줄여 프레임 단위로 맞춥니다", keys: "⌥ 누른 채 끌기")
     static let rollTrim = ShortcutGuideEntry(title: "롤 트림", summary: "클립 끝을 끌어 맞닿은 이웃 클립과의 경계를 옮깁니다(전체 길이 그대로)", keys: "⌘ 누른 채 끝 끌기")
@@ -79,11 +99,11 @@ enum ShortcutGuide {
 
     /// 단축키 목록 창에 보여줄 묶음. 단축키가 없는 항목은 넣지 않는다.
     static let sections: [(title: String, entries: [ShortcutGuideEntry])] = [
-        ("파일", [openProjectList, newProject, save, close, importMedia, export, batchExport]),
-        ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline]),
-        ("재생", [playPause, previousFrame, nextFrame, narration]),
+        ("파일", [openProjectList, newProject, newSequence, save, close, importMedia, export, batchExport, exportStillFrame]),
+        ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline, fitTimeline]),
+        ("재생", [playPause, shuttleReverse, shuttleStop, shuttleForward, goToStart, goToEnd, previousEditPoint, nextEditPoint, previousFrame, nextFrame, tenFramesBack, tenFramesForward, narration]),
         ("편집", [undo, redo, rename, clipEditor, trimNudge, excludeRange, preciseTrimBar, zoomInTrimBar, zoomOutTrimBar, fitTrimBar, cropKeepRatio, cutCopyPasteAssets, deleteAsset]),
-        ("타임라인", [deleteClips, rippleDeleteClips, cutClips, copyClips, pasteClips, duplicateClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect, addMarker, addSubtitle, moveSubtitle, preciseTrim, rollTrim, slipTrim, slideTrim]),
+        ("타임라인", [deleteClips, rippleDeleteClips, cutClips, copyClips, pasteClips, duplicateClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect, addMarker, addSubtitle, addDefaultTransition, previousSequence, nextSequence, moveSubtitle, preciseTrim, rollTrim, slipTrim, slideTrim]),
         ("도움말", [showHelp, showShortcuts]),
     ]
 }

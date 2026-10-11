@@ -26,6 +26,15 @@ final class EditorKeyMonitor {
         case copy
         case cut
         case paste
+        /// 재생 헤드를 처음·끝으로(#64, Home/End).
+        case goToStart
+        case goToEnd
+        /// J/K/L 재생 속도(#64).
+        case shuttleReverse
+        case shuttleStop
+        case shuttleForward
+        /// 타임라인 전체 보기(#64, ⇧Z).
+        case fitTimeline
     }
 
     /// 편집 창이 여러 개 열려 있어도 앞에 있는 창 하나만 반응하도록, 창이 앞에 있을 때만 받는다.
@@ -73,6 +82,13 @@ final class EditorKeyMonitor {
         case (8, .command): return .copy
         case (7, .command): return .cut
         case (9, .command): return .paste
+        // 115은 Home(fn+←), 119는 End(fn+→).
+        case (115, []): return .goToStart
+        case (119, []): return .goToEnd
+        case (38, []): return .shuttleReverse
+        case (40, []): return .shuttleStop
+        case (37, []): return .shuttleForward
+        case (6, .shift): return .fitTimeline
         default: return nil
         }
     }

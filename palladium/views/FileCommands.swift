@@ -39,6 +39,7 @@ struct FileCommands: Commands {
     @FocusedValue(\.exportStillFrame) private var exportStillFrame
     @FocusedValue(\.importSubtitles) private var importSubtitles
     @FocusedValue(\.exportSubtitles) private var exportSubtitles
+    @FocusedValue(\.newSequence) private var newSequence
 
     var body: some Commands {
         // 기본 "새 윈도우"는 프로젝트 없이 편집 창을 열기 때문에, 프로젝트 목록(시작 창)을 여는 항목으로 바꾼다.
@@ -47,6 +48,12 @@ struct FileCommands: Commands {
                 openWindow(id: SceneID.launcher)
             }
             .keyboardShortcut("1", modifiers: [.command, .shift])
+            // 프로젝트 창에서 ⌘N은 새 시퀀스다(#64, Premiere와 같음). 시작 창에서는 그 창의 "새 프로젝트" 버튼이 ⌘N을 먼저 받는다.
+            Button(ShortcutGuide.newSequence.title) {
+                newSequence?()
+            }
+            .keyboardShortcut("n")
+            .disabled(newSequence == nil)
         }
 
         // 저장은 보이는 이 묶음에 둔다. 문서 앱이 아니라 시스템 저장 항목이 없어, 그 뒤(`after: .saveItem`)에 붙이면
@@ -76,6 +83,7 @@ struct FileCommands: Commands {
             Button("정지 프레임 저장…") {
                 exportStillFrame?()
             }
+            .keyboardShortcut("e", modifiers: [.command, .option])
             .disabled(exportStillFrame == nil)
             Divider()
             Button("자막 가져오기(SRT)…") {
