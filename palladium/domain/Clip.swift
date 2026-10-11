@@ -32,6 +32,8 @@ nonisolated struct Clip {
     var chromaKey: ChromaKey?
     /// 소리 이펙트(#74, EQ·잔향·게이트·게인). 소리가 있는 클립에만 쓴다.
     var audioEffects = AudioEffects()
+    /// 타임라인 병합 그룹(#100). 같은 값을 가진 맞닿은 클립들을 한 번에 고르고 옮기고 지운다. `nil`이면 그룹이 아니다.
+    var groupID: UUID?
     /// 화면에서 잘라낼 만큼(#85, 클립 편집 창의 크롭). 위치·크기는 잘린 화면을 기준으로 한다.
     var crop = ClipCrop()
     /// 시간에 따라 바뀌는 트랜스폼·음량(#67, 키프레임). 비어 있으면 위의 고정 값을 쓴다.

@@ -28,6 +28,8 @@ nonisolated extension Clip {
         portion?.filters = filters
         portion?.chromaKey = chromaKey
         portion?.audioEffects = audioEffects
+        // 나눈 조각도 같은 그룹에 남는다(#100).
+        portion?.groupID = groupID
         portion?.crop = crop
         // 키프레임은 원본 시각에 붙어 있어 나눈 조각도 같은 키프레임을 그대로 갖는다(#67).
         portion?.animation = animation
@@ -46,12 +48,14 @@ nonisolated extension Clip {
 nonisolated extension Track {
     /// 클립을 넣을 지점. 클립 안에 떨어지면 앞쪽 절반은 그 클립 앞 경계, 뒤쪽 절반은 뒤 경계로 옮긴다.
     /// 클립 사이 틈이나 맨 뒤라면 그 시각 그대로다. 삽입은 클립을 자동으로 나누지 않기 위함이다.
+    /// 그룹(#100) 안에 떨어지면 그룹 전체를 한 덩어리로 보고 그 앞이나 뒤로 옮긴다(그룹 사이에 끼워 넣지 않는다).
     func insertionPoint(for time: CMTime) -> CMTime {
         guard let clip = clips.first(where: { $0.timelineStart < time && time < $0.timelineRange.end }) else {
             return CMTimeMaximum(time, .zero)
         }
-        let middle = clip.timelineStart + CMTimeMultiplyByRatio(clip.timelineDuration, multiplier: 1, divisor: 2)
-        return time < middle ? clip.timelineStart : clip.timelineRange.end
+        let block = blockRange(of: clip)
+        let middle = block.start + CMTimeMultiplyByRatio(block.duration, multiplier: 1, divisor: 2)
+        return time < middle ? block.start : block.end
     }
 
     /// 클립을 경계(또는 틈)에 넣고, 뒤 클립과 겹치면 겹치는 만큼 뒤 클립들을 뒤로 민다. 기존 클립은 나누지 않는다.
@@ -102,6 +106,7 @@ nonisolated extension Track {
                 piece.filters = original.filters
                 piece.chromaKey = original.chromaKey
                 piece.audioEffects = original.audioEffects
+                piece.groupID = original.groupID
                 piece.crop = original.crop
                 piece.animation = original.animation
                 piece.title = original.title
@@ -410,6 +415,11 @@ nonisolated extension EditSequence {
     /// 클립을 다른 시각·트랙으로 옮긴다. 원래 자리의 틈을 메우고(뒤 클립을 당김) 새 자리 경계에 넣어 뒤 클립을 민다.
     /// 같은 트랙에서는 순서 바꾸기가 된다. 종류가 다른 트랙으로는 옮기지 않는다. `time`은 옮기기 전 화면 기준 시각이다.
     mutating func moveClip(_ clipID: Clip.ID, toTrack trackID: Track.ID, at time: CMTime) {
+        // 그룹(#100)에 속한 클립은 그룹 전체를 옮긴다.
+        if clip(id: clipID)?.groupID != nil {
+            moveGroup(of: clipID, toTrack: trackID, at: time)
+            return
+        }
         guard let sourceTrackID = self.trackID(containing: clipID),
               var clip = clip(id: clipID),
               let sourceKind = tracks.first(where: { $0.id == sourceTrackID })?.kind,

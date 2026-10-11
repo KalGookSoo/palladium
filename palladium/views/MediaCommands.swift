@@ -12,6 +12,10 @@ extension FocusedValues {
     @Entry var duplicateClips: (() -> Void)?
     /// 트림할 수 있는 항목(미디어 패널 포커스)이나 클립 하나를 골랐을 때만 값이 있다(#81·#85).
     @Entry var openClipEditor: (() -> Void)?
+    /// 고른 클립을 묶을 수 있을 때만 값이 있다(#100).
+    @Entry var groupClips: (() -> Void)?
+    /// 고른 클립 중 그룹에 속한 것이 있을 때만 값이 있다(#100).
+    @Entry var ungroupClips: (() -> Void)?
 }
 
 extension KeyEquivalent {
@@ -24,6 +28,8 @@ struct MediaCommands: Commands {
     @FocusedValue(\.splitClips) private var splitClips
     @FocusedValue(\.duplicateClips) private var duplicateClips
     @FocusedValue(\.openClipEditor) private var openClipEditor
+    @FocusedValue(\.groupClips) private var groupClips
+    @FocusedValue(\.ungroupClips) private var ungroupClips
 
     var body: some Commands {
         CommandGroup(after: .pasteboard) {
@@ -55,6 +61,18 @@ struct MediaCommands: Commands {
             }
             .keyboardShortcut("t", modifiers: .command)
             .disabled(openClipEditor == nil)
+
+            // 맞닿은 클립 묶기·풀기(#100, Premiere의 그룹 키).
+            Button(ShortcutGuide.groupClips.title) {
+                groupClips?()
+            }
+            .keyboardShortcut("g", modifiers: .command)
+            .disabled(groupClips == nil)
+            Button(ShortcutGuide.ungroupClips.title) {
+                ungroupClips?()
+            }
+            .keyboardShortcut("g", modifiers: [.command, .shift])
+            .disabled(ungroupClips == nil)
         }
     }
 }

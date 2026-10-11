@@ -67,6 +67,10 @@ struct TimelineActions {
     var addTrack: (TrackKind) -> Void = { _ in }
     /// 비어 있는 트랙만 지운다.
     var deleteTrack: (Track.ID) -> Void = { _ in }
+    /// 맞닿은 클립 묶기·풀기(#100).
+    var groupClips: (Set<Clip.ID>) -> Void = { _ in }
+    var ungroupClips: (Set<Clip.ID>) -> Void = { _ in }
+    var canGroup: (Set<Clip.ID>) -> Bool = { _ in false }
 }
 
 /// 끄는 중인 편집의 미리보기. 손을 떼기 전에 결과(들어갈 자리와 뒤로 밀린 클립)를 보여준다.

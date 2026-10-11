@@ -170,6 +170,8 @@ final class ClipRecord {
     var chromaKeyData: Data?
     /// 소리 이펙트(#74, JSON). 옵셔널이라 기존 저장소가 열리고, `nil`이면 이펙트가 없다.
     var audioEffectsData: Data?
+    /// 타임라인 병합 그룹(#100). 옵셔널이라 기존 저장소가 열리고, `nil`이면 그룹이 아니다.
+    var groupID: UUID?
     var track: TrackRecord?
 
     init(

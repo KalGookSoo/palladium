@@ -175,6 +175,8 @@ struct MainWindowView: View {
             .focusedSceneValue(\.nextSequence, adjacentSequenceAction(offset: 1))
             .focusedSceneValue(\.addDefaultTransition, defaultTransitionAction)
             .focusedSceneValue(\.addTitle) { addTitleAtPlayhead() }
+            .focusedSceneValue(\.groupClips, editor.currentSequence.canGroup(selectedClipIDs) ? { timelineActions.groupClips(selectedClipIDs) } : nil)
+            .focusedSceneValue(\.ungroupClips, editor.currentSequence.canUngroup(selectedClipIDs) ? { timelineActions.ungroupClips(selectedClipIDs) } : nil)
             .focusedSceneValue(\.showTourChecklist, showTourChecklistAction)
         let withBehaviors = withMenuCommands
             .task { await writeBackupsPeriodically() }
@@ -448,7 +450,13 @@ struct MainWindowView: View {
             deleteMask: deleteMask,
             setTrackAudio: { trackID, volume, isMuted in editor.setTrackAudio(volume: volume, isMuted: isMuted, for: trackID) },
             addTrack: { kind in editor.addTrack(kind: kind) },
-            deleteTrack: { trackID in editor.deleteTrack(trackID) }
+            deleteTrack: { trackID in editor.deleteTrack(trackID) },
+            groupClips: { clipIDs in
+                editor.groupClips(clipIDs)
+                selectedClipIDs = editor.currentSequence.expandedToGroups(clipIDs)
+            },
+            ungroupClips: { clipIDs in editor.ungroupClips(clipIDs) },
+            canGroup: { clipIDs in editor.currentSequence.canGroup(clipIDs) }
         )
     }
 

@@ -490,9 +490,22 @@ final class ProjectEditor {
         }
     }
 
-    /// `ripple`이면 지운 자리 뒤의 클립을 당겨 틈을 메운다(리플 삭제).
+    /// `ripple`이면 지운 자리 뒤의 클립을 당겨 틈을 메운다(리플 삭제). 그룹(#100)에 속한 클립은 그룹 전체를 지운다.
     func deleteClips(_ clipIDs: Set<Clip.ID>, ripple: Bool) {
-        editCurrentSequence(ripple ? "리플 삭제" : "클립 삭제") { $0.removeClips(clipIDs, ripple: ripple) }
+        editCurrentSequence(ripple ? "리플 삭제" : "클립 삭제") { $0.removeClips($0.expandedToGroups(clipIDs), ripple: ripple) }
+    }
+
+    /// 같은 트랙에서 맞닿은 클립들을 그룹으로 묶는다(#100, 병합). 묶을 수 없으면 바꾸지 않는다. 새 그룹 ID.
+    @discardableResult
+    func groupClips(_ clipIDs: Set<Clip.ID>) -> UUID? {
+        var groupID: UUID?
+        editCurrentSequence("병합") { groupID = $0.group(clipIDs) }
+        return groupID
+    }
+
+    /// 고른 클립이 속한 그룹을 푼다(#100, 병합 해제). 클립은 그대로다.
+    func ungroupClips(_ clipIDs: Set<Clip.ID>) {
+        editCurrentSequence("병합 해제") { $0.ungroup(clipIDs) }
     }
 
     /// `time`에서 클립을 나눈다. 고른 클립이 비어 있으면 그 시각에 걸친 모든 클립을 나눈다.
@@ -543,7 +556,8 @@ final class ProjectEditor {
 
     /// 고른 클립을 클립보드에 담는다(#62). 프로젝트는 바꾸지 않는다. 고른 클립이 없으면 클립보드를 그대로 둔다.
     func copyClips(_ clipIDs: Set<Clip.ID>) {
-        let copied = currentSequence.copiedClips(clipIDs)
+        // 그룹(#100)은 통째로 복사한다.
+        let copied = currentSequence.copiedClips(currentSequence.expandedToGroups(clipIDs))
         if !copied.isEmpty {
             clipboard = .clips(copied)
         }
@@ -564,7 +578,7 @@ final class ProjectEditor {
     /// 고른 클립을 클립보드에 담고 지운 뒤 자리를 메운다(리플 삭제).
     func cutClips(_ clipIDs: Set<Clip.ID>) {
         copyClips(clipIDs)
-        editCurrentSequence("잘라내기") { $0.removeClips(clipIDs, ripple: true) }
+        editCurrentSequence("잘라내기") { $0.removeClips($0.expandedToGroups(clipIDs), ripple: true) }
     }
 
     /// 클립보드 내용을 현재 시퀀스의 `time`(재생 헤드)에 붙인다. 클립은 삽입 규칙대로 경계에 넣어 뒤 클립을 밀고,
@@ -594,8 +608,9 @@ final class ProjectEditor {
     /// 고른 클립을 바로 뒤(고른 클립 중 가장 늦게 끝나는 시각)에 복제한다. 클립보드는 바꾸지 않는다. 반환값은 새 클립 ID.
     @discardableResult
     func duplicateClips(_ clipIDs: Set<Clip.ID>) -> Set<Clip.ID> {
-        let copied = currentSequence.copiedClips(clipIDs)
-        guard let end = currentSequence.tracks.flatMap(\.clips).filter({ clipIDs.contains($0.id) }).map(\.timelineRange.end).max() else { return [] }
+        let expanded = currentSequence.expandedToGroups(clipIDs)
+        let copied = currentSequence.copiedClips(expanded)
+        guard let end = currentSequence.tracks.flatMap(\.clips).filter({ expanded.contains($0.id) }).map(\.timelineRange.end).max() else { return [] }
         var duplicatedIDs: Set<Clip.ID> = []
         editCurrentSequence("복제") { duplicatedIDs = $0.paste(copied, at: end) }
         return duplicatedIDs

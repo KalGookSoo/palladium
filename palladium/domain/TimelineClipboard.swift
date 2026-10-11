@@ -66,10 +66,17 @@ nonisolated extension EditSequence {
         let blockStart = tracks[anchor.trackIndex].insertionPoint(for: time) - anchor.item.clip.timelineStart
 
         var pastedIDs: Set<Clip.ID> = []
+        // 붙인 그룹(#100)은 원래 그룹과 따로인 새 그룹이다.
+        var newGroupIDs: [UUID: UUID] = [:]
         for trackIndex in Set(placed.map(\.trackIndex)) {
             let group = placed.filter { $0.trackIndex == trackIndex }.compactMap { entry -> Clip? in
                 var clip = entry.item.clip.duplicated()
                 clip?.timelineStart = blockStart + entry.item.clip.timelineStart
+                if let oldGroupID = entry.item.clip.groupID {
+                    let groupID = newGroupIDs[oldGroupID] ?? UUID()
+                    newGroupIDs[oldGroupID] = groupID
+                    clip?.groupID = groupID
+                }
                 return clip
             }
             tracks[trackIndex].insert(contentsOf: group)

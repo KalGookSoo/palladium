@@ -91,6 +91,7 @@ private extension SequenceRecord {
                 .withFilters(of: clip)
                 .withChromaKey(of: clip)
                 .withAudioEffects(of: clip)
+                .withGroup(of: clip)
             }
             return trackRecord
         }
@@ -291,6 +292,7 @@ private extension ClipRecord {
         clip?.title = titleData.flatMap { try? JSONDecoder().decode(StoredTitle.self, from: $0) }?.title
         clip?.filters = filtersData.flatMap { try? JSONDecoder().decode([StoredFilter].self, from: $0) }?.compactMap(\.filter) ?? []
         clip?.chromaKey = chromaKeyData.flatMap { try? JSONDecoder().decode(StoredChromaKey.self, from: $0) }?.chromaKey
+        clip?.groupID = groupID
         clip?.audioEffects = audioEffectsData.flatMap { try? JSONDecoder().decode(StoredAudioEffects.self, from: $0) }?.effects ?? AudioEffects()
         if clip == nil {
             let clipID = id
@@ -540,5 +542,14 @@ private struct StoredAudioEffects: Codable {
         )
         effects.clamp()
         return effects
+    }
+}
+
+// MARK: - Group (#100)
+
+private extension ClipRecord {
+    func withGroup(of clip: Clip) -> ClipRecord {
+        groupID = clip.groupID
+        return self
     }
 }

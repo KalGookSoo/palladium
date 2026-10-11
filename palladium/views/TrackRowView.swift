@@ -43,6 +43,21 @@ struct TrackRowView: View {
                     .opacity(clip.id == hiddenClipID ? 0 : 1)
             }
 
+            // 그룹(#100)은 묶인 클립 전체를 점선 테두리로 감싼다.
+            ForEach(groupSpans, id: \.groupID) { span in
+                RoundedRectangle(cornerRadius: ClipViewMetrics.cornerRadius + 1)
+                    .strokeBorder(Color.accentColor.opacity(0.8), style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
+                    .frame(width: max(scale.width(for: span.range.duration), 4), height: clipHeight + 4)
+                    .offset(x: scale.x(for: span.range.start), y: TimelineMetrics.clipVerticalInset - 2)
+                    .overlay(alignment: .topLeading) {
+                        Image(systemName: "link")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Color.accentColor)
+                            .offset(x: scale.x(for: span.range.start) + 2, y: TimelineMetrics.clipVerticalInset - 8)
+                    }
+            }
+            .allowsHitTesting(false)
+
             // 컷 지점을 가운데 둔 전환 구간. 영상 전환은 띠로, 오디오 크로스페이드는 아래쪽 막대로 보여준다.
             ForEach(track.clips.filter { $0.id != hiddenClipID }) { clip in
                 transitionMarks(for: clip)
@@ -67,6 +82,16 @@ struct TrackRowView: View {
             if !isPointerDragging {
                 dragFinished()
             }
+        }
+    }
+
+    /// 이 트랙의 그룹마다 묶인 구간.
+    private var groupSpans: [(groupID: UUID, range: CMTimeRange)] {
+        let groupIDs = Set(track.clips.compactMap(\.groupID))
+        return groupIDs.compactMap { groupID in
+            let members = track.members(ofGroup: groupID)
+            guard let first = members.first, let last = members.last else { return nil }
+            return (groupID, CMTimeRange(start: first.timelineStart, end: last.timelineRange.end))
         }
     }
 
@@ -177,27 +202,38 @@ struct TrackRowView: View {
     }
 
     /// ⌘ 클릭은 선택에 더하거나 빼고, ⇧ 클릭은 같은 트랙에서 이미 고른 클립과 이 클립 사이를 모두 고른다.
+    /// 그룹(#100)의 클립은 그룹 전체를 함께 고른다. ⌥ 클릭은 그룹 안 클립 하나만 고른다(인스펙터에서 그 클립만 고칠 때).
     private func select(_ clip: Clip) {
         let modifiers = NSEvent.modifierFlags
-        if modifiers.contains(.command) {
+        let members = groupMemberIDs(of: clip)
+        if modifiers.contains(.option) {
+            selectedClipIDs = [clip.id]
+        } else if modifiers.contains(.command) {
             if selectedClipIDs.contains(clip.id) {
-                selectedClipIDs.remove(clip.id)
+                selectedClipIDs.subtract(members)
             } else {
-                selectedClipIDs.insert(clip.id)
+                selectedClipIDs.formUnion(members)
             }
         } else if modifiers.contains(.shift), let anchor = track.clips.first(where: { selectedClipIDs.contains($0.id) }) {
             let lower = min(anchor.timelineStart, clip.timelineStart)
             let upper = max(anchor.timelineStart, clip.timelineStart)
-            selectedClipIDs.formUnion(track.clips.filter { lower <= $0.timelineStart && $0.timelineStart <= upper }.map(\.id))
+            let range = track.clips.filter { lower <= $0.timelineStart && $0.timelineStart <= upper }
+            selectedClipIDs.formUnion(range.flatMap { groupMemberIDs(of: $0) })
         } else {
-            selectedClipIDs = [clip.id]
+            selectedClipIDs = members
         }
+    }
+
+    /// 클립이 속한 그룹의 모든 클립(그룹이 아니면 그 클립 하나).
+    private func groupMemberIDs(of clip: Clip) -> Set<Clip.ID> {
+        guard let groupID = clip.groupID else { return [clip.id] }
+        return Set(track.members(ofGroup: groupID).map(\.id))
     }
 
     /// 고른 클립 위에서 열면 고른 클립 모두에, 고르지 않은 클립 위에서 열면 그 클립에만 적용한다.
     @ViewBuilder
     private func clipMenu(for clip: Clip) -> some View {
-        let targetIDs = selectedClipIDs.contains(clip.id) ? selectedClipIDs : [clip.id]
+        let targetIDs = selectedClipIDs.contains(clip.id) ? selectedClipIDs : groupMemberIDs(of: clip)
         let canSplit = targetIDs.contains { id in track.clips.first { $0.id == id }?.canSplit(at: playheadTime, clipIDs: nil) == true }
 
         // 메뉴 오른쪽에 단축키를 보여준다. 실제 단축키는 편집 창의 키 입력 처리와 편집 메뉴가 맡는다.
@@ -227,6 +263,15 @@ struct TrackRowView: View {
         pasteButton
         Button(ShortcutGuide.duplicateClips.title) { actions.duplicateClips(targetIDs) }
             .keyboardShortcut("d", modifiers: .command)
+        Divider()
+        // 맞닿은 클립 묶기(#100). 묶으면 한 번에 고르고 옮기고 지운다.
+        Button(ShortcutGuide.groupClips.title) { actions.groupClips(targetIDs) }
+            .keyboardShortcut("g", modifiers: .command)
+            .disabled(!actions.canGroup(targetIDs))
+        if clip.groupID != nil {
+            Button(ShortcutGuide.ungroupClips.title) { actions.ungroupClips(targetIDs) }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+        }
         Divider()
         // 트림 시트(#81)는 영상·오디오 클립 하나만 연다.
         if targetIDs.count == 1, assets.first(where: { $0.id == clip.assetID })?.isTrimmable == true {
