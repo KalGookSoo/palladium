@@ -39,7 +39,8 @@ struct PreviewPlayerView: View {
                     .overlay {
                         if let transformTarget, let targetContentSize {
                             TransformHandlesView(
-                                transform: transformTarget.clip.transform,
+                                // 키프레임(#67)이 있으면 지금 보이는 시각의 트랜스폼이다.
+                                transform: transformTarget.clip.transform(atTimeline: previewPlayer.currentTime),
                                 // 위치·크기는 잘린 화면(#85)을 기준으로 한다.
                                 contentSize: transformTarget.clip.crop.croppedSize(of: targetContentSize),
                                 renderSize: renderSize

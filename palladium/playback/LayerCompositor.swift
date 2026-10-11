@@ -25,6 +25,13 @@ nonisolated struct CompositionLayer {
     var colorAdjustment = ColorAdjustment()
     /// 잘라낼 화면(#85). 영상 층에만 쓴다. 위치·크기(`transform`)는 잘린 화면을 기준으로 한다.
     var crop = ClipCrop()
+    /// 트랜스폼 키프레임이 있는 클립(#67). 있으면 프레임마다 그 시각의 트랜스폼을 계산한다.
+    var animatedClip: Clip?
+
+    /// 합성 시각(시퀀스 시각)의 트랜스폼.
+    func transform(at time: CMTime) -> ClipTransform {
+        animatedClip?.transform(atTimeline: time) ?? transform
+    }
 }
 
 /// 시퀀스 구간 하나와 그 구간에 그릴 층들. 빈 구간은 층이 없어 검은 화면이다.
@@ -99,24 +106,26 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
     /// 층을 화면 좌표(Core Image는 왼쪽 아래 원점)에 놓은 이미지. 프레임을 얻지 못하면 `nil`.
     private func placedImage(for layer: CompositionLayer, request: AVAsynchronousVideoCompositionRequest, renderSize: CGSize) -> CIImage? {
         let placed: CIImage
+        // 키프레임이 있으면 이 프레임 시각의 트랜스폼이다(#67).
+        let clipTransform = layer.transform(at: request.compositionTime)
         switch layer.content {
         case let .video(trackID, naturalSize, preferredTransform):
             guard let buffer = request.sourceFrame(byTrackID: trackID) else { return nil }
             let transform = Self.videoTransform(
                 naturalSize: naturalSize,
                 preferredTransform: preferredTransform,
-                clipTransform: layer.transform,
+                clipTransform: clipTransform,
                 crop: layer.crop,
                 renderSize: renderSize
             )
             placed = Self.cropping(Self.applying(layer.colorAdjustment, to: CIImage(cvPixelBuffer: buffer)).transformed(by: transform), by: layer.crop)
         case let .image(source):
             let adjusted = Self.applying(layer.colorAdjustment, to: source)
-            placed = adjusted.transformed(by: Self.imageTransform(imageSize: source.extent.size, clipTransform: layer.transform, renderSize: renderSize))
+            placed = adjusted.transformed(by: Self.imageTransform(imageSize: source.extent.size, clipTransform: clipTransform, renderSize: renderSize))
         case let .subtitle(subtitle):
             return subtitleImage(subtitle, renderSize: renderSize)
         }
-        return Self.applyingOpacity(layer.transform.opacity, to: Self.rotating(placed, by: layer.transform, renderSize: renderSize))
+        return Self.applyingOpacity(clipTransform.opacity, to: Self.rotating(placed, by: clipTransform, renderSize: renderSize))
     }
 
     /// 화면에 놓은 클립을 클립 가운데 기준으로 돌린다(#66). 크롭으로 잘린 뒤에 돌려 잘린 화면 그대로 돈다.

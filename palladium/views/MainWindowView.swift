@@ -297,7 +297,7 @@ struct MainWindowView: View {
                     hasProjectAssets: !editor.project.assets.isEmpty,
                     transformTarget: transformTarget(in: currentSequence),
                     renderSize: SequenceComposer.renderSize(for: aspectRatio),
-                    setTransform: { clipID, transform in editor.setTransform(transform, for: clipID) },
+                    setTransform: { clipID, transform in editor.setTransform(transform, for: clipID, at: playheadTime) },
                     maskTarget: currentSequence.masks.first { $0.id == selectedMaskID },
                     setMaskArea: setMaskArea,
                     subtitleTarget: currentSequence.subtitles.first { $0.id == selectedSubtitleID },
@@ -497,8 +497,18 @@ struct MainWindowView: View {
                 },
                 renameClip: { clipID, name in editor.renameClip(clipID, to: name) },
                 setClipSource: { clipID, start, end in editor.setClipSource(clipID, start: start, end: end) },
-                setTransform: { clipID, transform in editor.setTransform(transform, for: clipID) },
-                setClipAudio: { clipID, volume, isMuted in editor.setClipAudio(volume: volume, isMuted: isMuted, for: clipID) },
+                setTransform: { clipID, transform in editor.setTransform(transform, for: clipID, at: playheadTime) },
+                setClipAudio: { clipID, volume, isMuted in editor.setClipAudio(volume: volume, isMuted: isMuted, for: clipID, at: playheadTime) },
+                playheadTime: playheadTime,
+                toggleKeyframe: { clipID, property in editor.toggleKeyframe(property, for: clipID, at: playheadTime) },
+                setKeyframeInterpolation: { clipID, property, interpolation in
+                    editor.setKeyframeInterpolation(interpolation, for: property, clipID: clipID, at: playheadTime)
+                },
+                clearKeyframes: { clipID, property in editor.clearKeyframes(property, for: clipID, at: playheadTime) },
+                movePlayhead: { time in
+                    previewPlayer.pause()
+                    playheadTime = time
+                },
                 setClipSpeed: { clipID, speed in editor.setClipSpeed(speed, for: clipID) },
                 maximumTransitionDuration: selectedClip.flatMap { clip in
                     currentSequence.tracks.first { $0.clips.contains { $0.id == clip.id } }?.maximumTransitionDuration(into: clip)

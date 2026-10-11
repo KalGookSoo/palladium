@@ -86,7 +86,11 @@ nonisolated enum SequenceComposer {
                         images[asset.id] = loadImage(at: resolveURL(asset))
                     }
                     if let image = images[asset.id] {
-                        placedLayers.append((layerRange, CompositionLayer(content: .image(image), transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment), order))
+                        placedLayers.append((
+                            layerRange,
+                            CompositionLayer(content: .image(image), transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, animatedClip: animatedClip(clip)),
+                            order
+                        ))
                     }
                     continue
                 }
@@ -105,12 +109,14 @@ nonisolated enum SequenceComposer {
                         sourceShortSides.append(min(abs(displayed.width), abs(displayed.height)))
                         sourceFrameTimings.append(SourceFrameTiming(nominalFrameRate: frameRate, minFrameDuration: minFrameDuration))
                         let content = CompositionLayer.Content.video(trackID: videoTrack.trackID, naturalSize: naturalSize, preferredTransform: preferredTransform)
-                        let layer = CompositionLayer(content: content, transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, crop: clip.crop)
+                        let layer = CompositionLayer(
+                            content: content, transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, crop: clip.crop, animatedClip: animatedClip(clip)
+                        )
                         placedLayers.append((layerRange, layer, order))
                     }
                     if let sourceAudio = try await source.loadTracks(withMediaType: .audio).first, let soundTrack {
                         try await insert(clip, of: sourceAudio, into: soundTrack, lead: edges.audioLead, tail: edges.audioTail, freezesMissingFrames: false)
-                        ramps += edges.volumeRamps(of: clip, trackID: soundTrack.trackID, volume: Float(sequence.effectiveVolume(of: clip.id)))
+                        ramps += edges.volumeRamps(of: clip, trackID: soundTrack.trackID, trackFactor: trackVolumeFactor(of: clip, in: track))
                     }
                 } catch {
                     Logger.playback.error("합성에서 클립을 건너뜀: \(asset.name, privacy: .public), \(error.localizedDescription, privacy: .public)")
@@ -129,7 +135,7 @@ nonisolated enum SequenceComposer {
                 do {
                     if let sourceAudio = try await source.loadTracks(withMediaType: .audio).first, let audioTrack {
                         try await insert(clip, of: sourceAudio, into: audioTrack, lead: edges.audioLead, tail: edges.audioTail, freezesMissingFrames: false)
-                        ramps += edges.volumeRamps(of: clip, trackID: audioTrack.trackID, volume: Float(sequence.effectiveVolume(of: clip.id)))
+                        ramps += edges.volumeRamps(of: clip, trackID: audioTrack.trackID, trackFactor: trackVolumeFactor(of: clip, in: track))
                     }
                 } catch {
                     Logger.playback.error("합성에서 클립을 건너뜀: \(asset.name, privacy: .public), \(error.localizedDescription, privacy: .public)")
@@ -266,6 +272,16 @@ nonisolated enum SequenceComposer {
         }
     }
 
+    /// 트랜스폼 키프레임이 있으면 합성기가 프레임마다 그 시각의 트랜스폼을 계산하도록 클립을 넘긴다(#67).
+    private static func animatedClip(_ clip: Clip) -> Clip? {
+        clip.animation.transform.isEmpty ? nil : clip
+    }
+
+    /// 클립 음량에 곱할 값: 트랙 음량, 클립·트랙 어느 쪽이든 음소거면 0. 클립 음량(키프레임 포함)은 램프가 시각마다 계산한다.
+    private static func trackVolumeFactor(of clip: Clip, in track: Track) -> Float {
+        clip.isMuted || track.isMuted ? 0 : Float(track.volume)
+    }
+
     /// 방향 정보를 반영해 바로 선 이미지로 불러온다. 읽지 못하면 `nil`.
     private static func loadImage(at url: URL) -> CIImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
@@ -351,20 +367,39 @@ private nonisolated struct TransitionEdges {
         CMTimeRange(start: clip.timelineStart - videoLead, end: clip.timelineStart + videoLead)
     }
 
-    /// 크로스페이드 구간에서는 0과 클립 음량 사이를 오가고, 나머지는 클립 음량 그대로다.
-    func volumeRamps(of clip: Clip, trackID: CMPersistentTrackID, volume: Float) -> [VolumeRamp] {
+    /// 키프레임 사이를 이만큼 잘게 나눠 감속 보간을 직선 램프로 가깝게 따른다(#67).
+    private static let keyframeSubdivisions = 8
+
+    /// 크로스페이드 구간에서는 0과 클립 음량 사이를 오가고, 나머지는 클립 음량(키프레임이 있으면 시각마다의 음량, #67)을 따른다.
+    /// 모든 음량에 `trackFactor`(트랙 음량·음소거)를 곱한다.
+    func volumeRamps(of clip: Clip, trackID: CMPersistentTrackID, trackFactor: Float) -> [VolumeRamp] {
         let start = clip.timelineStart
         let end = clip.timelineRange.end
+        let level = { (time: CMTime) in Float(clip.volume(atTimeline: time)) * trackFactor }
         var ramps: [VolumeRamp] = []
         if audioLead > .zero {
-            ramps.append(VolumeRamp(trackID: trackID, range: CMTimeRange(start: start - audioLead, end: start + audioLead), from: 0, to: volume))
+            ramps.append(VolumeRamp(trackID: trackID, range: CMTimeRange(start: start - audioLead, end: start + audioLead), from: 0, to: level(start + audioLead)))
         }
         let steadyRange = CMTimeRange(start: start + audioLead, end: end - audioTail)
         if steadyRange.duration > .zero {
-            ramps.append(VolumeRamp(trackID: trackID, range: steadyRange, from: volume, to: volume))
+            if clip.animation.volume.isEmpty {
+                ramps.append(VolumeRamp(trackID: trackID, range: steadyRange, from: level(steadyRange.start), to: level(steadyRange.start)))
+            } else {
+                let keyframeTimes = clip.keyframeTimes(of: .volume).filter { steadyRange.start < $0 && $0 < steadyRange.end }
+                let edges = [steadyRange.start] + keyframeTimes + [steadyRange.end]
+                for (from, to) in zip(edges, edges.dropFirst()) {
+                    let step = CMTimeMultiplyByRatio(to - from, multiplier: 1, divisor: Int32(Self.keyframeSubdivisions))
+                    for index in 0 ..< Self.keyframeSubdivisions {
+                        let pieceStart = from + CMTimeMultiply(step, multiplier: Int32(index))
+                        let pieceEnd = index == Self.keyframeSubdivisions - 1 ? to : pieceStart + step
+                        guard pieceEnd > pieceStart else { continue }
+                        ramps.append(VolumeRamp(trackID: trackID, range: CMTimeRange(start: pieceStart, end: pieceEnd), from: level(pieceStart), to: level(pieceEnd)))
+                    }
+                }
+            }
         }
         if audioTail > .zero {
-            ramps.append(VolumeRamp(trackID: trackID, range: CMTimeRange(start: end - audioTail, end: end + audioTail), from: volume, to: 0))
+            ramps.append(VolumeRamp(trackID: trackID, range: CMTimeRange(start: end - audioTail, end: end + audioTail), from: level(end - audioTail), to: 0))
         }
         return ramps
     }

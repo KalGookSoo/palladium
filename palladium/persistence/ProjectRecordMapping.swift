@@ -86,6 +86,7 @@ private extension SequenceRecord {
                 .withLabels(of: clip)
                 .withColorAdjustment(of: clip)
                 .withCrop(of: clip)
+                .withAnimation(of: clip)
             }
             return trackRecord
         }
@@ -282,6 +283,7 @@ private extension ClipRecord {
         adjustment.clamp()
         clip?.colorAdjustment = adjustment
         clip?.crop = ClipCrop(storedTop: cropTop, bottom: cropBottom, left: cropLeft, right: cropRight)
+        clip?.animation = animationData.flatMap { try? JSONDecoder().decode(StoredClipAnimation.self, from: $0) }?.animation ?? ClipAnimation()
         if clip == nil {
             let clipID = id
             Logger.project.error("Clip 불변식을 어기는 저장값이라 건너뜀: \(clipID, privacy: .public)")
@@ -300,5 +302,75 @@ private extension ClipCrop {
     init(storedTop top: Double?, bottom: Double?, left: Double?, right: Double?) {
         self.init(top: top ?? 0, bottom: bottom ?? 0, left: left ?? 0, right: right ?? 0)
         clamp()
+    }
+}
+
+// MARK: - Keyframes (#67)
+
+private extension ClipRecord {
+    func withAnimation(of clip: Clip) -> ClipRecord {
+        animationData = clip.animation.isEmpty ? nil : try? JSONEncoder().encode(StoredClipAnimation(clip.animation))
+        return self
+    }
+}
+
+/// 키프레임 저장 모양. 시각은 value/timescale로 나눠 둔다(`CMTime`은 Codable이 아니다). 알 수 없는 보간은 선형으로 연다.
+private struct StoredClipAnimation: Codable {
+    struct Time: Codable {
+        let value: Int64
+        let timescale: Int32
+
+        init(_ time: CMTime) {
+            value = time.value
+            timescale = time.timescale
+        }
+
+        var time: CMTime {
+            CMTime(value: value, timescale: max(timescale, 1))
+        }
+    }
+
+    struct TransformKey: Codable {
+        let time: Time
+        let centerX: Double
+        let centerY: Double
+        let scale: Double
+        let opacity: Double
+        let rotation: Double
+        let interpolation: String
+    }
+
+    struct VolumeKey: Codable {
+        let time: Time
+        let volume: Double
+        let interpolation: String
+    }
+
+    let transform: [TransformKey]
+    let volume: [VolumeKey]
+
+    init(_ animation: ClipAnimation) {
+        transform = animation.transform.map {
+            TransformKey(
+                time: Time($0.time), centerX: $0.value.centerX, centerY: $0.value.centerY, scale: $0.value.scale,
+                opacity: $0.value.opacity, rotation: $0.value.rotation, interpolation: $0.interpolation.rawValue
+            )
+        }
+        volume = animation.volume.map { VolumeKey(time: Time($0.time), volume: $0.value, interpolation: $0.interpolation.rawValue) }
+    }
+
+    var animation: ClipAnimation {
+        ClipAnimation(
+            transform: transform.map {
+                Keyframe(
+                    time: $0.time.time,
+                    value: ClipTransform(centerX: $0.centerX, centerY: $0.centerY, scale: $0.scale, opacity: $0.opacity, rotation: $0.rotation),
+                    interpolation: KeyframeInterpolation(rawValue: $0.interpolation) ?? .linear
+                )
+            }.sorted { $0.time < $1.time },
+            volume: volume.map {
+                Keyframe(time: $0.time.time, value: $0.volume, interpolation: KeyframeInterpolation(rawValue: $0.interpolation) ?? .linear)
+            }.sorted { $0.time < $1.time }
+        )
     }
 }

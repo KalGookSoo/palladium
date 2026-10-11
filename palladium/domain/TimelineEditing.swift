@@ -26,6 +26,8 @@ nonisolated extension Clip {
         portion?.colorLabel = colorLabel
         portion?.colorAdjustment = colorAdjustment
         portion?.crop = crop
+        // 키프레임은 원본 시각에 붙어 있어 나눈 조각도 같은 키프레임을 그대로 갖는다(#67).
+        portion?.animation = animation
         // 앞 클립과의 전환은 원래 시작을 가진 조각에만 남는다.
         if clippedStart == timelineStart {
             portion?.transitionIn = transitionIn
@@ -94,6 +96,7 @@ nonisolated extension Track {
                 piece.colorLabel = original.colorLabel
                 piece.colorAdjustment = original.colorAdjustment
                 piece.crop = original.crop
+                piece.animation = original.animation
             }
             piece.sourceRange = range
             piece.timelineStart = start
@@ -368,14 +371,6 @@ nonisolated extension EditSequence {
                 tracks[trackIndex].removeClip(id: clip.id, ripple: ripple)
             }
         }
-    }
-
-    /// 클립 소리가 실제로 들리는 크기: 클립 음량 × 트랙 음량, 어느 쪽이든 음소거면 0.
-    func effectiveVolume(of clipID: Clip.ID) -> Double {
-        guard let track = tracks.first(where: { $0.clips.contains { $0.id == clipID } }),
-              let clip = track.clips.first(where: { $0.id == clipID })
-        else { return 0 }
-        return clip.isMuted || track.isMuted ? 0 : clip.volume * track.volume
     }
 
     /// 클립이 있는 트랙에서 클립을 원본 구간 여러 개로 나눠 맞닿게 놓는다(#99, 리플).

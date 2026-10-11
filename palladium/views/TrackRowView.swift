@@ -91,6 +91,16 @@ struct TrackRowView: View {
             hasEffect: !clip.colorAdjustment.isDefault
         ) {
             ClipContentView(asset: asset, clip: clip, width: width, showsFilmstrip: showsFilmstrip, showsWaveform: showsWaveform, isFrozen: freezesContent)
+                // 키프레임(#67)은 클립 아래쪽에 작은 마름모로 보인다.
+                .overlay(alignment: .bottomLeading) {
+                    ForEach(clip.allKeyframeTimes, id: \.self) { time in
+                        Image(systemName: "diamond.fill")
+                            .font(.system(size: 7))
+                            .foregroundStyle(.yellow)
+                            .shadow(radius: 1)
+                            .offset(x: scale.x(for: time - clip.timelineStart) - 4, y: -2)
+                    }
+                }
         }
         .help("원본: \(assetName)")
         .frame(width: max(width - 2, 1), height: clipHeight)

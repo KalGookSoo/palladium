@@ -390,30 +390,40 @@ final class ProjectEditor {
         editCurrentSequence("트림") { $0.setSourceRange(range, forClip: clipID) }
     }
 
-    /// 클립의 위치·크기·불투명도를 바꾼다. 배율·불투명도는 허용 범위로 맞춘다.
-    func setTransform(_ transform: ClipTransform, for clipID: Clip.ID) {
+    /// 클립의 위치·크기·불투명도·회전을 바꾼다. 배율·불투명도는 허용 범위로 맞춘다.
+    /// 트랜스폼 키프레임이 있는 클립이면 `time`(재생 헤드, 타임라인 시각)의 키프레임을 두거나 고친다(#67). 없으면 고정 값을 바꾼다.
+    func setTransform(_ transform: ClipTransform, for clipID: Clip.ID, at time: CMTime? = nil) {
         var clamped = transform
         clamped.clamp()
-        editCurrentSequence("트랜스폼") { sequence in
-            for trackIndex in sequence.tracks.indices {
-                for clipIndex in sequence.tracks[trackIndex].clips.indices where sequence.tracks[trackIndex].clips[clipIndex].id == clipID {
-                    sequence.tracks[trackIndex].clips[clipIndex].transform = clamped
+        editCurrentSequence("트랜스폼") { $0.updateClips([clipID]) { $0.setTransform(clamped, atTimeline: time) } }
+    }
+
+    /// 클립 음량(0~1)과 음소거. 결과물(미리보기·내보내기)에 반영된다. `volume`이 `nil`이면 음소거만 바꾼다.
+    /// 음량 키프레임이 있는 클립이면 `time`의 키프레임을 두거나 고친다(#67). 음소거는 늘 클립 전체에 건다.
+    func setClipAudio(volume: Double?, isMuted: Bool, for clipID: Clip.ID, at time: CMTime? = nil) {
+        editCurrentSequence("클립 음량") { sequence in
+            sequence.updateClips([clipID]) { clip in
+                if let volume {
+                    clip.setVolume(min(max(volume, 0), 1), atTimeline: time)
                 }
+                clip.isMuted = isMuted
             }
         }
     }
 
-    /// 클립 음량(0~1)과 음소거. 결과물(미리보기·내보내기)에 반영된다.
-    func setClipAudio(volume: Double, isMuted: Bool, for clipID: Clip.ID) {
-        let clampedVolume = min(max(volume, 0), 1)
-        editCurrentSequence("클립 음량") { sequence in
-            for trackIndex in sequence.tracks.indices {
-                for clipIndex in sequence.tracks[trackIndex].clips.indices where sequence.tracks[trackIndex].clips[clipIndex].id == clipID {
-                    sequence.tracks[trackIndex].clips[clipIndex].volume = clampedVolume
-                    sequence.tracks[trackIndex].clips[clipIndex].isMuted = isMuted
-                }
-            }
-        }
+    /// `time`(재생 헤드)에 그 속성의 키프레임이 있으면 지우고 없으면 지금 보이는 값으로 둔다(#67). 실행 취소 한 번.
+    func toggleKeyframe(_ property: AnimatedProperty, for clipID: Clip.ID, at time: CMTime) {
+        editCurrentSequence("키프레임") { $0.updateClips([clipID]) { $0.toggleKeyframe(property, atTimeline: time) } }
+    }
+
+    /// `time`에 있는 키프레임의 보간(선형·감속)을 바꾼다(#67).
+    func setKeyframeInterpolation(_ interpolation: KeyframeInterpolation, for property: AnimatedProperty, clipID: Clip.ID, at time: CMTime) {
+        editCurrentSequence("키프레임 보간") { $0.updateClips([clipID]) { $0.setKeyframeInterpolation(interpolation, for: property, atTimeline: time) } }
+    }
+
+    /// 그 속성의 키프레임을 모두 지운다(#67). `time`에 보이던 값이 고정 값이 된다.
+    func clearKeyframes(_ property: AnimatedProperty, for clipID: Clip.ID, at time: CMTime) {
+        editCurrentSequence("키프레임 모두 지우기") { $0.updateClips([clipID]) { $0.clearKeyframes(property, atTimeline: time) } }
     }
 
     /// 앞 클립과의 영상 전환. `nil`이면 없앤다(#8).

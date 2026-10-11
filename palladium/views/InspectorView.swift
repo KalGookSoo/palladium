@@ -19,7 +19,14 @@ struct InspectorView: View {
     /// 트림 탭에서 원본 시작·끝 지점을 입력했을 때.
     var setClipSource: (Clip.ID, CMTime, CMTime) -> Void = { _, _, _ in }
     var setTransform: (Clip.ID, ClipTransform) -> Void = { _, _ in }
-    var setClipAudio: (Clip.ID, Double, Bool) -> Void = { _, _, _ in }
+    var setClipAudio: (Clip.ID, Double?, Bool) -> Void = { _, _, _ in }
+    /// 재생 헤드 시각. 키프레임(#67)이 있으면 그 시각의 값을 보여주고 키프레임 버튼이 그 시각에 동작한다.
+    var playheadTime = CMTime.zero
+    var toggleKeyframe: (Clip.ID, AnimatedProperty) -> Void = { _, _ in }
+    var setKeyframeInterpolation: (Clip.ID, AnimatedProperty, KeyframeInterpolation) -> Void = { _, _, _ in }
+    var clearKeyframes: (Clip.ID, AnimatedProperty) -> Void = { _, _ in }
+    /// 이전·다음 키프레임으로 재생 헤드를 옮긴다.
+    var movePlayhead: (CMTime) -> Void = { _ in }
     var setClipSpeed: (Clip.ID, Double) -> Void = { _, _ in }
     /// 고른 클립과 바로 앞 클립 사이 전환의 최대 길이. 맞닿은 앞 클립이 없으면 0이다.
     var maximumTransitionDuration = CMTime.zero
@@ -166,7 +173,11 @@ struct InspectorView: View {
                 ContentUnavailableView("이미지 클립", systemImage: "photo", description: Text("이미지 클립에는 소리가 없습니다"))
             } else {
                 Form {
-                    AudioInspectorView(clip: clip) { volume, isMuted in setClipAudio(clip.id, volume, isMuted) }
+                    AudioInspectorView(clip: clip, volume: clip.volume(atTimeline: playheadTime)) { volume, isMuted in
+                        setClipAudio(clip.id, volume, isMuted)
+                    } keyframes: {
+                        keyframeControls(clip: clip, property: .volume)
+                    }
                     Section("크로스페이드") {
                         TransitionInspectorView(
                             part: .audio,
@@ -182,6 +193,18 @@ struct InspectorView: View {
         }
     }
 
+    private func keyframeControls(clip: Clip, property: AnimatedProperty) -> some View {
+        KeyframeControlsView(
+            clip: clip,
+            property: property,
+            playheadTime: playheadTime,
+            toggle: { toggleKeyframe(clip.id, property) },
+            setInterpolation: { setKeyframeInterpolation(clip.id, property, $0) },
+            clear: { clearKeyframes(clip.id, property) },
+            movePlayhead: movePlayhead
+        )
+    }
+
     /// 영상 탭: 크롭(읽기 요약)·트랜스폼·이펙트·영상 전환을 접을 수 있는 섹션으로 둔다.
     private func videoTab(clip: Clip) -> some View {
         Form {
@@ -195,7 +218,8 @@ struct InspectorView: View {
                 }
             }
             Section("트랜스폼", isExpanded: $isTransformExpanded) {
-                TransformInspectorView(transform: clip.transform) { setTransform(clip.id, $0) }
+                TransformInspectorView(transform: clip.transform(atTimeline: playheadTime)) { setTransform(clip.id, $0) }
+                keyframeControls(clip: clip, property: .transform)
             }
             Section("이펙트", isExpanded: $isEffectExpanded) {
                 EffectInspectorView(adjustment: clip.colorAdjustment, setAdjustment: setColorAdjustment)
