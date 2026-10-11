@@ -67,6 +67,8 @@ nonisolated enum SequenceComposer {
         var sourceFrameTimings: [SourceFrameTiming] = []
         var sourceShortSides: [Double] = []
         var sourceBitRates: [Double] = []
+        // 합성 오디오 트랙마다 클립 구간과 소리 이펙트(#74). 처리 탭이 시각에 맞는 이펙트를 고른다.
+        var effectSegments: [CMPersistentTrackID: [AudioEffectTap.Segment]] = [:]
 
         for (trackIndex, track) in sequence.tracks.enumerated() where track.kind == .video {
             // 트랙 배열은 화면 위쪽부터라, 앞에 있을수록 위에 그린다.
@@ -130,6 +132,7 @@ nonisolated enum SequenceComposer {
                     if let sourceAudio = try await source.loadTracks(withMediaType: .audio).first, let soundTrack {
                         try await insert(clip, of: sourceAudio, into: soundTrack, lead: edges.audioLead, tail: edges.audioTail, freezesMissingFrames: false)
                         ramps += edges.volumeRamps(of: clip, trackID: soundTrack.trackID, trackFactor: trackVolumeFactor(of: clip, in: track))
+                        effectSegments[soundTrack.trackID, default: []].append(effectSegment(of: clip, edges: edges))
                     }
                 } catch {
                     Logger.playback.error("합성에서 클립을 건너뜀: \(asset.name, privacy: .public), \(error.localizedDescription, privacy: .public)")
@@ -149,6 +152,7 @@ nonisolated enum SequenceComposer {
                     if let sourceAudio = try await source.loadTracks(withMediaType: .audio).first, let audioTrack {
                         try await insert(clip, of: sourceAudio, into: audioTrack, lead: edges.audioLead, tail: edges.audioTail, freezesMissingFrames: false)
                         ramps += edges.volumeRamps(of: clip, trackID: audioTrack.trackID, trackFactor: trackVolumeFactor(of: clip, in: track))
+                        effectSegments[audioTrack.trackID, default: []].append(effectSegment(of: clip, edges: edges))
                     }
                 } catch {
                     Logger.playback.error("합성에서 클립을 건너뜀: \(asset.name, privacy: .public), \(error.localizedDescription, privacy: .public)")
@@ -170,7 +174,7 @@ nonisolated enum SequenceComposer {
         if !placedLayers.isEmpty, composition.tracks(withMediaType: .video).isEmpty || composition.duration < duration {
             await addBlankBase(to: composition, duration: duration)
         }
-        let audioMix = makeAudioMix(composition: composition, ramps: ramps)
+        let audioMix = makeAudioMix(composition: composition, ramps: ramps, effectSegments: effectSegments)
         let frameDuration = OutputFrameRate.frameDuration(forSources: sourceFrameTimings)
         guard !placedLayers.isEmpty else {
             return SequenceComposition(asset: composition, videoComposition: nil, audioMix: audioMix, duration: duration, frameDuration: frameDuration)
@@ -219,9 +223,12 @@ nonisolated enum SequenceComposer {
     }
 
     /// 합성 오디오 트랙마다 클립 음량과 크로스페이드를 음량 변화로 둔다.
-    private static func makeAudioMix(composition: AVComposition, ramps: [VolumeRamp]) -> AVAudioMix? {
+    private static func makeAudioMix(
+        composition: AVComposition, ramps: [VolumeRamp], effectSegments: [CMPersistentTrackID: [AudioEffectTap.Segment]]
+    ) -> AVAudioMix? {
         let parameters = composition.tracks(withMediaType: .audio).map { track in
             let trackParameters = AVMutableAudioMixInputParameters(track: track)
+            trackParameters.audioTapProcessor = AudioEffectTap.make(segments: effectSegments[track.trackID] ?? [])
             for ramp in ramps.filter({ $0.trackID == track.trackID }).sorted(by: { $0.range.start < $1.range.start }) {
                 trackParameters.setVolumeRamp(fromStartVolume: ramp.from, toEndVolume: ramp.to, timeRange: ramp.range)
             }
@@ -283,6 +290,14 @@ nonisolated enum SequenceComposer {
         } catch {
             Logger.playback.error("바탕 영상을 만들지 못함: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// 클립 소리가 나는 구간(크로스페이드로 앞뒤까지 늘어난 구간)과 그 소리 이펙트(#74).
+    private static func effectSegment(of clip: Clip, edges: TransitionEdges) -> AudioEffectTap.Segment {
+        AudioEffectTap.Segment(
+            range: CMTimeRange(start: clip.timelineStart - edges.audioLead, end: clip.timelineRange.end + edges.audioTail),
+            effects: clip.audioEffects
+        )
     }
 
     /// 트랜스폼 키프레임이 있으면 합성기가 프레임마다 그 시각의 트랜스폼을 계산하도록 클립을 넘긴다(#67).

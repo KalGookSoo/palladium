@@ -30,6 +30,8 @@ nonisolated struct Clip {
     var filters: [VideoFilter] = []
     /// 크로마키(#70). 있으면 그 배경색을 투명하게 빼 아래 트랙이 비친다. 색보정·필터보다 먼저 적용한다.
     var chromaKey: ChromaKey?
+    /// 소리 이펙트(#74, EQ·잔향·게이트·게인). 소리가 있는 클립에만 쓴다.
+    var audioEffects = AudioEffects()
     /// 화면에서 잘라낼 만큼(#85, 클립 편집 창의 크롭). 위치·크기는 잘린 화면을 기준으로 한다.
     var crop = ClipCrop()
     /// 시간에 따라 바뀌는 트랜스폼·음량(#67, 키프레임). 비어 있으면 위의 고정 값을 쓴다.

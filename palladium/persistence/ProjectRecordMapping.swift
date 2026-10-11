@@ -90,6 +90,7 @@ private extension SequenceRecord {
                 .withTitle(of: clip)
                 .withFilters(of: clip)
                 .withChromaKey(of: clip)
+                .withAudioEffects(of: clip)
             }
             return trackRecord
         }
@@ -290,6 +291,7 @@ private extension ClipRecord {
         clip?.title = titleData.flatMap { try? JSONDecoder().decode(StoredTitle.self, from: $0) }?.title
         clip?.filters = filtersData.flatMap { try? JSONDecoder().decode([StoredFilter].self, from: $0) }?.compactMap(\.filter) ?? []
         clip?.chromaKey = chromaKeyData.flatMap { try? JSONDecoder().decode(StoredChromaKey.self, from: $0) }?.chromaKey
+        clip?.audioEffects = audioEffectsData.flatMap { try? JSONDecoder().decode(StoredAudioEffects.self, from: $0) }?.effects ?? AudioEffects()
         if clip == nil {
             let clipID = id
             Logger.project.error("Clip 불변식을 어기는 저장값이라 건너뜀: \(clipID, privacy: .public)")
@@ -501,5 +503,42 @@ private struct StoredChromaKey: Codable {
         )
         key.clamp()
         return key
+    }
+}
+
+// MARK: - Audio effects (#74)
+
+private extension ClipRecord {
+    func withAudioEffects(of clip: Clip) -> ClipRecord {
+        audioEffectsData = clip.audioEffects.isDefault ? nil : try? JSONEncoder().encode(StoredAudioEffects(clip.audioEffects))
+        return self
+    }
+}
+
+private struct StoredAudioEffects: Codable {
+    let lowGain: Double
+    let midGain: Double
+    let highGain: Double
+    let cutsLowRumble: Bool
+    let reverb: Double
+    let noiseGate: Double
+    let gain: Double
+
+    init(_ effects: AudioEffects) {
+        lowGain = effects.lowGain
+        midGain = effects.midGain
+        highGain = effects.highGain
+        cutsLowRumble = effects.cutsLowRumble
+        reverb = effects.reverb
+        noiseGate = effects.noiseGate
+        gain = effects.gain
+    }
+
+    var effects: AudioEffects {
+        var effects = AudioEffects(
+            lowGain: lowGain, midGain: midGain, highGain: highGain, cutsLowRumble: cutsLowRumble, reverb: reverb, noiseGate: noiseGate, gain: gain
+        )
+        effects.clamp()
+        return effects
     }
 }

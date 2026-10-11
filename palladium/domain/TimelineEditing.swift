@@ -27,6 +27,7 @@ nonisolated extension Clip {
         portion?.colorAdjustment = colorAdjustment
         portion?.filters = filters
         portion?.chromaKey = chromaKey
+        portion?.audioEffects = audioEffects
         portion?.crop = crop
         // 키프레임은 원본 시각에 붙어 있어 나눈 조각도 같은 키프레임을 그대로 갖는다(#67).
         portion?.animation = animation
@@ -100,6 +101,7 @@ nonisolated extension Track {
                 piece.colorAdjustment = original.colorAdjustment
                 piece.filters = original.filters
                 piece.chromaKey = original.chromaKey
+                piece.audioEffects = original.audioEffects
                 piece.crop = original.crop
                 piece.animation = original.animation
                 piece.title = original.title

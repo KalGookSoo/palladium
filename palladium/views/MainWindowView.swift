@@ -505,6 +505,7 @@ struct MainWindowView: View {
                 setChromaKey: { chromaKey in
                     editor.setChromaKey(chromaKey, for: Set(pictureClips(in: currentSequence).map(\.id)))
                 },
+                setAudioEffects: { clipID, effects in editor.setAudioEffects(effects, for: clipID) },
                 renameClip: { clipID, name in editor.renameClip(clipID, to: name) },
                 setClipSource: { clipID, start, end in editor.setClipSource(clipID, start: start, end: end) },
                 setTransform: { clipID, transform in editor.setTransform(transform, for: clipID, at: playheadTime) },

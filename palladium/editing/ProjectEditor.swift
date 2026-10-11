@@ -534,6 +534,13 @@ final class ProjectEditor {
         editCurrentSequence(chromaKey == nil ? "크로마키 끄기" : "크로마키") { $0.updateClips(clipIDs) { $0.chromaKey = clamped } }
     }
 
+    /// 클립의 소리 이펙트를 바꾼다(#74, EQ·잔향·게이트·게인). 범위로 맞춘다.
+    func setAudioEffects(_ effects: AudioEffects, for clipID: Clip.ID) {
+        var clamped = effects
+        clamped.clamp()
+        editCurrentSequence("오디오 이펙트") { $0.updateClips([clipID]) { $0.audioEffects = clamped } }
+    }
+
     /// 고른 클립을 클립보드에 담는다(#62). 프로젝트는 바꾸지 않는다. 고른 클립이 없으면 클립보드를 그대로 둔다.
     func copyClips(_ clipIDs: Set<Clip.ID>) {
         let copied = currentSequence.copiedClips(clipIDs)

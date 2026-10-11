@@ -20,6 +20,8 @@ struct InspectorView: View {
     var setFilters: ([VideoFilter]) -> Void = { _ in }
     /// 고른 영상·이미지 클립 모두의 크로마키(#70).
     var setChromaKey: (ChromaKey?) -> Void = { _ in }
+    /// 클립 소리 이펙트(#74).
+    var setAudioEffects: (Clip.ID, AudioEffects) -> Void = { _, _ in }
     /// 클립 별칭(#78). 비우면 원본 이름을 보여준다.
     var renameClip: (Clip.ID, String) -> Void = { _, _ in }
     /// 트림 탭에서 원본 시작·끝 지점을 입력했을 때.
@@ -191,6 +193,9 @@ struct InspectorView: View {
                         setClipAudio(clip.id, volume, isMuted)
                     } keyframes: {
                         keyframeControls(clip: clip, property: .volume)
+                    }
+                    Section("이펙트") {
+                        AudioEffectsInspectorView(effects: clip.audioEffects) { setAudioEffects(clip.id, $0) }
                     }
                     Section("크로스페이드") {
                         TransitionInspectorView(

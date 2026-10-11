@@ -168,6 +168,8 @@ final class ClipRecord {
     var filtersData: Data?
     /// 크로마키(#70) 설정(JSON). 옵셔널이라 기존 저장소가 열리고, `nil`이면 크로마키가 꺼져 있다.
     var chromaKeyData: Data?
+    /// 소리 이펙트(#74, JSON). 옵셔널이라 기존 저장소가 열리고, `nil`이면 이펙트가 없다.
+    var audioEffectsData: Data?
     var track: TrackRecord?
 
     init(
