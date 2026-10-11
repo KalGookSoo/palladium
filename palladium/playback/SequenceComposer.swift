@@ -83,7 +83,8 @@ nonisolated enum SequenceComposer {
                 // 타이틀(#76)은 원본 파일 없이 글자만 그린다.
                 if let title = clip.title {
                     let layer = CompositionLayer(
-                        content: .title(title), transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, animatedClip: animatedClip(clip)
+                        content: .title(title), transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, animatedClip: animatedClip(clip),
+                        filters: clip.filters
                     )
                     placedLayers.append((layerRange, layer, order))
                     continue
@@ -96,7 +97,10 @@ nonisolated enum SequenceComposer {
                     if let image = images[asset.id] {
                         placedLayers.append((
                             layerRange,
-                            CompositionLayer(content: .image(image), transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, animatedClip: animatedClip(clip)),
+                            CompositionLayer(
+                                content: .image(image), transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, animatedClip: animatedClip(clip),
+                                filters: clip.filters
+                            ),
                             order
                         ))
                     }
@@ -118,7 +122,8 @@ nonisolated enum SequenceComposer {
                         sourceFrameTimings.append(SourceFrameTiming(nominalFrameRate: frameRate, minFrameDuration: minFrameDuration))
                         let content = CompositionLayer.Content.video(trackID: videoTrack.trackID, naturalSize: naturalSize, preferredTransform: preferredTransform)
                         let layer = CompositionLayer(
-                            content: content, transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, crop: clip.crop, animatedClip: animatedClip(clip)
+                            content: content, transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, crop: clip.crop, animatedClip: animatedClip(clip),
+                            filters: clip.filters
                         )
                         placedLayers.append((layerRange, layer, order))
                     }

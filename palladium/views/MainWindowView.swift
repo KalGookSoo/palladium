@@ -498,6 +498,10 @@ struct MainWindowView: View {
                 setColorAdjustment: { adjustment in
                     editor.setColorAdjustment(adjustment, for: Set(pictureClips(in: currentSequence).map(\.id)))
                 },
+                multipleSelectionFilters: selectedClipIDs.count > 1 ? pictureClips(in: currentSequence).first?.filters ?? [] : [],
+                setFilters: { filters in
+                    editor.setFilters(filters, for: Set(pictureClips(in: currentSequence).map(\.id)))
+                },
                 renameClip: { clipID, name in editor.renameClip(clipID, to: name) },
                 setClipSource: { clipID, start, end in editor.setClipSource(clipID, start: start, end: end) },
                 setTransform: { clipID, transform in editor.setTransform(transform, for: clipID, at: playheadTime) },

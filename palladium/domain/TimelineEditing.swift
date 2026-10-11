@@ -25,6 +25,7 @@ nonisolated extension Clip {
         portion?.name = name
         portion?.colorLabel = colorLabel
         portion?.colorAdjustment = colorAdjustment
+        portion?.filters = filters
         portion?.crop = crop
         // 키프레임은 원본 시각에 붙어 있어 나눈 조각도 같은 키프레임을 그대로 갖는다(#67).
         portion?.animation = animation
@@ -96,6 +97,7 @@ nonisolated extension Track {
                 piece.name = original.name
                 piece.colorLabel = original.colorLabel
                 piece.colorAdjustment = original.colorAdjustment
+                piece.filters = original.filters
                 piece.crop = original.crop
                 piece.animation = original.animation
                 piece.title = original.title

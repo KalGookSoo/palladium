@@ -26,6 +26,8 @@ nonisolated struct Clip {
     var colorLabel: ColorLabel?
     /// 밝기·대비·채도(#61). 영상·이미지 클립에만 그린다.
     var colorAdjustment = ColorAdjustment()
+    /// 쌓은 필터(#68, 블러·비네트 등). 색보정 뒤에 앞에서부터 차례로 적용한다.
+    var filters: [VideoFilter] = []
     /// 화면에서 잘라낼 만큼(#85, 클립 편집 창의 크롭). 위치·크기는 잘린 화면을 기준으로 한다.
     var crop = ClipCrop()
     /// 시간에 따라 바뀌는 트랜스폼·음량(#67, 키프레임). 비어 있으면 위의 고정 값을 쓴다.

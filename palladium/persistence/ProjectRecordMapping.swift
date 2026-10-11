@@ -88,6 +88,7 @@ private extension SequenceRecord {
                 .withCrop(of: clip)
                 .withAnimation(of: clip)
                 .withTitle(of: clip)
+                .withFilters(of: clip)
             }
             return trackRecord
         }
@@ -286,6 +287,7 @@ private extension ClipRecord {
         clip?.crop = ClipCrop(storedTop: cropTop, bottom: cropBottom, left: cropLeft, right: cropRight)
         clip?.animation = animationData.flatMap { try? JSONDecoder().decode(StoredClipAnimation.self, from: $0) }?.animation ?? ClipAnimation()
         clip?.title = titleData.flatMap { try? JSONDecoder().decode(StoredTitle.self, from: $0) }?.title
+        clip?.filters = filtersData.flatMap { try? JSONDecoder().decode([StoredFilter].self, from: $0) }?.compactMap(\.filter) ?? []
         if clip == nil {
             let clipID = id
             Logger.project.error("Clip 불변식을 어기는 저장값이라 건너뜀: \(clipID, privacy: .public)")
@@ -433,5 +435,34 @@ private struct StoredTitle: Codable {
         )
         title.clamp()
         return title
+    }
+}
+
+// MARK: - Filters (#68)
+
+private extension ClipRecord {
+    func withFilters(of clip: Clip) -> ClipRecord {
+        filtersData = clip.filters.isEmpty ? nil : try? JSONEncoder().encode(clip.filters.map(StoredFilter.init))
+        return self
+    }
+}
+
+/// 필터 저장 모양. 알 수 없는 종류는 버린다.
+private struct StoredFilter: Codable {
+    let id: UUID
+    let kind: String
+    let intensity: Double
+
+    init(_ filter: VideoFilter) {
+        id = filter.id
+        kind = filter.kind.rawValue
+        intensity = filter.intensity
+    }
+
+    var filter: VideoFilter? {
+        guard let kind = VideoFilterKind(rawValue: kind) else { return nil }
+        var filter = VideoFilter(id: id, kind: kind, intensity: intensity)
+        filter.clamp()
+        return filter
     }
 }

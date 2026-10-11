@@ -29,6 +29,8 @@ nonisolated struct CompositionLayer {
     var crop = ClipCrop()
     /// 트랜스폼 키프레임이 있는 클립(#67). 있으면 프레임마다 그 시각의 트랜스폼을 계산한다.
     var animatedClip: Clip?
+    /// 쌓은 필터(#68). 색보정 뒤, 화면에 놓기 전 원본 이미지에 차례로 적용한다.
+    var filters: [VideoFilter] = []
 
     /// 합성 시각(시퀀스 시각)의 트랜스폼.
     func transform(at time: CMTime) -> ClipTransform {
@@ -122,9 +124,10 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
                 crop: layer.crop,
                 renderSize: renderSize
             )
-            placed = Self.cropping(Self.applying(layer.colorAdjustment, to: CIImage(cvPixelBuffer: buffer)).transformed(by: transform), by: layer.crop)
+            let source = Self.applying(layer.filters, to: Self.applying(layer.colorAdjustment, to: CIImage(cvPixelBuffer: buffer)))
+            placed = Self.cropping(source.transformed(by: transform), by: layer.crop)
         case let .image(source):
-            let adjusted = Self.applying(layer.colorAdjustment, to: source)
+            let adjusted = Self.applying(layer.filters, to: Self.applying(layer.colorAdjustment, to: source))
             placed = adjusted.transformed(by: Self.imageTransform(imageSize: source.extent.size, clipTransform: clipTransform, renderSize: renderSize))
         case let .subtitle(subtitle):
             return subtitleImage(subtitle, renderSize: renderSize)
@@ -132,7 +135,7 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
             guard let image = titleImage(title, renderSize: renderSize) else { return nil }
             let size = image.extent.size
             let frame = clipTransform.frame(naturalSize: size, in: renderSize)
-            placed = Self.applying(layer.colorAdjustment, to: image).transformed(by: CGAffineTransform(scaleX: frame.width / size.width, y: frame.height / size.height)
+            placed = Self.applying(layer.filters, to: Self.applying(layer.colorAdjustment, to: image)).transformed(by: CGAffineTransform(scaleX: frame.width / size.width, y: frame.height / size.height)
                 .concatenating(CGAffineTransform(translationX: frame.minX, y: renderSize.height - frame.maxY)))
         }
         return Self.applyingOpacity(clipTransform.opacity, to: Self.rotating(placed, by: clipTransform, renderSize: renderSize))
@@ -278,6 +281,51 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
             kCIInputContrastKey: adjustment.contrast,
             kCIInputSaturationKey: adjustment.saturation,
         ])
+    }
+
+    /// 필터(#68)를 앞에서부터 차례로 적용한다. 세기는 이미지 짧은 변에 비례해 화면 크기와 상관없이 같은 느낌이다.
+    /// 흐리기·볼록 렌즈처럼 가장자리를 넘는 필터는 가장자리를 늘여 그린 뒤 원래 크기로 자른다.
+    static func applying(_ filters: [VideoFilter], to image: CIImage) -> CIImage {
+        let extent = image.extent
+        let shortSide = min(extent.width, extent.height)
+        let center = CIVector(x: extent.midX, y: extent.midY)
+        return filters.reduce(image) { current, filter in
+            let amount = filter.intensity
+            guard amount > 0 else { return current }
+            let filtered: CIImage = switch filter.kind {
+            case .blur:
+                current.clampedToExtent().applyingGaussianBlur(sigma: amount * shortSide * 0.03)
+            case .sharpen:
+                current.applyingFilter("CISharpenLuminance", parameters: [kCIInputSharpnessKey: amount * 2, kCIInputRadiusKey: 1 + amount * shortSide * 0.003])
+            case .vignette:
+                current.applyingFilter("CIVignetteEffect", parameters: [
+                    kCIInputCenterKey: center,
+                    kCIInputRadiusKey: shortSide * (0.9 - amount * 0.4),
+                    kCIInputIntensityKey: amount,
+                ])
+            case .noir:
+                Self.blend(current.applyingFilter("CIPhotoEffectNoir"), over: current, amount: amount)
+            case .sepia:
+                current.applyingFilter("CISepiaTone", parameters: [kCIInputIntensityKey: amount])
+            case .pixellate:
+                current.clampedToExtent().applyingFilter("CIPixellate", parameters: [kCIInputScaleKey: 2 + amount * shortSide * 0.04, kCIInputCenterKey: center])
+            case .bloom:
+                current.clampedToExtent().applyingFilter("CIBloom", parameters: [kCIInputRadiusKey: shortSide * 0.02, kCIInputIntensityKey: amount * 1.5])
+            case .bump:
+                current.clampedToExtent().applyingFilter("CIBumpDistortion", parameters: [
+                    kCIInputCenterKey: center,
+                    kCIInputRadiusKey: shortSide * 0.45,
+                    kCIInputScaleKey: amount,
+                ])
+            }
+            return filtered.cropped(to: extent)
+        }
+    }
+
+    /// `amount`(0~1)만큼 `top`을 `bottom` 위에 섞는다.
+    private static func blend(_ top: CIImage, over bottom: CIImage, amount: Double) -> CIImage {
+        guard amount < 1 else { return top }
+        return applyingOpacity(amount, to: top).composited(over: bottom)
     }
 
     private static func applyingOpacity(_ opacity: Double, to image: CIImage) -> CIImage {

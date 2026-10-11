@@ -90,7 +90,7 @@ struct TrackRowView: View {
             symbolName: clip.isTitle ? "textformat" : track.kind.symbolName,
             isSelected: selectedClipIDs.contains(clip.id),
             colorLabel: clip.colorLabel,
-            hasEffect: !clip.colorAdjustment.isDefault
+            hasEffect: clip.hasEffect
         ) {
             ClipContentView(asset: asset, clip: clip, width: width, showsFilmstrip: showsFilmstrip, showsWaveform: showsWaveform, isFrozen: freezesContent)
                 // 키프레임(#67)은 클립 아래쪽에 작은 마름모로 보인다.

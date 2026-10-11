@@ -164,6 +164,8 @@ final class ClipRecord {
     var animationData: Data?
     /// 타이틀 클립(#76)의 글자와 모양(JSON, `StoredTitle`). 옵셔널이라 기존 저장소가 열리고, `nil`이면 타이틀이 아니다.
     var titleData: Data?
+    /// 필터(#68) 목록(JSON, 종류·세기). 옵셔널이라 기존 저장소가 열리고, `nil`이면 필터가 없다.
+    var filtersData: Data?
     var track: TrackRecord?
 
     init(

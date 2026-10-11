@@ -14,6 +14,10 @@ struct InspectorView: View {
     var multipleSelectionAdjustment: ColorAdjustment?
     /// 고른 영상·이미지 클립 모두의 밝기·대비·채도(#61).
     var setColorAdjustment: (ColorAdjustment) -> Void = { _ in }
+    /// 여러 클립을 골랐을 때 보일 필터 목록(#68, 고른 영상·이미지 클립 중 첫 클립).
+    var multipleSelectionFilters: [VideoFilter] = []
+    /// 고른 영상·이미지 클립 모두의 필터 목록(#68).
+    var setFilters: ([VideoFilter]) -> Void = { _ in }
     /// 클립 별칭(#78). 비우면 원본 이름을 보여준다.
     var renameClip: (Clip.ID, String) -> Void = { _, _ in }
     /// 트림 탭에서 원본 시작·끝 지점을 입력했을 때.
@@ -123,6 +127,7 @@ struct InspectorView: View {
                             Form {
                                 Section("이펙트") {
                                     EffectInspectorView(adjustment: multipleSelectionAdjustment, appliesToMultipleClips: true, setAdjustment: setColorAdjustment)
+                                    FilterInspectorView(filters: multipleSelectionFilters, setFilters: setFilters)
                                 }
                             }
                             .formStyle(.grouped)
@@ -246,6 +251,7 @@ struct InspectorView: View {
             }
             Section("이펙트", isExpanded: $isEffectExpanded) {
                 EffectInspectorView(adjustment: clip.colorAdjustment, setAdjustment: setColorAdjustment)
+                FilterInspectorView(filters: clip.filters, setFilters: setFilters)
             }
             Section("전환", isExpanded: $isTransitionExpanded) {
                 TransitionInspectorView(

@@ -517,6 +517,16 @@ final class ProjectEditor {
         editCurrentSequence("색보정") { $0.updateClips(clipIDs) { $0.colorAdjustment = clamped } }
     }
 
+    /// 고른 클립 모두의 필터 목록을 바꾼다(#68, 추가·삭제·순서·세기). 세기는 0~1로 맞춘다. 실행 취소 한 번.
+    func setFilters(_ filters: [VideoFilter], for clipIDs: Set<Clip.ID>) {
+        let clamped = filters.map { filter in
+            var filter = filter
+            filter.clamp()
+            return filter
+        }
+        editCurrentSequence("필터") { $0.updateClips(clipIDs) { $0.filters = clamped } }
+    }
+
     /// 고른 클립을 클립보드에 담는다(#62). 프로젝트는 바꾸지 않는다. 고른 클립이 없으면 클립보드를 그대로 둔다.
     func copyClips(_ clipIDs: Set<Clip.ID>) {
         let copied = currentSequence.copiedClips(clipIDs)
