@@ -143,9 +143,9 @@ struct FolderTreeTests {
 
     @Test("사이드바 최대 폭은 폴더가 한 단계 깊어질 때마다 들여쓰기만큼 늘고 상한에서 멈춘다")
     func sidebarWidthFollowsDepth() {
-        #expect(MainWindowMetrics.sidebarMaxWidth(folderDepth: 0) == 320)
-        #expect(MainWindowMetrics.sidebarMaxWidth(folderDepth: 1) == 320)
-        #expect(MainWindowMetrics.sidebarMaxWidth(folderDepth: 3) == 360)
+        #expect(MainWindowMetrics.sidebarMaxWidth(folderDepth: 0) == 480)
+        #expect(MainWindowMetrics.sidebarMaxWidth(folderDepth: 1) == 480)
+        #expect(MainWindowMetrics.sidebarMaxWidth(folderDepth: 3) == 520)
         #expect(MainWindowMetrics.sidebarMaxWidth(folderDepth: 50) == MainWindowMetrics.sidebarMaxWidthLimit)
     }
 }

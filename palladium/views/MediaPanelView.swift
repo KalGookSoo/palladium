@@ -484,6 +484,7 @@ struct MediaPanelView: View {
         return Label(folder.name, systemImage: isDropTarget ? "folder.fill" : "folder")
             .lineLimit(1)
             .truncationMode(.middle)
+            .help(folder.name)
             .frame(maxWidth: .infinity, alignment: .leading)
             // 끄는 동안 이 폴더 안으로 들어갈 곳이면 머리를 칠한다(#109).
             .background {
@@ -1036,6 +1037,8 @@ private struct MediaAssetRow<Name: View>: View {
             }
         }
         .accessibilityElement(children: .combine)
+        // 좁은 패널에서 이름이 잘려도 커서를 올리면 전체 이름이 보인다.
+        .help(asset.name)
     }
 
     /// 태그가 있으면 길이 뒤에 붙인다. 예: "0:10 · 인터뷰, B컷"
