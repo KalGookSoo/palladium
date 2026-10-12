@@ -45,6 +45,13 @@ struct MediaPanelView: View {
     /// 끄는 중 포인터가 머문 접힌 폴더. 잠시 머물면 펼친다.
     @State private var dropHoverFolderID: MediaFolder.ID?
     private static let dropHoverExpandDelay = Duration.milliseconds(700)
+    /// 끄는 동안 목록 끝 띠에 커서가 있으면 한 번에 굴릴 거리(pt, 위로 음수). 띠를 벗어나면 `nil`(#108).
+    @State private var autoscrollSpeed: CGFloat?
+    @State private var filterBarHeight: CGFloat = 28
+    @State private var listScroller = ListScroller()
+    private static let autoscrollBandHeight: CGFloat = 24
+    /// 끄는 동안 커서가 올라가 있는 놓기 대상과 그곳에 놓으면 들어갈 곳(#109). 목록 빈 곳은 `nil` 키.
+    @State private var dropHovers: [UUID?: MediaDropTarget] = [:]
 
     var body: some View {
         let project = editor.project
@@ -87,8 +94,8 @@ struct MediaPanelView: View {
                 }
                 Button("취소", role: .cancel) {}
             }
-            // 이름 바꾸기는 하나만 골랐을 때만 한다.
-            .focusedSceneValue(\.renameSelectedAsset, listHasFocus ? singleSelection.map { assetID in { beginRenaming(assetID) } } : nil)
+            // 이름 바꾸기는 하나만 골랐을 때만 한다. 고른 것이 폴더면 폴더 이름을 바꾼다(#107).
+            .focusedSceneValue(\.renameSelectedAsset, listHasFocus ? singleSelection.map { id in { isFolder(id) ? beginRenamingFolder(id) : beginRenaming(id) } } : nil)
             .onChange(of: selectedAssetIDs, initial: true) { _, selection in
                 selectionOrder = AssetSelectionOrder.updated(selectionOrder, selection: selection, listOrder: listOrder)
                 // 타임라인의 "미디어 패널에서 원본 보기"처럼 접힌 폴더 안 원본이 골라지면 그 폴더들을 펼쳐 보이게 한다.
@@ -116,10 +123,15 @@ struct MediaPanelView: View {
                     }
                 }
             }
-            // 목록에 포커스가 있을 때 ⌫(편집 > 삭제)로 고른 원본을 지운다. 이름을 바꾸는 중에는 글자를 지운다.
+            // 목록에 포커스가 있을 때 ⌫(편집 > 삭제)로 고른 원본·폴더를 지운다. 이름을 바꾸는 중에는 글자를 지운다.
             .onDeleteCommand {
                 if !selectedAssetIDs.isEmpty, renamingAssetID == nil {
-                    requestDeletion(selectedAssetIDs)
+                    let folderIDs = selectedAssetIDs.filter(isFolder)
+                    let assetIDs = selectedAssetIDs.subtracting(folderIDs)
+                    deleteFolders(folderIDs)
+                    if !assetIDs.isEmpty {
+                        requestDeletion(assetIDs)
+                    }
                 }
             }
             .confirmationDialog(
@@ -174,6 +186,16 @@ struct MediaPanelView: View {
         // 행이 없는 빈 곳에 놓으면 맨 위로 옮긴다.
         .dropDestination(for: String.self) { items, _ in
             moveDropped(items, toFolder: nil)
+        } isTargeted: { isTargeted in
+            setDropHover(isTargeted, from: nil, to: .root)
+        }
+        // 맨 위로 옮겨질 때는 목록 테두리를 강조한다(#109).
+        .overlay {
+            if dropTarget == .root {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(Color.accentColor, lineWidth: 2)
+                    .allowsHitTesting(false)
+            }
         }
         .task(id: dropHoverFolderID) {
             guard let folderID = dropHoverFolderID else { return }
@@ -192,7 +214,13 @@ struct MediaPanelView: View {
                 Divider()
                 pasteButton(into: nil)
             } else {
-                assetMenu(for: assetIDs)
+                // 폴더 ID도 UUID라 폴더 줄을 우클릭하면 여기로 온다. 폴더 머리의 메뉴보다 이 메뉴가 먼저 뜨므로 폴더 메뉴를 여기서 낸다(#107).
+                let folderIDs = assetIDs.filter(isFolder)
+                if folderIDs.count == assetIDs.count {
+                    folderMenu(for: folderIDs)
+                } else {
+                    assetMenu(for: assetIDs.subtracting(folderIDs))
+                }
             }
         } primaryAction: { assetIDs in
             // 두 번 누르면 영상·오디오는 클립 편집 창을, 이미지는 훑어보기(Quick Look)를 연다(#81).
@@ -208,9 +236,35 @@ struct MediaPanelView: View {
         // 검색창 바로 아래에 색상 레이블 필터를 둔다.
         .safeAreaInset(edge: .top) {
             MediaFilterBar(filter: $filter) {
-                // 원본 하나를 골랐으면 그 원본이 있는 폴더 안에, 아니면 맨 위에 만든다.
-                let parentID = singleSelection.flatMap { assetID in editor.project.folders.first { $0.assetIDs.contains(assetID) }?.id }
-                addFolder(in: parentID)
+                // 폴더 하나를 골랐으면 그 안에, 원본 하나를 골랐으면 그 원본이 있는 폴더 안에, 아니면 맨 위에 만든다.
+                addFolder(in: singleSelection.flatMap(folder(containing:)))
+            }
+            // 끄는 동안 필터 줄에 커서를 대면 목록을 위로 굴린다(#108).
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { filterBarHeight = $0 }
+            .onDrop(of: [.item], delegate: AutoscrollDropDelegate(direction: -1, height: filterBarHeight) { autoscrollSpeed = $0 })
+        }
+        // 끄는 동안 목록 아래 끝 띠에 커서를 대면 목록을 아래로 굴린다(#108). 놓을 곳 안내 글자도 이 띠에 보인다(#109).
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear
+                .frame(height: Self.autoscrollBandHeight)
+                .overlay {
+                    if let dropTargetText {
+                        Text(dropTargetText)
+                            .font(.caption)
+                            .foregroundStyle(Color.accentColor)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .padding(.horizontal, 12)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onDrop(of: [.item], delegate: AutoscrollDropDelegate(direction: 1, height: Self.autoscrollBandHeight) { autoscrollSpeed = $0 })
+        }
+        .background(ListScrollerAnchor(scroller: listScroller))
+        .task(id: autoscrollSpeed == nil) {
+            while let speed = autoscrollSpeed, !Task.isCancelled {
+                listScroller.scroll(by: speed)
+                try? await Task.sleep(for: .milliseconds(16))
             }
         }
         .overlay {
@@ -261,6 +315,9 @@ struct MediaPanelView: View {
             .draggable(AssetDragPayload.encode(draggedAssetIDs(startingAt: asset.id)))
             .dropDestination(for: String.self) { items, _ in
                 moveDropped(items, toFolder: folderID)
+            } isTargeted: { isTargeted in
+                // 원본 위에 놓아도 들어가는 곳은 그 원본의 폴더라, 그 폴더(맨 위면 목록)를 표시한다(#109).
+                setDropHover(isTargeted, from: asset.id, to: folderID.map(MediaDropTarget.folder) ?? .root)
             }
     }
 
@@ -325,19 +382,64 @@ struct MediaPanelView: View {
         renamingFolderID = folderID
     }
 
+    /// 목록은 폴더 줄도 고른다. 폴더 ID도 `UUID`라 원본과 같은 선택에 들어온다(#107).
+    private func isFolder(_ id: UUID) -> Bool {
+        editor.project.folders.contains { $0.id == id }
+    }
+
+    /// 고른 것이 폴더면 그 폴더, 원본이면 그 원본이 있는 폴더(맨 위면 `nil`).
+    private func folder(containing id: UUID) -> MediaFolder.ID? {
+        isFolder(id) ? id : editor.project.folders.first { $0.assetIDs.contains(id) }?.id
+    }
+
+    /// 폴더 우클릭 메뉴. 하나면 새 폴더(그 안)·붙여넣기·이름 변경·삭제, 여럿이면 삭제만.
+    @ViewBuilder
+    private func folderMenu(for folderIDs: Set<MediaFolder.ID>) -> some View {
+        if folderIDs.count == 1, let folderID = folderIDs.first {
+            Button("새 폴더") { addFolder(in: folderID) }
+            pasteButton(into: folderID)
+            Divider()
+            Button("폴더 이름 변경…") { beginRenamingFolder(folderID) }
+        }
+        Button("폴더 삭제") { deleteFolders(folderIDs) }
+    }
+
+    private func beginRenamingFolder(_ folderID: MediaFolder.ID) {
+        folderNameText = editor.project.folders.first { $0.id == folderID }?.name ?? ""
+        renamingFolderID = folderID
+    }
+
+    /// 안의 원본과 하위 폴더는 한 단계 위로 올라가고, 실행 취소(⌘Z)로 되돌릴 수 있어 확인 창을 띄우지 않는다.
+    private func deleteFolders(_ folderIDs: Set<MediaFolder.ID>) {
+        for folderID in folderIDs {
+            editor.deleteFolder(folderID)
+        }
+        selectedAssetIDs.subtract(folderIDs)
+    }
+
     /// 폴더 머리. 원본·폴더를 끌어다 놓으면 이 폴더 안으로 넣고, 끄는 동안 잠시 머물면 펼친다.
     /// 머리를 끌면 폴더째 옮기고, 우클릭으로 하위 폴더를 만들거나 이름을 바꾸거나 지운다.
     private func folderHeader(_ folder: MediaFolder) -> some View {
-        Label(folder.name, systemImage: "folder")
+        let isDropTarget = dropTarget == .folder(folder.id)
+        return Label(folder.name, systemImage: isDropTarget ? "folder.fill" : "folder")
             .lineLimit(1)
             .truncationMode(.middle)
             .frame(maxWidth: .infinity, alignment: .leading)
+            // 끄는 동안 이 폴더 안으로 들어갈 곳이면 머리를 칠한다(#109).
+            .background {
+                if isDropTarget {
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(Color.accentColor.opacity(0.3))
+                        .padding(-3)
+                }
+            }
             .contentShape(Rectangle())
             .draggable(FolderDragPayload.encode(folder.id))
             .dropDestination(for: String.self) { items, _ in
                 dropHoverFolderID = nil
                 return moveDropped(items, toFolder: folder.id)
             } isTargeted: { isTargeted in
+                setDropHover(isTargeted, from: folder.id, to: .folder(folder.id))
                 if isTargeted {
                     dropHoverFolderID = folder.id
                 } else if dropHoverFolderID == folder.id {
@@ -345,16 +447,32 @@ struct MediaPanelView: View {
                 }
             }
             .contextMenu {
-                Button("새 폴더") { addFolder(in: folder.id) }
-                pasteButton(into: folder.id)
-                Divider()
-                Button("폴더 이름 변경…") {
-                    folderNameText = folder.name
-                    renamingFolderID = folder.id
-                }
-                // 안의 원본과 하위 폴더는 한 단계 위로 올라가고, 실행 취소(⌘Z)로 되돌릴 수 있어 확인 창을 띄우지 않는다.
-                Button("폴더 삭제") { editor.deleteFolder(folder.id) }
+                folderMenu(for: [folder.id])
             }
+    }
+
+    // MARK: - Drop target
+
+    /// 커서가 놓기 대상(폴더 머리·원본 줄, 목록 빈 곳은 `nil`) 위에 있음을 적거나 지운다(#109).
+    /// 줄을 옮겨 갈 때 들어가기·나가기 알림 순서가 섞여도 지워지지 않도록 대상마다 따로 적는다.
+    private func setDropHover(_ isTargeted: Bool, from source: UUID?, to target: MediaDropTarget) {
+        dropHovers[source] = isTargeted ? target : nil
+    }
+
+    /// 지금 놓으면 들어갈 곳. 줄 위면 그 줄이 정한 곳이, 줄이 없는 빈 곳이면 맨 위다.
+    private var dropTarget: MediaDropTarget? {
+        dropHovers.first { $0.key != nil }?.value ?? dropHovers[UUID?.none]
+    }
+
+    private var dropTargetText: String? {
+        switch dropTarget {
+        case .root:
+            "맨 위로 이동"
+        case let .folder(folderID):
+            "'\(editor.project.folders.first { $0.id == folderID }?.name ?? "")' 폴더로 이동"
+        case nil:
+            nil
+        }
     }
 
     /// 하나만 골랐을 때의 그 원본. 이름 바꾸기·태그·클립 편집처럼 원본 하나에만 하는 일에 쓴다.
@@ -365,7 +483,8 @@ struct MediaPanelView: View {
     /// `assetID`를 끌 때 함께 끌 원본들.
     private func draggedAssetIDs(startingAt assetID: MediaAsset.ID) -> [MediaAsset.ID] {
         guard selectedAssetIDs.contains(assetID), selectedAssetIDs.count > 1 else { return [assetID] }
-        return selectionOrder.filter(selectedAssetIDs.contains)
+        // 함께 고른 폴더는 원본이 아니므로 빼고 끈다(#107).
+        return selectionOrder.filter { selectedAssetIDs.contains($0) && !isFolder($0) }
     }
 
     /// 메뉴가 받은 원본들을 고른 순서대로(순서를 모르면 목록 순서).
@@ -376,6 +495,7 @@ struct MediaPanelView: View {
     /// 놓은 원본·폴더를 `folderID` 폴더 안(`nil`이면 맨 위)으로 옮긴다. Finder에서 끈 파일은 가져온다.
     /// 폴더를 자기 자신이나 자기 아래로 놓으면 옮기지 않는다.
     private func moveDropped(_ items: [String], toFolder folderID: MediaFolder.ID?) -> Bool {
+        dropHovers = [:]
         let fileURLs = items.compactMap(URL.init(string:)).filter(\.isFileURL)
         if !fileURLs.isEmpty {
             importFiles(fileURLs)
@@ -490,7 +610,9 @@ struct MediaPanelView: View {
     // MARK: - Clipboard
 
     /// 잘라내기·복사한 원본을 고른 순서대로 클립보드 글자로 담는다(#104). 편집 메뉴(⌘X·⌘C)가 클립보드에 쓴다.
-    private func clipboardItems(for assetIDs: Set<MediaAsset.ID>, isCut: Bool) -> [NSItemProvider] {
+    /// 함께 고른 폴더는 담지 않는다(#107).
+    private func clipboardItems(for selection: Set<MediaAsset.ID>, isCut: Bool) -> [NSItemProvider] {
+        let assetIDs = selection.filter { !isFolder($0) }
         guard !assetIDs.isEmpty, renamingAssetID == nil else { return [] }
         return [NSItemProvider(object: AssetClipboardPayload.encode(ordered(assetIDs), isCut: isCut) as NSString)]
     }
@@ -514,8 +636,11 @@ struct MediaPanelView: View {
         .disabled(text.flatMap(AssetClipboardPayload.decode) == nil)
     }
 
-    /// ⌘V로 붙일 곳: 고른 원본(목록 순서로 첫 원본)이 있는 폴더, 고른 것이 없으면 맨 위.
+    /// ⌘V로 붙일 곳: 폴더 하나를 골랐으면 그 폴더 안(#107), 아니면 고른 원본(목록 순서로 첫 원본)이 있는 폴더, 고른 것이 없으면 맨 위.
     private var pasteTargetFolder: MediaFolder.ID? {
+        if let selected = singleSelection, isFolder(selected) {
+            return selected
+        }
         let first = editor.project.assetListOrder.first(where: selectedAssetIDs.contains)
         return first.flatMap { assetID in editor.project.folders.first { $0.assetIDs.contains(assetID) }?.id }
     }
@@ -535,6 +660,96 @@ struct MediaPanelView: View {
         if let folderID {
             setExpanded(true, folderID)
         }
+    }
+}
+
+/// 미디어 패널에서 끌어 놓으면 들어갈 곳(#109).
+private enum MediaDropTarget: Equatable {
+    /// 어느 폴더에도 없는 맨 위.
+    case root
+    case folder(MediaFolder.ID)
+}
+
+/// 끄는 동안 목록 끝 띠에 커서가 들어오면 그쪽으로 굴릴 속도를 알린다(#108). 띠의 바깥 끝에 가까울수록 빠르다.
+/// 띠에 놓으면 아무 일도 하지 않는다.
+private struct AutoscrollDropDelegate: DropDelegate {
+    /// 위(-1)·아래(1).
+    let direction: CGFloat
+    let height: CGFloat
+    let setSpeed: (CGFloat?) -> Void
+
+    private func speed(at location: CGPoint) -> CGFloat {
+        let fraction = height > 0 ? location.y / height : 0
+        let depth = min(max(direction < 0 ? 1 - fraction : fraction, 0), 1)
+        return direction * (4 + 16 * depth)
+    }
+
+    func validateDrop(info _: DropInfo) -> Bool {
+        true
+    }
+
+    func dropEntered(info: DropInfo) {
+        setSpeed(speed(at: info.location))
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        setSpeed(speed(at: info.location))
+        return DropProposal(operation: .forbidden)
+    }
+
+    func dropExited(info _: DropInfo) {
+        setSpeed(nil)
+    }
+
+    func performDrop(info _: DropInfo) -> Bool {
+        setSpeed(nil)
+        return false
+    }
+}
+
+/// 목록의 `NSScrollView`를 점 단위로 굴린다(#108). SwiftUI 목록은 줄 단위로만 스크롤할 수 있어 AppKit 스크롤 뷰를 직접 움직인다.
+private final class ListScroller {
+    /// 목록 뒤에 깐 빈 뷰. 이 뷰 가운데를 품은 가장 안쪽 스크롤 뷰가 목록이다.
+    weak var anchor: NSView?
+    private weak var scrollView: NSScrollView?
+
+    /// 아래로 양수, 위로 음수. 목록 끝을 넘지 않는다.
+    func scroll(by delta: CGFloat) {
+        guard let scrollView = scrollView ?? findScrollView() else { return }
+        self.scrollView = scrollView
+        let clip = scrollView.contentView
+        var bounds = clip.bounds
+        bounds.origin.y += clip.isFlipped ? delta : -delta
+        clip.scroll(to: clip.constrainBoundsRect(bounds).origin)
+        scrollView.reflectScrolledClipView(clip)
+    }
+
+    private func findScrollView() -> NSScrollView? {
+        guard let anchor, let root = anchor.window?.contentView else { return nil }
+        let center = anchor.convert(NSPoint(x: anchor.bounds.midX, y: anchor.bounds.midY), to: nil)
+        return Self.innermostScrollView(in: root, containing: center)
+    }
+
+    private static func innermostScrollView(in view: NSView, containing point: NSPoint) -> NSScrollView? {
+        guard !view.isHidden, view.convert(view.bounds, to: nil).contains(point) else { return nil }
+        for subview in view.subviews.reversed() {
+            if let found = innermostScrollView(in: subview, containing: point) {
+                return found
+            }
+        }
+        return view as? NSScrollView
+    }
+}
+
+private struct ListScrollerAnchor: NSViewRepresentable {
+    let scroller: ListScroller
+
+    func makeNSView(context _: Context) -> NSView {
+        NSView()
+    }
+
+    func updateNSView(_ nsView: NSView, context _: Context) {
+        scroller.anchor = nsView
     }
 }
 
