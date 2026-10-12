@@ -96,12 +96,15 @@ git tag v1.0.0
 
 ### 릴리스 절차
 
-1. `project.pbxproj`에서 `palladium` 타겟의 `MARKETING_VERSION`을 올린다(빌드 업로드 때마다 `CURRENT_PROJECT_VERSION`도 1씩 올린다).
-2. `chore: 버전을 X.Y.Z로 올림` 커밋을 만든다.
-3. 위 규칙대로 태그를 로컬에 만든다.
-4. Xcode에서 스킴 `palladium`, 대상 `My Mac`으로 `Product → Archive` 한 뒤, Organizer의 Distribute App → App Store Connect → Upload로 업로드한다.
-5. [릴리스 템플릿](RELEASE_TEMPLATE.md)에 따라 GitHub 릴리스 노트를 작성한다.
-6. GitHub 릴리스 노트 중 사용자가 체감할 수 있는 부분만 추려서 [App Store 릴리스 노트 템플릿](../docs/app-store-release-notes-template.md) 형식으로 다시 써서, App Store Connect의 "새로운 기능" 필드에 채운다.
+1. 포맷·빌드·전체 단위 테스트를 통과시킨다(`/verify`). 이전 버전에서 저장한 프로젝트가 새 버전에서 열리는지도 확인한다(SwiftData 가벼운 마이그레이션).
+2. `project.pbxproj`에서 `palladium` 타겟의 `MARKETING_VERSION`을 올린다(빌드 업로드 때마다 `CURRENT_PROJECT_VERSION`도 1씩 올린다). 지금 값은 `1.0`이며, 첫 출시는 `1.0.0`으로 맞춘다.
+3. `chore: 버전을 X.Y.Z로 올림` 커밋을 만든다.
+4. 위 규칙대로 태그를 로컬에 만든다.
+5. Xcode에서 스킴 `palladium`, 대상 `Any Mac`으로 `Product → Archive` 한 뒤, Organizer의 Distribute App → App Store Connect → Upload로 업로드한다.
+6. App Store Connect의 TestFlight에서 받은 빌드로 처음 실행부터 가져오기 → 편집 → 내보내기·내레이션 녹음까지 샌드박스 안에서 확인한다.
+7. [릴리스 템플릿](RELEASE_TEMPLATE.md)에 따라 GitHub 릴리스 노트를 작성한다.
+8. GitHub 릴리스 노트 중 사용자가 체감할 수 있는 부분만 추려서 [App Store 릴리스 노트 템플릿](../docs/app-store-release-notes-template.md) 형식으로 다시 써서, App Store Connect의 "이 버전의 새로운 기능" 필드에 채운다. 스크린샷·설명이 바뀌었으면 함께 고친다.
+9. 업로드한 빌드를 골라 심사에 제출한다. 통과하면 출시하고, GitHub 릴리스를 공개한다(태그를 원격에 올리는 것은 따로 정한다).
 
 ## 응답 언어
 
