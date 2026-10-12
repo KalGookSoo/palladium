@@ -729,6 +729,8 @@ struct MainWindowView: View {
 
     private func startExport(to url: URL) {
         let job = ExportJob(fileName: url.lastPathComponent)
+        // 미리보기 재생도 같은 원본을 읽으므로 내보내는 동안 멈춘다(#131).
+        previewPlayer.pause()
         let sequence = editor.currentSequence
         let assets = editor.project.assets
         let preset = aspectRatio
@@ -770,6 +772,7 @@ struct MainWindowView: View {
         let job = BatchExportJob(items: zip(sequences, destinations).map { BatchExportJob.Item(sequenceID: $0.id, destination: $1) })
         let assets = editor.project.assets
         let options = ExportOptionsView.current
+        previewPlayer.pause()
         job.task = Task {
             await job.run { item, progress in
                 guard let sequence = sequences.first(where: { $0.id == item.sequenceID }),

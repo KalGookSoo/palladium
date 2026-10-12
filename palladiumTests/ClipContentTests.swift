@@ -51,6 +51,39 @@ struct ClipContentProviderTests {
         #expect(peaks.allSatisfy { $0 > 0.3 && $0 <= 1 })
     }
 
+    @Test("같은 원본의 파형을 여러 클립이 동시에 원하면 원본은 한 번만 읽는다")
+    func readsPeaksOnce() async throws {
+        let url = try TestMedia.makeTone(seconds: 1)
+        let asset = MediaAsset(id: UUID(), name: "tone.wav", sourceURL: url, kind: .audio, duration: CMTime(value: 1, timescale: 1))
+        let provider = ClipContentProvider()
+
+        async let first = provider.peaks(for: asset)
+        async let second = provider.peaks(for: asset)
+        async let third = provider.peaks(for: asset)
+        let results = await[first, second, third]
+
+        #expect(!results[0].isEmpty)
+        #expect(results.allSatisfy { $0 == results[0] })
+        #expect(provider.peakReadCount == 1)
+    }
+
+    @Test("내보내는 동안에는 파형을 읽지 않고 기다렸다가, 끝나면 읽는다")
+    func peaksWaitForExport() async throws {
+        let url = try TestMedia.makeTone(seconds: 1)
+        let asset = MediaAsset(id: UUID(), name: "tone.wav", sourceURL: url, kind: .audio, duration: CMTime(value: 1, timescale: 1))
+        let provider = ClipContentProvider()
+        let gate = MediaWorkGate.shared
+
+        gate.beginExport()
+        let task = Task { await provider.peaks(for: asset) }
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(provider.peakReadCount == 0)
+        gate.endExport()
+
+        #expect(await !task.value.isEmpty)
+        #expect(provider.peakReadCount == 1)
+    }
+
     @Test("파일이 없는 원본은 파형도 프레임도 없다")
     func missingFiles() async {
         let provider = ClipContentProvider()

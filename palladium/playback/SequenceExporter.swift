@@ -53,6 +53,9 @@ nonisolated enum SequenceExporter {
         progress: @escaping @Sendable (Double) -> Void
     ) async throws {
         try? FileManager.default.removeItem(at: url)
+        // 내보내는 동안 파형·필름스트립·손떨림 분석 같은 다른 미디어 읽기를 멈춘다(#131).
+        await MediaWorkGate.shared.beginExport()
+        defer { Task { @MainActor in MediaWorkGate.shared.endExport() } }
         do {
             let job = try await EncodingJob(composition: composition, url: url, codec: codec, quality: quality, customMbps: customMbps, progress: progress)
             try await withTaskCancellationHandler {
@@ -91,13 +94,22 @@ nonisolated enum SequenceExporter {
 /// 합성을 읽어 파일로 쓰는 작업 하나. 영상·소리 입력이 각자의 큐에서 준비되는 대로 샘플을 넘긴다.
 /// 취소하면 읽기·쓰기를 멈추고 오류(`CancellationError`)로 끝난다.
 private final nonisolated class EncodingJob: @unchecked Sendable {
+    /// 리더 하나 → 출력 하나 → 입력 하나. 영상·오디오가 리더를 따로 써 한쪽 읽기가 막혀도 다른 쪽이 같이 멈추지 않는다(#131).
     private struct Pipe {
+        let reader: AVAssetReader
         let output: AVAssetReaderOutput
         let input: AVAssetWriterInput
         let isVideo: Bool
+
+        init(composition: SequenceComposition, timeRange: CMTimeRange, output: AVAssetReaderOutput, input: AVAssetWriterInput, isVideo: Bool) throws {
+            reader = try AVAssetReader(asset: composition.asset)
+            reader.timeRange = timeRange
+            self.output = output
+            self.input = input
+            self.isVideo = isVideo
+        }
     }
 
-    private let reader: AVAssetReader
     private let writer: AVAssetWriter
     private let pipes: [Pipe]
     private let duration: CMTime
@@ -110,8 +122,7 @@ private final nonisolated class EncodingJob: @unchecked Sendable {
         composition: SequenceComposition, url: URL, codec: ExportCodec, quality: ExportQuality, customMbps: Double,
         progress: @escaping @Sendable (Double) -> Void
     ) async throws {
-        reader = try AVAssetReader(asset: composition.asset)
-        reader.timeRange = CMTimeRange(start: .zero, duration: composition.duration)
+        let timeRange = CMTimeRange(start: .zero, duration: composition.duration)
         writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         writer.shouldOptimizeForNetworkUse = true
         duration = composition.duration
@@ -149,7 +160,7 @@ private final nonisolated class EncodingJob: @unchecked Sendable {
                 ],
             ])
             input.expectsMediaDataInRealTime = false
-            pipes.append(Pipe(output: output, input: input, isVideo: true))
+            try pipes.append(Pipe(composition: composition, timeRange: timeRange, output: output, input: input, isVideo: true))
         }
 
         let audioTracks = try await composition.asset.loadTracks(withMediaType: .audio)
@@ -174,20 +185,28 @@ private final nonisolated class EncodingJob: @unchecked Sendable {
                 AVEncoderBitRateKey: 256_000,
             ])
             input.expectsMediaDataInRealTime = false
-            pipes.append(Pipe(output: output, input: input, isVideo: false))
+            try pipes.append(Pipe(composition: composition, timeRange: timeRange, output: output, input: input, isVideo: false))
         }
 
         guard !pipes.isEmpty else { throw SequenceExporter.ExportError.cannotCreateSession }
         for pipe in pipes {
-            guard reader.canAdd(pipe.output), writer.canAdd(pipe.input) else { throw SequenceExporter.ExportError.cannotCreateSession }
-            reader.add(pipe.output)
+            guard pipe.reader.canAdd(pipe.output), writer.canAdd(pipe.input) else { throw SequenceExporter.ExportError.cannotCreateSession }
+            pipe.reader.add(pipe.output)
             writer.add(pipe.input)
         }
         self.pipes = pipes
     }
 
+    /// 표시만 세우지 않고 리더를 바로 취소해, 막혀 있던 `copyNextSampleBuffer()`가 곧바로 끝나게 한다(#131).
     func cancel() {
         lock.withLock { isCancelled = true }
+        stopReading()
+    }
+
+    private func stopReading() {
+        for pipe in pipes where pipe.reader.status == .reading {
+            pipe.reader.cancelReading()
+        }
     }
 
     private var shouldStop: Bool {
@@ -195,7 +214,9 @@ private final nonisolated class EncodingJob: @unchecked Sendable {
     }
 
     func run() async throws {
-        guard reader.startReading() else { throw reader.error ?? SequenceExporter.ExportError.cannotCreateSession }
+        for pipe in pipes {
+            guard pipe.reader.startReading() else { throw pipe.reader.error ?? SequenceExporter.ExportError.cannotCreateSession }
+        }
         guard writer.startWriting() else { throw writer.error ?? SequenceExporter.ExportError.cannotCreateSession }
         writer.startSession(atSourceTime: .zero)
 
@@ -206,12 +227,12 @@ private final nonisolated class EncodingJob: @unchecked Sendable {
         }
 
         if lock.withLock({ isCancelled }) {
-            reader.cancelReading()
+            stopReading()
             writer.cancelWriting()
             throw CancellationError()
         }
-        if let failure = lock.withLock({ failure }) ?? (reader.status == .failed ? reader.error : nil) {
-            reader.cancelReading()
+        if let failure = lock.withLock({ failure }) ?? pipes.first(where: { $0.reader.status == .failed })?.reader.error {
+            stopReading()
             writer.cancelWriting()
             throw failure
         }
@@ -227,7 +248,8 @@ private final nonisolated class EncodingJob: @unchecked Sendable {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             // `finished`·`finish`는 모두 이 직렬 큐에서만 다뤄 한 번만 끝낸다.
             var finished = false
-            let watchdog = DispatchSource.makeTimerSource(queue: queue)
+            // 감시는 읽기가 막힐 수 있는 이 큐가 아닌 다른 큐에서 돈다(#131 — 같은 큐에 있어 취소가 먹지 않았다).
+            let watchdog = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "palladium.export.watchdog"))
             let finish = {
                 guard !finished else { return }
                 finished = true
@@ -236,11 +258,14 @@ private final nonisolated class EncodingJob: @unchecked Sendable {
                 continuation.resume()
             }
             // 취소했거나 다른 입력이 실패해 쓰기가 멈추면 이 입력의 준비 알림이 다시 오지 않을 수 있어 직접 살펴 끝낸다.
+            // 리더를 취소해 막힌 읽기를 풀고, 끝내기는 이 입력의 큐에 넣는다(읽기가 풀리면 바로 실행된다).
             watchdog.schedule(deadline: .now() + 0.1, repeating: 0.1)
             watchdog.setEventHandler { [self] in
-                if shouldStop || writer.status != .writing {
-                    finish()
+                guard shouldStop || writer.status != .writing else { return }
+                if pipe.reader.status == .reading {
+                    pipe.reader.cancelReading()
                 }
+                queue.async { finish() }
             }
             watchdog.resume()
             pipe.input.requestMediaDataWhenReady(on: queue) { [self] in

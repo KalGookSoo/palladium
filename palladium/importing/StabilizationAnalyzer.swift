@@ -47,6 +47,8 @@ final class StabilizationAnalyzer {
         let destination = folder.appending(path: "\(asset.mediaKey.uuidString).json")
         progress[asset.mediaKey] = 0
         tasks[asset.mediaKey] = Task {
+            // 내보내는 중이면 끝난 뒤에 분석한다(#131).
+            await MediaWorkGate.shared.waitUntilIdle()
             do {
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 let path = try await Self.analyze(url: source) { fraction in

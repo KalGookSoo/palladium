@@ -11,6 +11,13 @@ final class ClipContentProvider {
     private var frameCache: [String: CGImage] = [:]
     private var peakCache: [MediaAsset.ID: [Float]] = [:]
     private var sizeCache: [MediaAsset.ID: CGSize] = [:]
+    /// 읽는 중인 파형(원본 캐시 키별, #131). 같은 원본을 쓰는 클립·파생 항목이 동시에 물어도 한 번만 읽는다.
+    private var peakReads: [MediaAsset.ID: Task<[Float], Never>] = [:]
+    /// 실제로 파일을 읽어 파형을 만든 횟수(#131, 테스트용).
+    private(set) var peakReadCount = 0
+    /// 파형 읽기는 차단 호출이라 Swift 동시성 스레드가 아니라 이 직렬 큐에서 하나씩 읽는다(#131).
+    /// 오디오 디코딩 리더가 한꺼번에 많이 열리면 서로 막혀 내보내기까지 멈췄다.
+    private nonisolated static let peakQueue = DispatchQueue(label: "palladium.waveform", qos: .utility)
 
     /// 원본이 화면에 보이는 크기(영상은 회전 반영, 이미지는 픽셀 크기). 소리만 있거나 읽지 못하면 `nil`.
     func contentSize(for asset: MediaAsset) async -> CGSize? {
@@ -46,6 +53,8 @@ final class ClipContentProvider {
 
     /// 프레임을 만들지 못한 칸은 `nil`이다. 이미지 원본은 모든 칸에 같은 축소본을 쓴다.
     func frames(for asset: MediaAsset, at times: [CMTime]) async -> [CGImage?] {
+        // 내보내는 동안에는 새로 읽지 않는다(#131).
+        await MediaWorkGate.shared.waitUntilIdle()
         if asset.kind == .image {
             let image = await MediaThumbnailProvider.shared.thumbnail(for: asset)
             return times.map { _ in image }
@@ -76,12 +85,26 @@ final class ClipContentProvider {
 
     /// 원본 전체의 파형(초당 `ClipContentLayout.peaksPerSecond`개, 0~1). 오디오가 없거나 읽지 못하면 빈 배열.
     func peaks(for asset: MediaAsset) async -> [Float] {
-        if let cached = peakCache[asset.mediaKey] {
+        let key = asset.mediaKey
+        if let cached = peakCache[key] {
             return cached
         }
+        if let reading = peakReads[key] {
+            return await reading.value
+        }
         let url = MediaFileAccess.resolvedURL(for: asset)
-        let peaks = await Task.detached(priority: .utility) { Self.readPeaks(from: url) }.value
-        peakCache[asset.mediaKey] = peaks
+        let reading = Task { @MainActor () -> [Float] in
+            // 내보내는 동안에는 새로 읽지 않는다(#131).
+            await MediaWorkGate.shared.waitUntilIdle()
+            peakReadCount += 1
+            return await withCheckedContinuation { continuation in
+                Self.peakQueue.async { continuation.resume(returning: Self.readPeaks(from: url)) }
+            }
+        }
+        peakReads[key] = reading
+        let peaks = await reading.value
+        peakCache[key] = peaks
+        peakReads[key] = nil
         return peaks
     }
 

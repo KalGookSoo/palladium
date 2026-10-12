@@ -241,11 +241,15 @@ struct SequenceExporterTests {
 
         let task = Task { try await SequenceExporter.export(composition, to: output) { _ in } }
         try await Task.sleep(for: .milliseconds(300))
+        #expect(await MediaWorkGate.shared.isExporting)
+        let cancelledAt = ContinuousClock.now
         task.cancel()
         let result = await task.result
 
         #expect(throws: CancellationError.self) { try result.get() }
         #expect(!FileManager.default.fileExists(atPath: output.path))
+        // 취소는 읽기를 바로 끊어 곧 끝나야 한다(#131 — 0%에서 멈춘 채 취소가 먹지 않았다).
+        #expect(ContinuousClock.now - cancelledAt < .seconds(3))
     }
 
     @Test("자막만 있는 시퀀스도 자막 길이만큼 내보내고 자막이 화면에 박힌다")
