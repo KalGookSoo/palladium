@@ -25,6 +25,7 @@ classDiagram
         id: UUID
         name: String
         assetIDs: Array~MediaAsset.ID~
+        parentID: MediaFolder.ID?
     }
     class MediaAsset {
         id: UUID
@@ -32,11 +33,13 @@ classDiagram
         sourceURL: URL
         kind: MediaKind
         duration: CMTime
+        bookmarkData: Data?
         colorLabel: ColorLabel?
         tags: Array~String~
         usedRange: CMTimeRange?
         excludedRanges: Array~CMTimeRange~
         sourceAssetID: UUID?
+        crop: ClipCrop
     }
     class EditSequence {
         id: UUID
@@ -69,22 +72,36 @@ classDiagram
         id: UUID
         kind: TrackKind
         clips: Array~Clip~
+        volume: Double
+        isMuted: Bool
     }
     class Clip {
         id: UUID
         assetID: MediaAsset.ID
         sourceRange: CMTimeRange
         timelineStart: CMTime
+        transform: ClipTransform
+        volume: Double
+        isMuted: Bool
         transitionIn: ClipTransition?
         audioCrossfadeIn: CMTime?
         speed: Double
         name: String?
         colorLabel: ColorLabel?
         colorAdjustment: ColorAdjustment
+        filters: Array~VideoFilter~
+        chromaKey: ChromaKey?
+        audioEffects: AudioEffects
+        groupID: UUID?
+        stabilization: ClipStabilization?
+        crop: ClipCrop
+        animation: ClipAnimation
+        title: TitleText?
     }
     Project "1" *-- "0..*" MediaAsset
     Project "1" *-- "0..*" MediaFolder
     MediaFolder ..> MediaAsset : assetIDs로 참조
+    MediaFolder ..> MediaFolder : parentID로 상위 폴더
     Project "1" *-- "1..*" EditSequence
     EditSequence "1" *-- "0..*" Track
     EditSequence "1" *-- "0..*" Marker
@@ -100,9 +117,9 @@ classDiagram
 |----------------|-------------------------------------------------------------|-------------------------------------------------------------------------|
 | `Project`      | 가져온 원본 미디어와 시퀀스를 담는 저장 단위                                   | 새 프로젝트는 빈 시퀀스 하나로 시작한다([프로젝트 저장/불러오기](use-cases/project-management.md)) |
 | `MediaAsset`   | 가져온 원본 파일 하나(영상/오디오/이미지)의 정보                                | 미디어 패널에 보이는 항목. 정리용으로 색상 레이블과 태그(자유 텍스트 여러 개)를 갖는다. 타임라인 배치 정보는 갖지 않는다. `name`은 가져올 때 파일 이름으로 채우고 이후 바꿀 수 있다. 원본 위치는 `sourceURL`과 함께 security-scoped bookmark(`bookmarkData`)로 들고 있어 앱을 다시 켜도 연다([파일 접근 권한](file-access-and-sandboxing.md)). 클립 편집 창으로 만든 파생 항목은 쓰는 구간(`usedRange`, 없으면 전체)·그 안에서 뺀 구간(`excludedRanges`, #99 — 놓으면 남은 구간마다 맞닿은 클립이 된다)·크롭(`crop`, #85)과 처음 원본 표시(`sourceAssetID`)를 갖고, 처음 원본의 캐시 키(`mediaKey`)를 같이 쓴다(#81). 원본 항목·파일은 트림·크롭으로 바뀌지 않는다 |
-| `MediaFolder`  | 미디어 패널에서 원본을 분류하는 폴더(빈) 하나                                   | 원본을 복사하지 않고 `assetIDs`로 참조한다. 어느 폴더에도 없는 원본은 "분류 안 됨"으로 보여준다. 한 단계뿐이고, 원본은 한 폴더에만 속한다(`Project.moveAssets(_:toFolder:before:)`가 다른 폴더에서 뺀다) |
+| `MediaFolder`  | 미디어 패널에서 원본을 분류하는 폴더(빈) 하나                                   | 원본을 복사하지 않고 `assetIDs`로 참조한다. 폴더 안에 폴더를 둔다(`parentID`, `nil`이면 맨 위, #93). 어느 폴더에도 없는 원본은 맨 위에 폴더와 함께 보인다("분류 안 됨" 묶음은 없앰). 원본은 한 폴더에만 속한다(`Project.moveAssets(_:toFolder:before:)`가 다른 폴더에서 뺀다). 트리 쿼리는 `subfolders(of:)`·`folderTree`·`folderPath(_:)`, 옮기기는 `moveFolder(_:into:)`(자기 아래로는 옮기지 않음) |
 | `EditSequence` | 독립된 편집 결과물 하나(통합본 또는 하이라이트)                                 | Swift 표준 라이브러리의 `Sequence` 프로토콜과 이름이 겹치지 않도록 `EditSequence`로 짓는다        |
-| `Track`        | 시퀀스 안에서 클립이 시간순으로 놓이는 레인 하나                                 | `TrackKind`: `video`, `audio`                                           |
+| `Track`        | 시퀀스 안에서 클립이 시간순으로 놓이는 레인 하나                                 | `TrackKind`: `video`, `audio`. 트랙 음량(`volume`)·음소거(`isMuted`)는 그 트랙의 모든 클립에 곱해진다 |
 | `Marker`       | 시퀀스의 특정 시각에 붙이는 책갈피(시각 + 이름)                                | 영상 내용은 바꾸지 않는 표시용 정보. 추가·삭제 편집은 [클립 이어붙이기](use-cases/joining-clips.md)(#3)에서 다룬다 |
 | `Subtitle`     | 시퀀스(결과물) 시간의 한 구간에 보이는 글자와 모양(`SubtitleStyle` — 크기, 화면 비율 위치(`centerX`·`centerY`, 위·가운데·아래는 빠른 위치), 글꼴(PostScript 이름), 글자색·배경색(`SubtitleRGB`)과 각 불투명도, #4·#82) | 클립과 상관없이 그 시각에 맨 위에 그린다. 시퀀스 길이에 자막 끝도 포함한다. SRT 읽기·쓰기는 `SubtitleFile` |
 | `Mask`         | 시퀀스 시간의 한 구간 동안 화면의 고정 영역(`MaskArea` — 화면 비율)을 블러·모자이크로 가린다(사각형·타원, 세기, #59) | 자막 아래, 영상·이미지 위에 적용한다. 시퀀스 길이에는 넣지 않는다([오버레이 및 마스킹](use-cases/overlays.md)) |
@@ -167,11 +184,8 @@ classDiagram
 
 ## 이번 범위에서 제외
 
-아래 개념은 해당 기능 이슈에서 이 문서에 추가한다.
-
-- 마커 추가·삭제 편집([클립 이어붙이기](use-cases/joining-clips.md))
-- 프록시(#43)([미디어 가져오기](use-cases/media-import.md))
-- 재생 속도·역재생([클립 자르기(트림)](use-cases/trimming.md))
+- 역재생·타임 리맵: 5단계에서 쓸지 정한다. 재생 속도(`Clip.speed`)는 있다([클립 자르기(트림)](use-cases/trimming.md)).
+- 프록시(#43)는 도메인 타입이 아니라 앱 캐시다. `ProxyGenerator`가 원본의 `mediaKey`(파생 항목은 처음 원본의 키)로 찾는다([미디어 가져오기](use-cases/media-import.md)).
 
 ## 미정 사항
 
