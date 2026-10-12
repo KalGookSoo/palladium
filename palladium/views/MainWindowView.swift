@@ -662,9 +662,11 @@ struct MainWindowView: View {
         isOpeningExportPanel = true
         Task {
             let warning = Self.aspectRatioWarning(chosen: aspectRatio, suggested: await suggestedAspectRatio(for: editor.currentSequence))
-            // 안내가 화면에 그려질 틈을 준다.
-            try? await Task.sleep(for: .milliseconds(80))
-            showExportPanel(warning: warning)
+            // 저장 창은 Swift 동시성 작업 안에서 만들면 시스템 저장 창 서비스와의 연결을 기다리다 시간 초과로 멈췄다(#130).
+            // 메뉴 동작처럼 일반 런루프 차례에서 만들도록 넘긴다(안내가 화면에 그려질 틈도 생긴다).
+            RunLoop.main.perform(inModes: [.default]) {
+                MainActor.assumeIsolated { showExportPanel(warning: warning) }
+            }
         }
     }
 
