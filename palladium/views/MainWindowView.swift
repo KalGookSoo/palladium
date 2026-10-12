@@ -77,6 +77,10 @@ struct MainWindowView: View {
     @State private var timelineScale = TimelineScale(pointsPerSecond: 40)
     /// 바뀔 때마다 타임라인이 시퀀스 전체가 보이게 배율을 맞춘다(#64, ⇧Z).
     @State private var timelineFitRequest = 0
+    /// 바뀔 때마다 미디어 패널 검색창에 커서를 둔다(#115, ⌘F).
+    @State private var mediaSearchFocusRequest = 0
+    /// 미디어 패널 키보드 탐색 요청(#113).
+    @State private var mediaNavigation: MediaNavigationRequest?
     @State private var previewPlayer = PreviewPlayer()
     @State private var narration = NarrationRecorder()
     /// 정지 프레임을 저장하지 못했을 때의 안내.
@@ -471,7 +475,10 @@ struct MainWindowView: View {
                 isListFocused: $isMediaPanelFocused,
                 openClipEditor: { assetID in openClipEditor(.asset(assetID)) },
                 revealRequest: assetRevealRequest,
-                importMedia: { isImporterPresented = true }
+                importMedia: { isImporterPresented = true },
+                revealAsset: revealInMediaPanel,
+                searchFocusRequest: mediaSearchFocusRequest,
+                navigationRequest: mediaNavigation
             )
             .onChange(of: isMediaPanelFocused) { _, isFocused in
                 if isFocused {
@@ -795,6 +802,11 @@ struct MainWindowView: View {
     /// 처리하지 않는 키(미리보기에 원본이 없을 때의 재생 키, 고른 클립이 없을 때의 삭제)는 그대로 넘긴다.
     /// `fromMenu`면 재생 메뉴·타임라인 메뉴 항목에서 부른 것이라(#64) 키를 받는 영역과 상관없이 실행한다.
     private func handleEditorKey(_ key: EditorKeyMonitor.Key, fromMenu: Bool = false) -> Bool {
+        // 미디어 패널이 키를 받으면 ←/→·⌥←/⌥→·⌘↑/⌘↓로 폴더 트리를 다룬다(#113). 목록보다 먼저 받아 Finder처럼 동작시킨다.
+        if activePane == .mediaPanel, !fromMenu, let navigation = Self.mediaNavigationKey(for: key) {
+            mediaNavigation = MediaNavigationRequest(key: navigation)
+            return true
+        }
         // 자막을 골랐으면 ←/→는 프레임 이동 대신 자막을 옮긴다(#82).
         if selectedSubtitleID != nil, !fromMenu, key == .previousFrame || key == .nextFrame {
             return nudgeSelectedSubtitle(key)
@@ -828,6 +840,14 @@ struct MainWindowView: View {
         case .fitTimeline:
             isTimelineVisible = true
             timelineFitRequest += 1
+        case .optionRight, .optionLeft, .commandDown, .commandUp:
+            return false
+        case .findInMediaPanel:
+            if columnVisibility == .detailOnly {
+                columnVisibility = .all
+            }
+            activePane = .mediaPanel
+            mediaSearchFocusRequest += 1
         case .playPause, .previousFrame, .nextFrame:
             guard key == .playPause || canNavigate else { return false }
             guard case let .ready(timeline) = previewPlayer.loadState else { return false }
@@ -904,6 +924,19 @@ struct MainWindowView: View {
         let projectID = editor.project.id
         guard TourProgress.shared.isTourProject(projectID), !TourProgress.shared.showsChecklist(for: projectID) else { return nil }
         return { TourProgress.shared.setChecklistHidden(false, for: projectID) }
+    }
+
+    /// 미디어 패널 탐색에 쓰는 키(#113). 다른 키는 `nil`.
+    private static func mediaNavigationKey(for key: EditorKeyMonitor.Key) -> MediaNavigationKey? {
+        switch key {
+        case .previousFrame: .left
+        case .nextFrame: .right
+        case .optionLeft: .collapseAll
+        case .optionRight: .expandAll
+        case .commandDown: .open
+        case .commandUp: .parent
+        default: nil
+        }
     }
 
     /// 재생 헤드를 이전·다음 편집점(클립 시작·끝)으로 옮긴다(#64). 재생 중이면 멈춘다.

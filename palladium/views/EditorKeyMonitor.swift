@@ -35,6 +35,13 @@ final class EditorKeyMonitor {
         case shuttleForward
         /// 타임라인 전체 보기(#64, ⇧Z).
         case fitTimeline
+        /// 미디어 패널 검색창으로(#115, ⌘F). 입력란을 편집 중이면 그 입력란의 찾기에 맡긴다.
+        case findInMediaPanel
+        /// 미디어 패널 탐색(#113): ⌥→/⌥←, ⌘↓/⌘↑. 다른 영역에서는 넘긴다.
+        case optionRight
+        case optionLeft
+        case commandDown
+        case commandUp
     }
 
     /// 편집 창이 여러 개 열려 있어도 앞에 있는 창 하나만 반응하도록, 창이 앞에 있을 때만 받는다.
@@ -89,6 +96,11 @@ final class EditorKeyMonitor {
         case (40, []): return .shuttleStop
         case (37, []): return .shuttleForward
         case (6, .shift): return .fitTimeline
+        case (3, .command): return .findInMediaPanel
+        case (124, .option): return .optionRight
+        case (123, .option): return .optionLeft
+        case (125, .command): return .commandDown
+        case (126, .command): return .commandUp
         default: return nil
         }
     }

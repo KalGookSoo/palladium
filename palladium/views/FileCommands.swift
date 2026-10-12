@@ -40,6 +40,9 @@ struct FileCommands: Commands {
     @FocusedValue(\.importSubtitles) private var importSubtitles
     @FocusedValue(\.exportSubtitles) private var exportSubtitles
     @FocusedValue(\.newSequence) private var newSequence
+    @FocusedValue(\.newMediaFolder) private var newMediaFolder
+    @FocusedValue(\.newMediaFolderWithSelection) private var newMediaFolderWithSelection
+    @FocusedValue(\.revealAssetsInFinder) private var revealAssetsInFinder
 
     var body: some Commands {
         // 기본 "새 윈도우"는 프로젝트 없이 편집 창을 열기 때문에, 프로젝트 목록(시작 창)을 여는 항목으로 바꾼다.
@@ -54,6 +57,17 @@ struct FileCommands: Commands {
             }
             .keyboardShortcut("n")
             .disabled(newSequence == nil)
+            // 미디어 패널에 포커스가 있을 때만(#110, Finder와 같은 키).
+            Button(ShortcutGuide.newMediaFolder.title) {
+                newMediaFolder?()
+            }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
+            .disabled(newMediaFolder == nil)
+            Button(ShortcutGuide.newFolderWithSelection.title) {
+                newMediaFolderWithSelection?()
+            }
+            .keyboardShortcut("n", modifiers: [.command, .control])
+            .disabled(newMediaFolderWithSelection == nil)
         }
 
         // 저장은 보이는 이 묶음에 둔다. 문서 앱이 아니라 시스템 저장 항목이 없어, 그 뒤(`after: .saveItem`)에 붙이면
@@ -85,6 +99,12 @@ struct FileCommands: Commands {
             }
             .keyboardShortcut("e", modifiers: [.command, .option])
             .disabled(exportStillFrame == nil)
+            Divider()
+            Button(ShortcutGuide.revealInFinder.title) {
+                revealAssetsInFinder?()
+            }
+            .keyboardShortcut("r", modifiers: .command)
+            .disabled(revealAssetsInFinder == nil)
             Divider()
             Button("자막 가져오기(SRT)…") {
                 importSubtitles?()

@@ -24,10 +24,21 @@ struct MediaPanelView: View {
     var revealRequest: AssetRevealRequest?
     /// 빈 곳 우클릭 > 가져오기…(#104). 파일 > 가져오기(⌘I)와 같다.
     var importMedia: () -> Void = {}
+    /// 원본 항목을 골라 그 줄까지 보이게 한다(#112, 파생 항목의 "원본 항목 보기").
+    var revealAsset: (MediaAsset.ID) -> Void = { _ in }
+    /// 바뀔 때마다 검색창에 커서를 둔다(#115, ⌘F).
+    var searchFocusRequest = 0
+    /// 편집 창 키 모니터가 넘긴 방향키(#113). 목록보다 먼저 받아 Finder처럼 폴더 트리를 다룬다.
+    var navigationRequest: MediaNavigationRequest?
     @State private var filter = MediaFilter()
     /// 고른 순서(#86). 타임라인에 이어 붙이거나 폴더로 옮길 때 이 순서를 쓴다.
     @State private var selectionOrder: [MediaAsset.ID] = []
     @FocusState private var listHasFocus: Bool
+    @FocusState private var isSearchFocused: Bool
+    /// 끄는 동안 ⌥를 누르고 있는지(#111). 놓을 곳 안내를 "복사"로 바꾼다.
+    @State private var isOptionHeld = false
+    /// "Finder에서 보기"로 찾지 못한 파일 이름(#112).
+    @State private var missingFileNames: [String] = []
     /// 클립이 쓰고 있어 확인을 기다리는 삭제(#60).
     @State private var pendingDeletion: Set<MediaAsset.ID>?
     /// 태그를 편집 중인 원본. 편집 창이 닫히면 `nil`.
@@ -96,6 +107,24 @@ struct MediaPanelView: View {
             }
             // 이름 바꾸기는 하나만 골랐을 때만 한다. 고른 것이 폴더면 폴더 이름을 바꾼다(#107).
             .focusedSceneValue(\.renameSelectedAsset, listHasFocus ? singleSelection.map { id in { isFolder(id) ? beginRenamingFolder(id) : beginRenaming(id) } } : nil)
+            .modifier(MediaPanelCommandValues(
+                isActive: listHasFocus,
+                hasAssets: !selectedAssetIDs.filter { !isFolder($0) }.isEmpty,
+                hasSelection: !selectedAssetIDs.isEmpty,
+                newFolder: { addFolder(in: singleSelection.flatMap(folder(containing:))) },
+                newFolderWithSelection: addFolderWithSelection,
+                revealInFinder: { revealInFinder(selectedAssetIDs) },
+                duplicate: { duplicate(selectedAssetIDs) }
+            ))
+            .alert("파일을 찾을 수 없습니다", isPresented: Binding(get: { !missingFileNames.isEmpty }, set: {
+                if !$0 {
+                    missingFileNames = []
+                }
+            })) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text("\(missingFileNames.joined(separator: ", "))\n원본 파일이 옮겨졌거나 지워졌습니다.")
+            }
             .onChange(of: selectedAssetIDs, initial: true) { _, selection in
                 selectionOrder = AssetSelectionOrder.updated(selectionOrder, selection: selection, listOrder: listOrder)
                 // 타임라인의 "미디어 패널에서 원본 보기"처럼 접힌 폴더 안 원본이 골라지면 그 폴더들을 펼쳐 보이게 한다.
@@ -223,9 +252,11 @@ struct MediaPanelView: View {
                 }
             }
         } primaryAction: { assetIDs in
-            // 두 번 누르면 영상·오디오는 클립 편집 창을, 이미지는 훑어보기(Quick Look)를 연다(#81).
+            // 두 번 누르면 영상·오디오는 클립 편집 창을, 이미지는 훑어보기(Quick Look)를 연다(#81). 폴더는 펼치고 접는다(#114).
             if let assetID = assetIDs.first {
-                if editor.asset(id: assetID)?.isTrimmable == true {
+                if isFolder(assetID) {
+                    setExpanded(collapsedFolderIDs.contains(assetID), assetID)
+                } else if editor.asset(id: assetID)?.isTrimmable == true {
                     openClipEditor(assetID)
                 } else {
                     openAsset(assetID)
@@ -233,6 +264,15 @@ struct MediaPanelView: View {
             }
         }
         .searchable(text: $filter.query, placement: .sidebar, prompt: "이름·태그 검색")
+        .searchFocused($isSearchFocused)
+        .onChange(of: searchFocusRequest) { isSearchFocused = true }
+        .onModifierKeysChanged(mask: .option, initial: true) { _, keys in isOptionHeld = keys.contains(.option) }
+        // Finder 목록 보기처럼 키보드로 폴더 트리를 다룬다(#113).
+        .onChange(of: navigationRequest) { _, request in
+            if let request {
+                handleNavigation(request.key)
+            }
+        }
         // 검색창 바로 아래에 색상 레이블 필터를 둔다.
         .safeAreaInset(edge: .top) {
             MediaFilterBar(filter: $filter) {
@@ -355,7 +395,11 @@ struct MediaPanelView: View {
         Binding(
             get: { filter != MediaFilter() || !collapsedFolderIDs.contains(folderID) },
             set: { isExpanded in
-                if filter == MediaFilter() {
+                guard filter == MediaFilter() else { return }
+                // ⌥를 누른 채 삼각형을 누르면 하위 폴더까지 같은 상태로(#114, Finder와 같음).
+                if NSEvent.modifierFlags.contains(.option) {
+                    setExpanded(isExpanded, includingDescendantsOf: folderID)
+                } else {
                     setExpanded(isExpanded, folderID)
                 }
             }
@@ -368,6 +412,19 @@ struct MediaPanelView: View {
             collapsed.remove(folderID)
         } else {
             collapsed.insert(folderID)
+        }
+        collapsedFolderText = collapsed.map(\.uuidString).sorted().joined(separator: ",")
+    }
+
+    /// 폴더와 그 아래 모든 폴더를 펼치거나 접는다(#113·#114).
+    private func setExpanded(_ isExpanded: Bool, includingDescendantsOf folderID: MediaFolder.ID) {
+        let project = editor.project
+        let ids = project.folders.filter { project.isFolder($0.id, inside: folderID) }.map(\.id)
+        var collapsed = collapsedFolderIDs
+        if isExpanded {
+            collapsed.subtract(ids)
+        } else {
+            collapsed.formUnion(ids)
         }
         collapsedFolderText = collapsed.map(\.uuidString).sorted().joined(separator: ",")
     }
@@ -397,10 +454,13 @@ struct MediaPanelView: View {
     private func folderMenu(for folderIDs: Set<MediaFolder.ID>) -> some View {
         if folderIDs.count == 1, let folderID = folderIDs.first {
             Button("새 폴더") { addFolder(in: folderID) }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
             pasteButton(into: folderID)
             Divider()
             Button("폴더 이름 변경…") { beginRenamingFolder(folderID) }
         }
+        Button(ShortcutGuide.newFolderWithSelection.title) { addFolderWithSelection(folderIDs) }
+            .keyboardShortcut("n", modifiers: [.command, .control])
         Button("폴더 삭제") { deleteFolders(folderIDs) }
     }
 
@@ -467,9 +527,9 @@ struct MediaPanelView: View {
     private var dropTargetText: String? {
         switch dropTarget {
         case .root:
-            "맨 위로 이동"
+            isOptionHeld ? "맨 위로 복사" : "맨 위로 이동"
         case let .folder(folderID):
-            "'\(editor.project.folders.first { $0.id == folderID }?.name ?? "")' 폴더로 이동"
+            "'\(editor.project.folders.first { $0.id == folderID }?.name ?? "")' 폴더로 \(isOptionHeld ? "복사" : "이동")"
         case nil:
             nil
         }
@@ -510,7 +570,15 @@ struct MediaPanelView: View {
         }
         let assetIDs = items.flatMap(AssetDragPayload.decode)
         if !assetIDs.isEmpty {
-            editor.moveAssets(assetIDs, toFolder: folderID)
+            // ⌥를 누른 채 놓으면 옮기지 않고 사본을 만든다(#111, Finder와 같음). 폴더는 늘 옮긴다.
+            if NSEvent.modifierFlags.contains(.option) {
+                selectedAssetIDs = Set(editor.duplicateAssets(assetIDs, toFolder: folderID))
+                if let folderID {
+                    setExpanded(true, folderID)
+                }
+            } else {
+                editor.moveAssets(assetIDs, toFolder: folderID)
+            }
         }
         return !folderIDs.isEmpty || !assetIDs.isEmpty
     }
@@ -552,12 +620,25 @@ struct MediaPanelView: View {
         // 우클릭한 원본이 있는 폴더(맨 위면 맨 위)에 새 폴더를 만들고 붙인다(#104).
         let folderID = ordered(assetIDs).first.flatMap { assetID in editor.project.folders.first { $0.assetIDs.contains(assetID) }?.id }
         Button("새 폴더") { addFolder(in: folderID) }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
+        Button(ShortcutGuide.newFolderWithSelection.title) { addFolderWithSelection(assetIDs) }
+            .keyboardShortcut("n", modifiers: [.command, .control])
         Divider()
         Button("잘라내기") { putOnClipboard(assetIDs, isCut: true) }
             .keyboardShortcut("x", modifiers: .command)
         Button("복사") { putOnClipboard(assetIDs, isCut: false) }
             .keyboardShortcut("c", modifiers: .command)
         pasteButton(into: folderID)
+        Button(ShortcutGuide.duplicateAssets.title) { duplicate(assetIDs) }
+            .keyboardShortcut("d", modifiers: .command)
+        Divider()
+        Button(ShortcutGuide.revealInFinder.title) { revealInFinder(assetIDs) }
+            .keyboardShortcut("r", modifiers: .command)
+        // 파생 항목은 처음 원본 항목을 찾아간다(#112). 원본 항목을 지웠으면 꺼진다.
+        if assetIDs.count == 1, let asset = assetIDs.first.flatMap(editor.asset(id:)), asset.isDerived {
+            Button("원본 항목 보기") { revealAsset(asset.mediaKey) }
+                .disabled(editor.asset(id: asset.mediaKey) == nil)
+        }
         Divider()
         Menu("색상 레이블") {
             Button("없음") {
@@ -605,6 +686,88 @@ struct MediaPanelView: View {
         // 메뉴 오른쪽에 단축키를 보여준다. 실제 ⌫는 목록에 포커스가 있을 때 처리한다.
         Button("삭제…", role: .destructive) { requestDeletion(assetIDs) }
             .keyboardShortcut(.delete, modifiers: [])
+    }
+
+    // MARK: - Finder-like commands (#110~#116)
+
+    /// 고른 원본·폴더를 담은 새 폴더를 그 자리에 만들고 바로 이름을 정하게 한다(#110, ⌃⌘N).
+    private func addFolderWithSelection(_ ids: Set<UUID>) {
+        let folderIDs = ids.filter(isFolder)
+        let assetIDs = ordered(ids.subtracting(folderIDs))
+        guard let folderID = editor.addFolder(containing: assetIDs, folderIDs: Array(folderIDs)) else { return }
+        if let parentID = editor.project.folders.first(where: { $0.id == folderID })?.parentID {
+            setExpanded(true, parentID)
+        }
+        setExpanded(true, folderID)
+        selectedAssetIDs = [folderID]
+        beginRenamingFolder(folderID)
+    }
+
+    private func addFolderWithSelection() {
+        addFolderWithSelection(selectedAssetIDs)
+    }
+
+    /// 고른 원본을 각자 있던 폴더에 복제하고 사본을 고른다(#116, ⌘D). 함께 고른 폴더는 복제하지 않는다.
+    private func duplicate(_ ids: Set<UUID>) {
+        let assetIDs = ordered(ids.filter { !isFolder($0) })
+        guard !assetIDs.isEmpty else { return }
+        selectedAssetIDs = Set(editor.duplicateAssetsInPlace(assetIDs))
+    }
+
+    /// 고른 원본의 파일을 Finder에서 골라 보여준다(#112, ⌘R). 파생 항목·사본은 같은 원본 파일이다. 없는 파일은 알린다.
+    private func revealInFinder(_ ids: Set<UUID>) {
+        let assets = ordered(ids.filter { !isFolder($0) }).compactMap(editor.asset(id:))
+        let urls = assets.map(MediaFileAccess.resolvedURL(for:))
+        let existing = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
+        missingFileNames = zip(assets, urls).filter { !FileManager.default.fileExists(atPath: $1.path) }.map(\.0.name)
+        if !existing.isEmpty {
+            NSWorkspace.shared.activateFileViewerSelecting(Array(Set(existing)))
+        }
+    }
+
+    /// 방향키로 폴더 트리를 다룬다(#113). →: 접힌 폴더 펼치기·펼친 폴더는 첫 항목으로, ←: 펼친 폴더 접기·아니면 부모 폴더로,
+    /// ⌥→/⌥←: 하위 폴더까지 모두 펼치기·접기, ⌘↓: 원본은 열기(두 번 누르기와 같음)·폴더는 펼치기/접기, ⌘↑: 부모 폴더로.
+    /// ↑/↓(수식키 없음)은 목록 기본 동작(위아래 이동)에 맡긴다.
+    private func handleNavigation(_ key: MediaNavigationKey) {
+        guard renamingAssetID == nil, let id = singleSelection else { return }
+        let project = editor.project
+        let isFolderID = isFolder(id)
+        let isCollapsed = collapsedFolderIDs.contains(id)
+        let parentID: MediaFolder.ID? = isFolderID ? project.folders.first { $0.id == id }?.parentID : project.folders.first { $0.assetIDs.contains(id) }?.id
+        switch key {
+        case .expandAll where isFolderID:
+            setExpanded(true, includingDescendantsOf: id)
+        case .collapseAll where isFolderID:
+            setExpanded(false, includingDescendantsOf: id)
+        case .collapseAll, .left:
+            if key == .left, isFolderID, !isCollapsed {
+                setExpanded(false, id)
+            } else if let parentID {
+                selectedAssetIDs = [parentID]
+            }
+        case .right where isFolderID:
+            if isCollapsed {
+                setExpanded(true, id)
+            } else if let first = project.subfolders(of: id).first(where: isVisible)?.id
+                ?? project.folders.first(where: { $0.id == id }).flatMap({ project.assets(in: $0).first(where: filter.matches)?.id })
+            {
+                selectedAssetIDs = [first]
+            }
+        case .open:
+            if isFolderID {
+                setExpanded(isCollapsed, id)
+            } else if editor.asset(id: id)?.isTrimmable == true {
+                openClipEditor(id)
+            } else {
+                openAsset(id)
+            }
+        case .parent:
+            if let parentID {
+                selectedAssetIDs = [parentID]
+            }
+        case .right, .expandAll:
+            break
+        }
     }
 
     // MARK: - Clipboard
@@ -928,4 +1091,45 @@ private struct MediaThumbnailView: View {
         selectedAssetIDs: .constant([]),
         openAsset: { _ in }
     )
+}
+
+/// 미디어 패널에 포커스가 있을 때 메뉴(새 폴더·선택 항목으로 새 폴더·Finder에서 보기·복제)가 부를 동작(#110·#112·#116).
+private struct MediaPanelCommandValues: ViewModifier {
+    let isActive: Bool
+    let hasAssets: Bool
+    let hasSelection: Bool
+    let newFolder: () -> Void
+    let newFolderWithSelection: () -> Void
+    let revealInFinder: () -> Void
+    let duplicate: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .focusedSceneValue(\.newMediaFolder, isActive ? newFolder : nil)
+            .focusedSceneValue(\.newMediaFolderWithSelection, isActive && hasSelection ? newFolderWithSelection : nil)
+            .focusedSceneValue(\.revealAssetsInFinder, isActive && hasAssets ? revealInFinder : nil)
+            .focusedSceneValue(\.duplicateSelectedAssets, isActive && hasAssets ? duplicate : nil)
+    }
+}
+
+/// 미디어 패널 키보드 탐색(#113)의 키.
+enum MediaNavigationKey {
+    /// →: 접힌 폴더 펼치기, 펼친 폴더는 첫 항목으로.
+    case right
+    /// ←: 펼친 폴더 접기, 아니면 부모 폴더로.
+    case left
+    /// ⌥→: 하위 폴더까지 모두 펼치기.
+    case expandAll
+    /// ⌥←: 하위 폴더까지 모두 접기(원본이면 부모 폴더로).
+    case collapseAll
+    /// ⌘↓: 원본은 열기, 폴더는 펼치기/접기.
+    case open
+    /// ⌘↑: 부모 폴더로.
+    case parent
+}
+
+/// 키 하나를 미디어 패널에 넘기는 요청. 같은 키를 다시 눌러도 새 요청으로 치도록 ID를 둔다.
+struct MediaNavigationRequest: Equatable {
+    let id = UUID()
+    let key: MediaNavigationKey
 }

@@ -12,6 +12,14 @@ extension FocusedValues {
     @Entry var duplicateClips: (() -> Void)?
     /// 트림할 수 있는 항목(미디어 패널 포커스)이나 클립 하나를 골랐을 때만 값이 있다(#81·#85).
     @Entry var openClipEditor: (() -> Void)?
+    /// 미디어 패널에 포커스가 있을 때만 값이 있다(#110, ⇧⌘N).
+    @Entry var newMediaFolder: (() -> Void)?
+    /// 미디어 패널에 포커스가 있고 고른 항목이 있을 때만 값이 있다(#110, ⌃⌘N).
+    @Entry var newMediaFolderWithSelection: (() -> Void)?
+    /// 미디어 패널에 포커스가 있고 원본을 골랐을 때만 값이 있다(#112, ⌘R).
+    @Entry var revealAssetsInFinder: (() -> Void)?
+    /// 미디어 패널에 포커스가 있고 원본을 골랐을 때만 값이 있다(#116, ⌘D).
+    @Entry var duplicateSelectedAssets: (() -> Void)?
     /// 고른 클립을 묶을 수 있을 때만 값이 있다(#100).
     @Entry var groupClips: (() -> Void)?
     /// 고른 클립 중 그룹에 속한 것이 있을 때만 값이 있다(#100).
@@ -29,6 +37,8 @@ struct MediaCommands: Commands {
     @FocusedValue(\.duplicateClips) private var duplicateClips
     @FocusedValue(\.openClipEditor) private var openClipEditor
     @FocusedValue(\.groupClips) private var groupClips
+    @FocusedValue(\.duplicateSelectedAssets) private var duplicateSelectedAssets
+    @FocusedValue(\.editorCommand) private var editorCommand
     @FocusedValue(\.ungroupClips) private var ungroupClips
 
     var body: some Commands {
@@ -50,11 +60,19 @@ struct MediaCommands: Commands {
             .disabled(splitClips == nil)
 
             // 복사·잘라내기·붙여넣기(⌘C·⌘X·⌘V)는 입력란과 같이 쓰도록 기본 편집 메뉴 항목의 단축키를 편집 창이 직접 받는다.
-            Button(ShortcutGuide.duplicateClips.title) {
-                duplicateClips?()
+            // ⌘D는 미디어 패널에 포커스가 있으면 원본 복제(#116), 아니면 타임라인 클립 복제다(F2와 같은 방식).
+            let duplicate = duplicateSelectedAssets ?? duplicateClips
+            Button(duplicateSelectedAssets != nil ? ShortcutGuide.duplicateAssets.title : ShortcutGuide.duplicateClips.title) {
+                duplicate?()
             }
             .keyboardShortcut("d", modifiers: .command)
-            .disabled(duplicateClips == nil)
+            .disabled(duplicate == nil)
+
+            // ⌘F는 입력란의 찾기와 겹치지 않게 편집 창이 직접 받는다(#115). 메뉴에는 키를 적어 보이기만 한다.
+            Button(ShortcutGuide.findInMediaPanel.menuTitle) {
+                editorCommand?(.findInMediaPanel)
+            }
+            .disabled(editorCommand == nil)
 
             Button(ShortcutGuide.clipEditor.title) {
                 openClipEditor?()

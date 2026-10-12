@@ -94,6 +94,13 @@ enum ShortcutGuide {
     static let preciseTrimBar = ShortcutGuideEntry(title: "클립 편집 정밀 끌기", summary: "클립 편집 창에서 손잡이·재생 위치를 끌 때 이동량을 5분의 1로 줄입니다", keys: "⌥ 끌기 (클립 편집 창)")
     static let cropKeepRatio = ShortcutGuideEntry(title: "크롭 비율 유지", summary: "클립 편집 창 크롭 탭에서 ⇧를 누른 채 손잡이를 끌면 지금 비율을 지킵니다", keys: "⇧ 끌기 (클립 편집 창)")
     static let cutCopyPasteAssets = ShortcutGuideEntry(title: "원본 잘라내기·복사·붙여넣기", summary: "미디어 패널에서 원본을 잘라내 다른 폴더로 옮기거나, 복사해 같은 파일을 가리키는 사본을 만듭니다", keys: "⌘X/⌘C/⌘V (미디어 패널)")
+    static let newMediaFolder = ShortcutGuideEntry(title: "새 폴더", summary: "미디어 패널에 새 폴더를 만들고 바로 이름을 정합니다(고른 폴더 안, 원본을 골랐으면 그 원본의 폴더)", keys: "⇧⌘N (미디어 패널)")
+    static let newFolderWithSelection = ShortcutGuideEntry(title: "선택 항목으로 새 폴더", summary: "고른 원본·폴더를 담은 새 폴더를 그 자리에 만듭니다", keys: "⌃⌘N (미디어 패널)")
+    static let revealInFinder = ShortcutGuideEntry(title: "Finder에서 보기", summary: "고른 원본의 파일을 Finder에서 골라 보여줍니다(파생 항목은 원본 파일)", keys: "⌘R (미디어 패널)")
+    static let duplicateAssets = ShortcutGuideEntry(title: "원본 복제", summary: "고른 원본의 사본을 같은 폴더에 만듭니다(같은 파일을 가리키는 항목)", keys: "⌘D (미디어 패널)")
+    static let findInMediaPanel = ShortcutGuideEntry(title: "미디어 패널에서 찾기", summary: "미디어 패널을 열고 검색창에 커서를 둡니다", keys: "⌘F")
+    static let mediaPanelExpand = ShortcutGuideEntry(title: "폴더 펼치기·접기", summary: "미디어 패널에서 →는 폴더를 펼치거나 첫 항목으로, ←는 접거나 부모 폴더로 갑니다. ⌥와 함께면 하위 폴더까지 모두", keys: "→/←, ⌥→/⌥← (미디어 패널)")
+    static let mediaPanelOpen = ShortcutGuideEntry(title: "열기·부모 폴더로", summary: "미디어 패널에서 ⌘↓는 원본을 열고(두 번 누르기와 같음) 폴더를 펼치거나 접으며, ⌘↑는 부모 폴더로 갑니다", keys: "⌘↓/⌘↑ (미디어 패널)")
     static let deleteAsset = ShortcutGuideEntry(title: "원본 삭제", summary: "미디어 패널에서 고른 원본을 프로젝트에서 뺍니다(쓰는 클립도 함께, 원본 파일은 남음)", keys: "⌫ (미디어 패널)")
     static let filterMedia = ShortcutGuideEntry(title: "필터", summary: "색상 레이블로 원본을 거릅니다", keys: nil)
 
@@ -105,7 +112,7 @@ enum ShortcutGuide {
         ("파일", [openProjectList, newProject, newSequence, save, close, importMedia, export, batchExport, exportStillFrame]),
         ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline, fitTimeline]),
         ("재생", [playPause, shuttleReverse, shuttleStop, shuttleForward, goToStart, goToEnd, previousEditPoint, nextEditPoint, previousFrame, nextFrame, tenFramesBack, tenFramesForward, narration]),
-        ("편집", [undo, redo, rename, clipEditor, trimNudge, excludeRange, preciseTrimBar, zoomInTrimBar, zoomOutTrimBar, fitTrimBar, cropKeepRatio, cutCopyPasteAssets, deleteAsset]),
+        ("편집", [undo, redo, rename, clipEditor, trimNudge, excludeRange, preciseTrimBar, zoomInTrimBar, zoomOutTrimBar, fitTrimBar, cropKeepRatio, cutCopyPasteAssets, duplicateAssets, newMediaFolder, newFolderWithSelection, revealInFinder, findInMediaPanel, mediaPanelExpand, mediaPanelOpen, deleteAsset]),
         ("타임라인", [deleteClips, rippleDeleteClips, cutClips, copyClips, pasteClips, duplicateClips, splitAtPlayhead, selectAllClips, toggleClipSelection, extendClipSelection, deselect, groupClips, ungroupClips, addMarker, addSubtitle, addTitle, addDefaultTransition, previousSequence, nextSequence, moveSubtitle, preciseTrim, rollTrim, slipTrim, slideTrim]),
         ("도움말", [showHelp, showShortcuts]),
     ]

@@ -283,6 +283,35 @@ nonisolated extension Project {
         return copiedIDs
     }
 
+    /// 고른 원본들을 각자 있던 폴더(맨 위면 맨 위)에 복제한다(#116, Finder의 ⌘D). 사본 규칙은 `duplicateAssets`와 같다. 사본 ID(순서대로).
+    @discardableResult
+    mutating func duplicateAssetsInPlace(_ assetIDs: [MediaAsset.ID]) -> [MediaAsset.ID] {
+        assetIDs.flatMap { assetID in
+            duplicateAssets([assetID], toFolder: folders.first { $0.assetIDs.contains(assetID) }?.id)
+        }
+    }
+
+    /// 고른 원본·폴더를 담은 새 폴더를 그 자리에 만든다(#110, Finder "선택 항목으로 새로운 폴더 만들기").
+    /// 새 폴더는 처음 항목이 있던 곳(폴더면 그 폴더의 부모, 원본이면 그 원본의 폴더, 맨 위면 맨 위)에 생긴다.
+    /// 자기 자신 안으로는 옮기지 않는다. 고른 것이 없으면 `nil`.
+    @discardableResult
+    mutating func addFolder(containing assetIDs: [MediaAsset.ID], folderIDs: [MediaFolder.ID]) -> MediaFolder.ID? {
+        let existingFolders = folderIDs.filter { id in folders.contains { $0.id == id } }
+        let existingAssets = assetIDs.filter { id in assets.contains { $0.id == id } }
+        guard !existingFolders.isEmpty || !existingAssets.isEmpty else { return nil }
+        let parentID: MediaFolder.ID? = if let first = existingFolders.first {
+            folders.first { $0.id == first }?.parentID
+        } else {
+            folders.first { $0.assetIDs.contains(existingAssets[0]) }?.id
+        }
+        let newFolderID = addFolder(named: "", in: parentID)
+        for folderID in existingFolders {
+            moveFolder(folderID, into: newFolderID)
+        }
+        moveAssets(existingAssets, toFolder: newFolderID)
+        return newFolderID
+    }
+
     /// 같은 파일을 가리키는 파생 항목을 `afterAssetID` 바로 뒤(같은 폴더)에 구간·뺀 구간(#99)·크롭(#85)과 함께 추가한다(#81).
     /// 이름은 `derivedAssetName` 규칙이다(남은 구간들을 감싸는 구간으로 짓는다). 파일을 복사하지 않고, 썸네일·파형·프록시는 처음 원본 것을 같이 쓴다.
     /// 원본이 없거나 이미지거나 남는 구간이 없으면 `nil`.

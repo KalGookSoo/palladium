@@ -648,6 +648,22 @@ final class ProjectEditor {
         return copiedIDs
     }
 
+    /// 고른 원본을 각자 있던 폴더에 복제한다(#116, ⌘D). 실행 취소 한 번. 사본 ID.
+    @discardableResult
+    func duplicateAssetsInPlace(_ assetIDs: [MediaAsset.ID]) -> [MediaAsset.ID] {
+        var copiedIDs: [MediaAsset.ID] = []
+        perform("원본 복제") { copiedIDs = $0.duplicateAssetsInPlace(assetIDs) }
+        return copiedIDs
+    }
+
+    /// 고른 원본·폴더를 담은 새 폴더를 그 자리에 만든다(#110, ⌃⌘N). 실행 취소 한 번. 새 폴더 ID.
+    @discardableResult
+    func addFolder(containing assetIDs: [MediaAsset.ID], folderIDs: [MediaFolder.ID]) -> MediaFolder.ID? {
+        var folderID: MediaFolder.ID?
+        perform("선택 항목으로 새 폴더") { folderID = $0.addFolder(containing: assetIDs, folderIDs: folderIDs) }
+        return folderID
+    }
+
     /// 폴더를 다른 폴더 안(`nil`이면 맨 위)으로 옮긴다(#93). 자기 아래로는 옮기지 않아 편집이 남지 않는다.
     func moveFolder(_ folderID: MediaFolder.ID, into parentID: MediaFolder.ID?) {
         perform("폴더 이동") { $0.moveFolder(folderID, into: parentID) }
