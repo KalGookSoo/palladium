@@ -84,6 +84,8 @@ struct MainWindowView: View {
     @State private var mediaNavigation: MediaNavigationRequest?
     /// 내보내기 저장 위치 창을 여는 중(#130). 창이 뜨기를 기다리는 동안 멈춘 것처럼 보이지 않게 안내한다.
     @State private var isOpeningExportPanel = false
+    /// 지난번 저장 창이 열리지 않아 멈췄을 때 어떻게 내보낼지 묻는 중(#130).
+    @State private var isAskingExportFallback = false
     @State private var previewPlayer = PreviewPlayer()
     @State private var narration = NarrationRecorder()
     /// 정지 프레임을 저장하지 못했을 때의 안내.
@@ -257,6 +259,17 @@ struct MainWindowView: View {
                 Button("확인", role: .cancel) {}
             } message: {
                 Text(importReport?.summary?.message ?? "")
+            }
+            .alert("지난번에 저장 위치 창이 열리지 않았습니다", isPresented: $isAskingExportFallback) {
+                Button("동영상 폴더로 내보내기") { exportToMoviesFolder() }
+                    .keyboardShortcut(.defaultAction)
+                Button("저장 창 다시 시도") {
+                    UserDefaults.standard.set(false, forKey: AppPreferences.exportPanelPendingKey)
+                    chooseExportDestination()
+                }
+                Button("취소", role: .cancel) {}
+            } message: {
+                Text("macOS 저장 창 서비스가 응답하지 않아 앱이 멈췄습니다. 저장 창 없이 ~/Movies/palladium에 바로 내보낼 수 있습니다. 저장 창이 계속 안 뜨면 Mac을 다시 시동하면 대개 풀립니다.")
             }
             .alert("저장하지 못했습니다", isPresented: isShowingSaveError) {
                 Button("확인", role: .cancel) {}
@@ -659,11 +672,15 @@ struct MainWindowView: View {
     /// 편집 창에 붙는 시트로 띄운다. 창이 뜨지 않으면 안내가 "동영상 폴더로 내보내기"를 알려 준다.
     private func chooseExportDestination() {
         guard !isOpeningExportPanel else { return }
+        // 지난번 저장 창을 만들다 앱이 멈췄으면(표시가 남아 있으면) 다시 열지 않고 어떻게 할지 묻는다(#130).
+        if UserDefaults.standard.bool(forKey: AppPreferences.exportPanelPendingKey) {
+            isAskingExportFallback = true
+            return
+        }
         isOpeningExportPanel = true
         Task {
             let warning = Self.aspectRatioWarning(chosen: aspectRatio, suggested: await suggestedAspectRatio(for: editor.currentSequence))
-            // 저장 창은 Swift 동시성 작업 안에서 만들면 시스템 저장 창 서비스와의 연결을 기다리다 시간 초과로 멈췄다(#130).
-            // 메뉴 동작처럼 일반 런루프 차례에서 만들도록 넘긴다(안내가 화면에 그려질 틈도 생긴다).
+            // 메뉴 동작처럼 일반 런루프 차례에서 만든다. "여는 중" 안내가 화면에 그려질 틈도 생긴다.
             RunLoop.main.perform(inModes: [.default]) {
                 MainActor.assumeIsolated { showExportPanel(warning: warning) }
             }
@@ -686,7 +703,11 @@ struct MainWindowView: View {
 
     private func showExportPanel(warning: String?) {
         defer { isOpeningExportPanel = false }
+        // 저장 창은 시스템 서비스가 응답하지 않으면 메인 스레드를 막은 채 기다리다 예외로 앱을 멈춘다(잡을 수 없음, #130).
+        // 만들기 전에 표시를 남기고 만들어지면 지운다. 표시가 남아 있으면 다음 ⌘E에서 동영상 폴더로 내보내기를 권한다.
+        UserDefaults.standard.set(true, forKey: AppPreferences.exportPanelPendingKey)
         let panel = NSSavePanel()
+        UserDefaults.standard.set(false, forKey: AppPreferences.exportPanelPendingKey)
         panel.allowedContentTypes = [.mpeg4Movie]
         panel.nameFieldStringValue = "\(editor.project.name) - \(editor.currentSequence.name).mp4"
         let summary = "현재 시퀀스를 \(aspectRatio.title) 화면비 MP4로 내보냅니다. 프레임레이트는 원본을 따릅니다."

@@ -10,6 +10,8 @@ enum AppPreferences {
     /// 내보내기 화질 단계와 직접 입력한 Mbit/s(#77).
     static let exportQualityKey = "exportQuality"
     static let exportCustomMbpsKey = "exportCustomMbps"
+    /// 내보내기 저장 창을 만드는 중이라는 표시(#130). 만들다 앱이 멈추면 남아, 다음 내보내기에서 저장 창 대신 동영상 폴더를 권한다.
+    static let exportPanelPendingKey = "exportPanelPending"
     static let timelineShowsFilmstripKey = "timelineShowsFilmstrip"
     static let timelineShowsWaveformKey = "timelineShowsWaveform"
     /// 미디어 패널에서 접어 둔 폴더 ID들(#93). 프로젝트 내용이 아니라 보기 상태라 저장하지 않은 변경·실행 취소를 남기지 않는다.
