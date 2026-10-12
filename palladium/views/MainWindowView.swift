@@ -82,6 +82,8 @@ struct MainWindowView: View {
     @State private var mediaSearchFocusRequest = 0
     /// 미디어 패널 키보드 탐색 요청(#113).
     @State private var mediaNavigation: MediaNavigationRequest?
+    /// 내보내기 저장 위치 창을 여는 중(#130). 창이 뜨기를 기다리는 동안 멈춘 것처럼 보이지 않게 안내한다.
+    @State private var isOpeningExportPanel = false
     @State private var previewPlayer = PreviewPlayer()
     @State private var narration = NarrationRecorder()
     /// 정지 프레임을 저장하지 못했을 때의 안내.
@@ -161,6 +163,7 @@ struct MainWindowView: View {
             .focusedSceneValue(\.saveCommand, saveAction)
             .focusedSceneValue(\.importMedia) { isImporterPresented = true }
             .focusedSceneValue(\.exportSequence, exportAction)
+            .focusedSceneValue(\.exportToMoviesFolder, moviesFolderExportAction)
             .focusedSceneValue(\.batchExport, batchExportAction)
             .focusedSceneValue(\.exportStillFrame, stillFrameAction)
             .focusedSceneValue(\.importSubtitles) { chooseSubtitleFile() }
@@ -503,6 +506,25 @@ struct MainWindowView: View {
                 .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
                 .toast($toast)
+                // 저장 위치 창을 기다리는 동안의 안내(#130).
+                .overlay(alignment: .top) {
+                    if isOpeningExportPanel {
+                        VStack(spacing: 6) {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("저장 위치 창을 여는 중…")
+                                    .font(.callout.weight(.semibold))
+                            }
+                            Text("창이 오래 뜨지 않으면 파일 > 동영상 폴더로 내보내기를 쓰세요(저장 창 없이 ~/Movies/palladium에 저장).")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(12)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                        .padding(.top, 12)
+                    }
+                }
         }
         .inspector(isPresented: $isInspectorPresented) {
             InspectorView(
@@ -633,14 +655,35 @@ struct MainWindowView: View {
     }
 
     /// 저장 위치를 고른 뒤 현재 시퀀스를 툴바의 화면비로 내보낸다.
+    /// 저장 창은 시스템 프로세스가 그려 뜨기까지 메인 스레드가 기다린다(#130). 먼저 "여는 중" 안내를 그린 뒤 창을 만들고,
+    /// 편집 창에 붙는 시트로 띄운다. 창이 뜨지 않으면 안내가 "동영상 폴더로 내보내기"를 알려 준다.
     private func chooseExportDestination() {
+        guard !isOpeningExportPanel else { return }
+        isOpeningExportPanel = true
         Task {
             let warning = Self.aspectRatioWarning(chosen: aspectRatio, suggested: await suggestedAspectRatio(for: editor.currentSequence))
+            // 안내가 화면에 그려질 틈을 준다.
+            try? await Task.sleep(for: .milliseconds(80))
             showExportPanel(warning: warning)
         }
     }
 
+    /// 파일 > 동영상 폴더로 내보내기. 클립이 없으면 `nil`이라 비활성화된다.
+    private var moviesFolderExportAction: (() -> Void)? {
+        exportAction == nil ? nil : { exportToMoviesFolder() }
+    }
+
+    /// 파일 > 동영상 폴더로 내보내기(#130). 저장 창 없이 ~/Movies/palladium에 바로 내보낸다(이름이 겹치면 번호).
+    private func exportToMoviesFolder() {
+        do {
+            try startExport(to: ExportDestination.nextMoviesFolderURL(named: "\(editor.project.name) - \(editor.currentSequence.name)"))
+        } catch {
+            saveErrorMessage = "동영상 폴더에 내보낼 수 없습니다: \(error.localizedDescription)"
+        }
+    }
+
     private func showExportPanel(warning: String?) {
+        defer { isOpeningExportPanel = false }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.mpeg4Movie]
         panel.nameFieldStringValue = "\(editor.project.name) - \(editor.currentSequence.name).mp4"
@@ -649,9 +692,15 @@ struct MainWindowView: View {
         let options = NSHostingView(rootView: Form { ExportOptionsView() }.padding(12).frame(width: 340))
         options.frame.size = options.fittingSize
         panel.accessoryView = options
-        panel.begin { response in
+        let completion: (NSApplication.ModalResponse) -> Void = { response in
             guard response == .OK, let url = panel.url else { return }
             startExport(to: url)
+        }
+        // 편집 창에 붙는 시트로 띄워 어느 창의 내보내기인지 분명히 한다.
+        if let window = NSApp.keyWindow {
+            panel.beginSheetModal(for: window, completionHandler: completion)
+        } else {
+            panel.begin(completionHandler: completion)
         }
     }
 
@@ -672,7 +721,8 @@ struct MainWindowView: View {
                 try await SequenceExporter.export(composition, to: url, codec: options.codec, quality: options.quality, customMbps: options.customMbps) { fraction in
                     Task { @MainActor in job.progress = fraction }
                 }
-                job.finish(error: nil)
+                // 내보내기는 됐지만 일부 프레임을 그리지 못했으면 알린다(#130).
+                job.finish(error: nil, warning: composition.diagnostics.summary)
                 TourProgress.shared.markExported(editor.project.id)
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             } catch is CancellationError {

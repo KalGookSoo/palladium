@@ -15,6 +15,8 @@ nonisolated struct SequenceComposition {
     var frameDuration = OutputFrameRate.defaultDuration
     /// 쓰인 영상 원본 중 가장 높은 비트레이트(초당 비트, #77 "원본과 비슷하게"). 영상이 없거나 알 수 없으면 `nil`.
     var sourceBitRate: Double?
+    /// 합성기가 그리지 못한 프레임 기록(#130). 내보내기 실패 안내와 완료 경고에 쓴다.
+    var diagnostics = CompositionDiagnostics()
 }
 
 /// 시퀀스의 모든 영상 트랙(아래 트랙이 먼저, 위 트랙이 그 위에)과 이미지 클립을 클립마다의 위치·크기·불투명도로 겹쳐 그리고(#5 2단계, #9),
@@ -88,7 +90,7 @@ nonisolated enum SequenceComposer {
                         content: .title(title), transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, animatedClip: animatedClip(clip),
                         filters: clip.filters, chromaKey: clip.chromaKey
                     )
-                    placedLayers.append((layerRange, layer, order))
+                    placedLayers.append((layerRange, layer.named(clip.displayName(assetName: title.text)), order))
                     continue
                 }
                 guard let asset = assets.first(where: { $0.id == clip.assetID }) else { continue }
@@ -102,7 +104,7 @@ nonisolated enum SequenceComposer {
                             CompositionLayer(
                                 content: .image(image), transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, animatedClip: animatedClip(clip),
                                 filters: clip.filters, chromaKey: clip.chromaKey
-                            ),
+                            ).named(clip.displayName(assetName: asset.name)),
                             order
                         ))
                     }
@@ -127,7 +129,7 @@ nonisolated enum SequenceComposer {
                             content: content, transform: clip.transform, fade: fade, colorAdjustment: clip.colorAdjustment, crop: clip.crop, animatedClip: animatedClip(clip),
                             filters: clip.filters, chromaKey: clip.chromaKey, stabilization: stabilizedLayer(of: clip, asset: asset)
                         )
-                        placedLayers.append((layerRange, layer, order))
+                        placedLayers.append((layerRange, layer.named(clip.displayName(assetName: asset.name)), order))
                     }
                     if let sourceAudio = try await source.loadTracks(withMediaType: .audio).first, let soundTrack {
                         try await insert(clip, of: sourceAudio, into: soundTrack, lead: edges.audioLead, tail: edges.audioTail, freezesMissingFrames: false)
@@ -180,15 +182,17 @@ nonisolated enum SequenceComposer {
             return SequenceComposition(asset: composition, videoComposition: nil, audioMix: audioMix, duration: duration, frameDuration: frameDuration)
         }
         let size = renderSize(for: aspectRatio, shortSide: shortSide(for: resolution, sourceShortSides: sourceShortSides))
+        let diagnostics = CompositionDiagnostics()
         return SequenceComposition(
             asset: composition,
             videoComposition: makeVideoComposition(
-                layers: placedLayers, masks: sequence.masks, duration: duration, renderSize: size, frameDuration: frameDuration
+                layers: placedLayers, masks: sequence.masks, duration: duration, renderSize: size, frameDuration: frameDuration, diagnostics: diagnostics
             ),
             audioMix: audioMix,
             duration: duration,
             frameDuration: frameDuration,
-            sourceBitRate: sourceBitRates.max()
+            sourceBitRate: sourceBitRates.max(),
+            diagnostics: diagnostics
         )
     }
 
@@ -198,7 +202,8 @@ nonisolated enum SequenceComposer {
         masks: [Mask],
         duration: CMTime,
         renderSize: CGSize,
-        frameDuration: CMTime
+        frameDuration: CMTime,
+        diagnostics: CompositionDiagnostics
     ) -> AVVideoComposition {
         let boundaries = Set([CMTime.zero, duration] + layers.flatMap { [$0.range.start, $0.range.end] } + masks.flatMap { [$0.range.start, $0.range.end] })
             .filter { $0 >= .zero && $0 <= duration }
@@ -211,7 +216,7 @@ nonisolated enum SequenceComposer {
                 .sorted { ($0.order, $0.range.start.seconds) < ($1.order, $1.range.start.seconds) }
                 .map(\.layer)
             let activeMasks = masks.filter { $0.range.start <= start && start < $0.range.end }
-            return LayerInstruction(timeRange: CMTimeRange(start: start, end: end), layers: active, masks: activeMasks)
+            return LayerInstruction(timeRange: CMTimeRange(start: start, end: end), layers: active, masks: activeMasks, diagnostics: diagnostics)
         }
 
         let videoComposition = AVMutableVideoComposition()

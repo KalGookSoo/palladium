@@ -35,6 +35,15 @@ nonisolated struct CompositionLayer {
     var chromaKey: ChromaKey?
     /// 손떨림 보정(#71): 원본 움직임 경로, 보정 설정, 시각을 원본 시각으로 바꿀 클립, 고정 확대 배율. 영상 층에만 쓴다.
     var stabilization: StabilizedLayer?
+    /// 클립 이름(#130). 그리지 못했을 때 어느 클립인지 알리는 데만 쓴다.
+    var clipName: String?
+
+    /// 클립 이름을 단 같은 층.
+    func named(_ name: String) -> CompositionLayer {
+        var named = self
+        named.clipName = name
+        return named
+    }
 
     /// 합성 시각(시퀀스 시각)의 트랜스폼.
     func transform(at time: CMTime) -> ClipTransform {
@@ -79,8 +88,12 @@ final nonisolated class LayerInstruction: NSObject, AVVideoCompositionInstructio
     /// 이 구간에 걸친 마스크(#59). 자막 아래, 영상·이미지 층 위에 적용한다.
     let masks: [Mask]
 
-    init(timeRange: CMTimeRange, layers: [CompositionLayer], masks: [Mask] = []) {
+    /// 그리지 못한 프레임을 적는 곳(#130). 한 합성의 모든 구간이 같은 기록을 쓴다.
+    let diagnostics: CompositionDiagnostics
+
+    init(timeRange: CMTimeRange, layers: [CompositionLayer], masks: [Mask] = [], diagnostics: CompositionDiagnostics = CompositionDiagnostics()) {
         self.timeRange = timeRange
+        self.diagnostics = diagnostics
         self.layers = layers
         self.masks = masks
         let trackIDs = layers.compactMap { layer -> CMPersistentTrackID? in
@@ -106,10 +119,13 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
     func renderContextChanged(_: AVVideoCompositionRenderContext) {}
 
     func startRequest(_ request: AVAsynchronousVideoCompositionRequest) {
-        guard let instruction = request.videoCompositionInstruction as? LayerInstruction,
-              let output = request.renderContext.newPixelBuffer()
-        else {
-            request.finish(with: NSError(domain: "palladium.LayerCompositor", code: 1))
+        guard let instruction = request.videoCompositionInstruction as? LayerInstruction else {
+            request.finish(with: NSError(domain: "palladium.LayerCompositor", code: 1, userInfo: [NSLocalizedDescriptionKey: "합성 지시를 알 수 없습니다"]))
+            return
+        }
+        guard let output = request.renderContext.newPixelBuffer() else {
+            instruction.diagnostics.record(time: request.compositionTime, clipName: nil, reason: "그릴 화면 버퍼를 만들지 못함(메모리 부족일 수 있음)")
+            request.finish(with: NSError(domain: "palladium.LayerCompositor", code: 2, userInfo: [NSLocalizedDescriptionKey: "그릴 화면 버퍼를 만들지 못했습니다"]))
             return
         }
         let renderSize = request.renderContext.size
@@ -122,7 +138,13 @@ final nonisolated class LayerCompositor: NSObject, AVVideoCompositing {
                 image = Self.applying(instruction.masks, to: image, renderSize: renderSize)
                 masksApplied = true
             }
-            guard var layerImage = placedImage(for: layer, request: request, renderSize: renderSize) else { continue }
+            guard var layerImage = placedImage(for: layer, request: request, renderSize: renderSize) else {
+                // 영상 층의 원본 프레임을 받지 못하면 그 층만 빼고 그린다. 어느 클립인지 기록해 내보내기가 알린다(#130).
+                if case .video = layer.content {
+                    instruction.diagnostics.record(time: request.compositionTime, clipName: layer.clipName, reason: "원본 프레임을 읽지 못함")
+                }
+                continue
+            }
             if let fade = layer.fade {
                 layerImage = Self.applying(fade, at: request.compositionTime, to: layerImage, renderSize: renderSize)
             }

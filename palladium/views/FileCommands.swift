@@ -20,6 +20,8 @@ extension FocusedValues {
     @Entry var importMedia: (() -> Void)?
     /// 내보낼 클립이 있는 편집 창이 앞에 있을 때만 값이 있다.
     @Entry var exportSequence: (() -> Void)?
+    /// 저장 창 없이 동영상 폴더로 내보낸다(#130). 내보낼 클립이 있을 때만 값이 있다.
+    @Entry var exportToMoviesFolder: (() -> Void)?
     /// 클립이 있는 시퀀스가 있는 편집 창이 앞에 있을 때만 값이 있다.
     @Entry var batchExport: (() -> Void)?
     /// 재생 헤드에 그릴 화면이 있는 편집 창이 앞에 있을 때만 값이 있다.
@@ -35,6 +37,7 @@ struct FileCommands: Commands {
     @FocusedValue(\.saveCommand) private var saveCommand
     @FocusedValue(\.importMedia) private var importMedia
     @FocusedValue(\.exportSequence) private var exportSequence
+    @FocusedValue(\.exportToMoviesFolder) private var exportToMoviesFolder
     @FocusedValue(\.batchExport) private var batchExport
     @FocusedValue(\.exportStillFrame) private var exportStillFrame
     @FocusedValue(\.importSubtitles) private var importSubtitles
@@ -89,6 +92,11 @@ struct FileCommands: Commands {
             }
             .keyboardShortcut("e")
             .disabled(exportSequence == nil)
+            Button(ShortcutGuide.exportToMoviesFolder.title) {
+                exportToMoviesFolder?()
+            }
+            .keyboardShortcut("e", modifiers: [.command, .control])
+            .disabled(exportToMoviesFolder == nil)
             Button("여러 시퀀스 내보내기…") {
                 batchExport?()
             }

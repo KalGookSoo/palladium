@@ -9,12 +9,15 @@ nonisolated enum SequenceExporter {
         case cannotCreateSession
         case noPicture
         case cannotWriteImage
+        /// 인코딩이 실패했고 합성기가 그리지 못한 프레임이 있었다(#130). 어느 시각·클립인지 함께 알린다.
+        case renderFailed(reason: String, details: String)
 
         var errorDescription: String? {
             switch self {
             case .cannotCreateSession: "내보내기를 시작할 수 없습니다."
             case .noPicture: "이 시각에는 화면에 그릴 영상·이미지가 없습니다."
             case .cannotWriteImage: "이미지 파일을 쓸 수 없습니다."
+            case let .renderFailed(reason, details): "\(reason)\n\(details)"
             }
         }
     }
@@ -63,6 +66,10 @@ nonisolated enum SequenceExporter {
         } catch {
             try? FileManager.default.removeItem(at: url)
             Logger.export.error("내보내기 실패: \(error.localizedDescription, privacy: .public)")
+            // 합성기가 그리지 못한 프레임이 있었으면 어느 시각·클립인지 함께 알린다(#130).
+            if !(error is CancellationError), let details = composition.diagnostics.summary {
+                throw ExportError.renderFailed(reason: error.localizedDescription, details: details)
+            }
             throw error
         }
     }

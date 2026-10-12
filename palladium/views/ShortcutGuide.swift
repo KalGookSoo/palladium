@@ -29,6 +29,7 @@ enum ShortcutGuide {
     static let close = ShortcutGuideEntry(title: "닫기", summary: "편집 창을 닫습니다", keys: "⌘W")
     static let importMedia = ShortcutGuideEntry(title: "가져오기", summary: "영상·오디오·이미지 파일을 프로젝트로 가져옵니다", keys: "⌘I")
     static let export = ShortcutGuideEntry(title: "내보내기", summary: "편집한 영상을 파일로 내보냅니다", keys: "⌘E")
+    static let exportToMoviesFolder = ShortcutGuideEntry(title: "동영상 폴더로 내보내기", summary: "저장 창 없이 ~/Movies/palladium에 바로 내보냅니다(같은 이름이 있으면 번호를 붙임). 저장 창이 뜨지 않을 때 씁니다", keys: "⌃⌘E")
     static let batchExport = ShortcutGuideEntry(title: "여러 시퀀스 내보내기", summary: "고른 시퀀스들을 한 폴더에 차례로 내보냅니다", keys: "⇧⌘E")
     static let exportStillFrame = ShortcutGuideEntry(title: "정지 프레임 저장", summary: "재생 헤드 위치의 화면 한 장을 PNG로 저장합니다", keys: "⌥⌘E")
     static let newSequence = ShortcutGuideEntry(title: "새 시퀀스", summary: "이 프로젝트에 빈 시퀀스를 만들고 그 시퀀스로 바꿉니다", keys: "⌘N")
@@ -109,7 +110,7 @@ enum ShortcutGuide {
 
     /// 단축키 목록 창에 보여줄 묶음. 단축키가 없는 항목은 넣지 않는다.
     static let sections: [(title: String, entries: [ShortcutGuideEntry])] = [
-        ("파일", [openProjectList, newProject, newSequence, save, close, importMedia, export, batchExport, exportStillFrame]),
+        ("파일", [openProjectList, newProject, newSequence, save, close, importMedia, export, exportToMoviesFolder, batchExport, exportStillFrame]),
         ("보기", [toggleMediaPanel, toggleTimeline, toggleInspector, zoomInTimeline, zoomOutTimeline, fitTimeline]),
         ("재생", [playPause, shuttleReverse, shuttleStop, shuttleForward, goToStart, goToEnd, previousEditPoint, nextEditPoint, previousFrame, nextFrame, tenFramesBack, tenFramesForward, narration]),
         ("편집", [undo, redo, rename, clipEditor, trimNudge, excludeRange, preciseTrimBar, zoomInTrimBar, zoomOutTrimBar, fitTrimBar, cropKeepRatio, cutCopyPasteAssets, duplicateAssets, newMediaFolder, newFolderWithSelection, revealInFinder, findInMediaPanel, mediaPanelExpand, mediaPanelOpen, deleteAsset]),
